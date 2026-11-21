@@ -116,10 +116,10 @@ Network and address. Forget network turns Wi-Fi off. Connect to Wi-Fi starts set
 Сеть и адрес. «Забыть сеть» выключает Wi-Fi. «Подключиться к Wi-Fi» снова запускает настройку.
 
 <b>Restart / Reset</b>
-<b>Перезагрузка / Сброс</b>
+<b>Перезапуск / Сброс</b>
 
 Restart keeps your settings. Reset erases device settings and application data, then starts Wi-Fi setup. Installed applications stay. Both ask for confirmation.
-Перезагрузка сохраняет настройки. Сброс стирает настройки устройства и данные приложений, затем запускает настройку Wi-Fi. Установленные приложения остаются. Оба действия требуют подтверждения.
+Перезапуск сохраняет настройки. Сброс стирает настройки устройства и данные приложений, затем запускает настройку Wi-Fi. Установленные приложения остаются. Оба действия требуют подтверждения.
 
 More on the device page
 Больше настроек на странице устройства
