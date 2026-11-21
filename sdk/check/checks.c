@@ -297,6 +297,9 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     if (round->kind == ROUND_CUT && (is_picked || status < 0)) {
         return;
     }
+    if (is_head) {
+        answer.length = 0; /* poller_net.c: HEAD has no response body, with either delivery mode */
+    }
     if (is_picked) {
         /* One that fails late is, for the application, one that failed - with what the picker
          * read before it broke off: here all of it before its last closing bracket, so that every
@@ -313,9 +316,6 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     /* A request with no pieces to give fails the way the round's answers fail. */
     if (round->kind == ROUND_FAILED_LATE && status < 0) {
         status = HOST_FAILED_NO_ANSWER;
-    }
-    if (is_head) {
-        answer.length = 0; /* poller_net.c: the headers are the answer, one piece of no data */
     }
     int32_t piece = round->kind == ROUND_PIECES ? round->size : HOST_DATA_CHUNK_MAX;
     int32_t ending = round->kind == ROUND_CUT ? STANDIN_CUT : round->kind == ROUND_FAILED_LATE ? STANDIN_FAILED : STANDIN_WHOLE;
@@ -393,7 +393,7 @@ static void answer_round(const round_t *round)
         for (int32_t index = 0; index < (items < 0 || is_empty ? 1 : items); index++) {
             delivery_t answer = { .alarm = -1, .request = poll, .item = items < 0 || is_empty ? -1 : standin_poll_item(poll, index),
                                   .is_picked = standin_subject.polls[poll].picks != NULL, .is_permitted = true,
-                                  .round = round };
+                                  .is_head = standin_subject.polls[poll].method == HOST_HTTP_HEAD, .round = round };
             answer.is_ready = !is_empty && standin_poll_url(poll, answer.item, answer.url, sizeof answer.url) &&
                               standin_poll_ready(poll, answer.item);
             hand(&answer);

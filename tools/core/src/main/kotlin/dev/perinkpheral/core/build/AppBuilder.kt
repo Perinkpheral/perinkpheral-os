@@ -93,7 +93,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             // As it was written, and the least firmware it runs on: the latest the calls it
             // makes came with. A manifest may ask for more - for a behaviour, not a call - never less.
             val calls = module.imports.filter { it.first == HOST_MODULE }.map { it.second }
-            val (needed, byCall) = sdk.firmwareFor(calls + module.exports)
+            val (needed, byCall) = sdk.firmwareFor(calls + module.exports + sdk.manifestFeatures(manifest))
             val declared = manifest["firmware"] as? String
             val firmware = if (declared != null && versionNumber(declared)!! > versionNumber(needed)!!) declared else needed
             val firmwareLine = when {

@@ -1,0 +1,35 @@
+{
+  "app": "firmware/test/host/apps/poll-method",
+  "at": 1795262400,
+  "serial": true,
+  "store": {
+    "token": "current"
+  },
+  "mocks": {
+    "https://example.test/picked/one": {
+      "method": "POST",
+      "request_body": "item=one&token=current",
+      "body": "{\"value\":\"ok\"}"
+    },
+    "https://example.test/stream": {
+      "method": "POST",
+      "request_body": "current",
+      "body": "ok"
+    },
+    "https://example.test/head": {
+      "method": "HEAD",
+      "request_body": "",
+      "status": 204,
+      "body": "{\"value\":\"must not arrive\"}"
+    },
+    "*": {
+      "status": -2,
+      "body": ""
+    }
+  },
+  "steps": [
+    "forward 2",
+    "wait 1",
+    "shot posted"
+  ]
+}

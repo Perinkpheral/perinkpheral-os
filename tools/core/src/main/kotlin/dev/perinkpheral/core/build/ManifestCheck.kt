@@ -161,6 +161,17 @@ class ManifestCheck(private val sdk: Sdk) {
             fail("$where: \"url\" must be an http(s) URL of at most $urlMax bytes, or begin with " +
                 "{{key}} of a setting of the \"url\" or \"link\" type")
         }
+        val method = if (poll.containsKey("method")) poll["method"] else "GET"
+        if (method !is String || method !in setOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "PROPFIND", "REPORT")) {
+            fail("$where: invalid request method")
+        }
+        if (poll.containsKey("body")) {
+            val body = poll["body"]
+            val bodyMax = sdk.limit("POLL_BODY_MAX")
+            if (body !is String || body.toByteArray().size > bodyMax || method in setOf("GET", "HEAD")) {
+                fail("$where: body must be text of at most $bodyMax bytes, with a method other than GET or HEAD")
+            }
+        }
         val every = poll["every"]
         if (every is String) {
             // "{{key}}": the pace is the user's choice in that setting.

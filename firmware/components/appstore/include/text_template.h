@@ -40,13 +40,18 @@ bool text_template_fill(const char *template_text, text_template_value_fn value_
 bool text_template_fill_url(const char *template_text, text_template_value_fn value_of,
                             void *context, char *filled, size_t filled_size);
 
+/* Body values are copied as stored, including line feeds and UTF-8.
+ * Carriage returns fail. The developer supplies the body's escaping. */
+bool text_template_fill_body(const char *template_text, text_template_value_fn value_of,
+                             void *context, char *filled, size_t filled_size);
+
 typedef enum {
     TEXT_REQUEST_READY,
     TEXT_REQUEST_NOT_READY,
     TEXT_REQUEST_NOT_ALLOWED,
 } text_request_result_t;
 
-/* Authorizes a queued expanded destination before copying header values.
+/* Authorizes a queued expanded destination before expanding headers and body.
  * manifest NULL: expand a poll URL, whose destination was declared directly. The
  * caller holds one consistent value_of view for the whole call. */
 text_request_result_t text_template_prepare_request(app_poll_t *poll, const char *manifest,

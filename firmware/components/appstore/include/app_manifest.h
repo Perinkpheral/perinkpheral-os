@@ -38,6 +38,7 @@ extern "C" {
 #define APP_POLLS_MAX            MANIFEST_POLLS_MAX
 #define APP_POLL_EVERY_MIN_S     MANIFEST_POLL_EVERY_MIN_S
 #define APP_POLL_EVERY_MAX_S     MANIFEST_POLL_EVERY_MAX_S
+#define APP_POLL_BODY_MAX        MANIFEST_POLL_BODY_MAX
 #define APP_URL_MAX              MANIFEST_URL_MAX
 #define APP_POLL_EVERY_UNSET_S    (15 * 60) /* a pace left to a setting that has no default */
 #define APP_HEADERS_MAX          MANIFEST_HEADERS_MAX
@@ -94,10 +95,12 @@ typedef struct {
     char value[APP_HEADER_VALUE_MAX + 1];
 } app_header_t;
 
-/* One poll in full. The URL and the header values are as written, with
+/* One poll in full. The URL, header values and body are as written, with
  * {{key}} in them still to be replaced (see text_template.h). */
 typedef struct {
     char         url[APP_URL_MAX + 1];
+    int          method; /* HOST_HTTP_*, GET when absent */
+    char         body[APP_POLL_BODY_MAX + 1]; /* template, expanded at send time */
     app_header_t headers[APP_HEADERS_MAX];
     int          header_count;
     uint32_t     every_s;

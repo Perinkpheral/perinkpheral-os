@@ -1,0 +1,51 @@
+{
+  "name": "poll-method",
+  "title": "POST polls",
+  "version": "0.1.0",
+  "abi": 3,
+  "polls": [
+    {
+      "url": "https://example.test/picked/{{items}}",
+      "method": "POST",
+      "body": "item={{items}}&token={{token}}",
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      "each": "items",
+      "prefix": "item:",
+      "every": 60,
+      "pick": [
+        "value"
+      ]
+    },
+    {
+      "url": "https://example.test/stream",
+      "method": "POST",
+      "body": "{{token}}",
+      "every": 60
+    },
+    {
+      "url": "https://example.test/head",
+      "method": "HEAD",
+      "every": 60,
+      "pick": [
+        "value"
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "items",
+      "type": "list",
+      "title": "Items",
+      "default": [
+        "item:one"
+      ]
+    },
+    {
+      "key": "token",
+      "type": "secret",
+      "title": "Token"
+    }
+  ]
+}

@@ -154,6 +154,16 @@ APP_EXPORT(app_data_buffer, uint8_t *app_data_buffer(void));
 
 /* ---- Network ---- */
 
+/* Manifest polls accept "method" (the HOST_HTTP_* names, GET by default)
+ * and "body" (at most 1024 bytes before and after expansion). A body is
+ * refused with GET or HEAD. {{key}} values in a body are stored text,
+ * including line feeds; a carriage return fails preparation. The developer
+ * supplies escaping and Content-Type in headers. Headers and body expand
+ * together immediately before sending; "each" substitutes its item in both.
+ * "pick" works with every method; HEAD has no values. Only GET follows redirects.
+ * The build computes this firmware minimum for non-GET methods or any body. */
+#define HOST_SINCE_POLL_METHOD "0.1.80"
+
 /* Network availability is reported in the answer: a request made without
  * a network fails with HOST_FAILED_NO_NETWORK. The radio can be off
  * between requests. */
@@ -209,8 +219,8 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  * receives the last answer only. A redirect to a host outside "hosts"
  * fails with HOST_FAILED_NOT_ALLOWED. Request headers are not sent to
  * another host. A request with any other method is sent once; its 3xx
- * status is delivered as the answer. Polls are followed the same way,
- * to any host.
+ * status is delivered as the answer. GET polls follow redirects to any
+ * host; polls of another method are sent once too.
  *
  * A JSON answer can be parsed with sdk/lib/json_pick.h: feed every piece,
  * read the values after the last one.

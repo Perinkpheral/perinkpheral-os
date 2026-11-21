@@ -37,12 +37,12 @@ class Sdk(val root: File) {
     }
 
     /** HOST_SINCE_<entry> stamps only additions after the ABI firmware floor.
-     * Every stamp names a contract entry and no version past VERSION. */
+     * Every stamp names a call, constant or known manifest feature, and no version past VERSION. */
     val callSince: Map<String, String> by lazy {
         val calls = (contract.calls.map { it.name } + contract.exports.map { it.name }).toSet()
         contract.namesStartingWith("HOST_SINCE_").associate { call ->
             val since = contract.string("HOST_SINCE_$call") ?: throw BuildError("sdk/host_api.h: HOST_SINCE_$call is not a version")
-            if (call !in calls && contract.written(call) == null) throw BuildError("sdk/host_api.h: HOST_SINCE_$call names no contract entry")
+            if (call !in calls && call !in MANIFEST_FEATURES && contract.written(call) == null) throw BuildError("sdk/host_api.h: HOST_SINCE_$call names no contract entry")
             val number = versionNumber(since) ?: throw BuildError("sdk/host_api.h: HOST_SINCE_$call is not a version")
             if (number <= versionNumber(firmwareFirst)!!) {
                 throw BuildError("sdk/host_api.h: HOST_SINCE_$call must be after the ABI floor $firmwareFirst")
@@ -71,6 +71,17 @@ class Sdk(val root: File) {
         return if (newest != null && versionNumber(callSince.getValue(newest))!! > versionNumber(floor)!!) {
             callSince.getValue(newest) to newest
         } else floor to null
+    }
+
+    /** Behaviour that is absent from wasm imports still raises a package's minimum. */
+    fun manifestFeatures(manifest: Map<*, *>): List<String> =
+        if ((manifest["polls"] as? List<*>).orEmpty().any {
+            val poll = it as Map<*, *>
+            (poll["method"] ?: "GET") != "GET" || poll.containsKey("body")
+        }) listOf("POLL_METHOD") else emptyList()
+
+    companion object {
+        private val MANIFEST_FEATURES = setOf("POLL_METHOD")
     }
 
     val hostApiVersion: Long by lazy { contract.number("HOST_API_VERSION") }

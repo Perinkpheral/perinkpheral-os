@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "json_pick.h"
+#include "manifest_limits.h"
 
 standin_handlers_t standin_handlers;
 
@@ -1338,7 +1339,7 @@ static bool is_unreserved(char character)
  * value of a header go in as they are and must be printable; any other value of a URL is
  * percent-encoded; a list's items are joined with commas. A key with no value and no default
  * fails it; an empty value goes in empty. */
-static bool fill_text(const char *written, const standin_poll_t *asked, int32_t item, bool is_url, char *url,
+static bool fill_text(const char *written, const standin_poll_t *asked, int32_t item, bool is_url, bool is_body, char *url,
                       int32_t capacity)
 {
     standin();
@@ -1377,10 +1378,10 @@ static bool fill_text(const char *written, const standin_poll_t *asked, int32_t 
         }
         bool is_verbatim = !is_url || at == written;
         for (int32_t index = 0; index < length; index++) {
-            bool is_join = filled[index] == '\n'; /* between a list's items */
+            bool is_join = !is_body && filled[index] == '\n'; /* between a list's items */
             char character = is_join ? ',' : filled[index];
             bool is_kept = is_verbatim || is_join || is_unreserved(character);
-            if (is_verbatim && (character < ' ' || character > '~')) {
+            if (is_body ? character == '\r' : is_verbatim && (character < ' ' || character > '~')) {
                 return false;
             }
             if (used + (is_kept ? 1 : 3) >= capacity) {
@@ -1404,12 +1405,12 @@ static bool fill_text(const char *written, const standin_poll_t *asked, int32_t 
 
 bool standin_poll_url(int32_t poll, int32_t item, char *url, int32_t capacity)
 {
-    return fill_text(standin_subject.polls[poll].url, &standin_subject.polls[poll], item, true, url, capacity);
+    return fill_text(standin_subject.polls[poll].url, &standin_subject.polls[poll], item, true, false, url, capacity);
 }
 
 bool standin_fill_url(const char *written, char *url, int32_t capacity)
 {
-    return fill_text(written, NULL, -1, true, url, capacity);
+    return fill_text(written, NULL, -1, true, false, url, capacity);
 }
 
 /* A host as app_manifest.c reads one: the name, and the port when one is written. */
@@ -1522,7 +1523,9 @@ static bool header_lines_ready(const char *headers, int32_t length, const standi
 bool standin_poll_ready(int32_t poll, int32_t item)
 {
     const standin_poll_t *asked = &standin_subject.polls[poll];
-    return asked->headers == NULL || header_lines_ready(asked->headers, (int32_t)strlen(asked->headers), asked, item);
+    char body[MANIFEST_POLL_BODY_MAX + 1];
+    return (asked->headers == NULL || header_lines_ready(asked->headers, (int32_t)strlen(asked->headers), asked, item)) &&
+           (asked->body == NULL || fill_text(asked->body, asked, item, false, true, body, sizeof body));
 }
 
 bool standin_header_lines_ready(const char *headers, int32_t length)
@@ -1545,7 +1548,7 @@ static bool header_lines_ready(const char *headers, int32_t length, const standi
                 value++;
             }
             snprintf(written, sizeof written, "%.*s", (int)(line_end - value), value);
-            if (!fill_text(written, asked, item, false, filled, sizeof filled)) {
+            if (!fill_text(written, asked, item, false, false, filled, sizeof filled)) {
                 return false;
             }
         }

@@ -381,6 +381,7 @@ typedef struct job {
     char        each_key[APP_SETTING_KEY_MAX + 1];
     char        each_value[APP_SETTING_VALUE_MAX + 1];
     char       *headers; /* "Name: value\n" each */
+    char       *body_template;
     uint8_t    *body;
     size_t      body_length;
     char        pick[JSON_PICK_PATHS_MAX][JSON_PICK_PATH_MAX + 1];
@@ -410,14 +411,20 @@ static const char *const METHODS[] = { "GET", "POST", "PUT", "DELETE", "PATCH", 
                                        "PROPFIND", "REPORT" };
 
 /* A mock for the address: an exact key, or a key ending in "*" the address begins with. */
-static const json_t *mock_for(const char *url)
+static const json_t *mock_for(const job_t *job)
 {
     const json_t *mock;
     json_for_each(mock, s_mocks)
     {
         size_t length = strlen(mock->name);
         bool   is_prefix = length > 0 && mock->name[length - 1] == '*';
-        if (is_prefix ? strncmp(url, mock->name, length - 1) == 0 : strcmp(url, mock->name) == 0) {
+        const json_t *method = json_get(mock, "method");
+        const json_t *body = json_get(mock, "request_body");
+        bool matches_request = (!json_is_string(method) || strcmp(method->text, METHODS[job->method]) == 0) &&
+                               (!json_is_string(body) || (strlen(body->text) == job->body_length &&
+                                (job->body_length == 0 || memcmp(body->text, job->body, job->body_length) == 0)));
+        if (matches_request && (is_prefix ? strncmp(job->url, mock->name, length - 1) == 0
+                                         : strcmp(job->url, mock->name) == 0)) {
             return mock;
         }
     }
@@ -597,7 +604,7 @@ static void exchange(job_t *job, char *next, size_t next_size)
 {
     next[0] = '\0';
     job->response.length = -1;
-    const json_t *mock = mock_for(job->url);
+    const json_t *mock = mock_for(job);
     if (mock != NULL) {
         answer_from_mock(job, mock);
         return;
@@ -710,6 +717,9 @@ static void fetch(job_t *job)
     for (int hop = 0;; hop++) {
         char next[APP_URL_MAX + 1];
         exchange(job, next, sizeof next);
+        if (job->method == HOST_HTTP_HEAD) {
+            job->answer_length = 0;
+        }
         int code = job->status;
         bool is_redirect = code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
         if (job->method != HOST_HTTP_GET || !is_redirect || next[0] == '\0' || hop == REDIRECTS_MAX) {
@@ -772,6 +782,7 @@ static void free_job(job_t *job)
     free(job->manifest);
     json_free(job->host_values);
     free(job->headers);
+    free(job->body_template);
     free(job->body);
     free(job->answer);
     free(job);
@@ -829,6 +840,16 @@ static void prepare_job(job_t *job)
             return;
         }
         add_header(&job->headers, job->header_templates[i].name, value);
+    }
+    if (job->body_template != NULL) {
+        char body[APP_POLL_BODY_MAX + 1];
+        if (!text_template_fill_body(job->body_template, setting_of,
+                                    job->each_key[0] != '\0' ? &each : NULL, body, sizeof body)) {
+            job->status = HOST_FAILED_NOT_READY;
+            return;
+        }
+        job->body_length = strlen(body);
+        job->body = (uint8_t *)strdup(body);
     }
 }
 
@@ -948,7 +969,8 @@ static void start_poll_request(const app_poll_t *poll, int number, const list_it
     job->is_poll = true;
     job->number = number;
     job->item = item;
-    job->method = HOST_HTTP_GET;
+    job->method = poll->method;
+    job->body_template = strdup(poll->body);
     job->wants_values = poll->pick_count > 0;
     job->pick_count = poll->pick_count;
     memcpy(job->pick, poll->pick, sizeof poll->pick);

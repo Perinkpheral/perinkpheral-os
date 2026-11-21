@@ -25,6 +25,7 @@
 #define MANIFEST_POLLS_MAX        4
 #define MANIFEST_POLL_EVERY_MIN_S 10
 #define MANIFEST_POLL_EVERY_MAX_S (24 * 60 * 60)
+#define MANIFEST_POLL_BODY_MAX    1024 /* template and expanded text, in bytes */
 #define MANIFEST_URL_MAX          511 /* fits a secret calendar address */
 #define MANIFEST_HEADERS_MAX      4
 #define MANIFEST_HEADER_NAME_MAX  31

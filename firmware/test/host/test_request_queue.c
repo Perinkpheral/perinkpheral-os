@@ -127,8 +127,29 @@ static void test_overdue_and_gone(void)
     CHECK(request_queue_is_empty(&queue));
 }
 
+
+static void test_body_budget(void)
+{
+    fresh();
+    uint8_t body[APP_POLL_BODY_MAX];
+    memset(body, 'x', sizeof body);
+    const char *url = "https://example.org/post";
+    size_t bytes = sizeof(queued_request_t) + strlen(url) + 1 + sizeof body;
+    int count = 0;
+    while (request_queue_add(&queue, count / HOST_HTTP_PENDING_MAX + 1, "owner", count,
+                             HOST_HTTP_POST, url, NULL, 0, body, sizeof body, 0) == REQUEST_QUEUE_ADDED) {
+        count++;
+        CHECK(queue.bytes == (size_t)count * bytes);
+    }
+    CHECK(count == (int)(REQUEST_QUEUE_BYTES_MAX / bytes));
+    CHECK(queue.bytes + bytes > REQUEST_QUEUE_BYTES_MAX);
+    fresh();
+    CHECK(queue.bytes == 0);
+}
+
 int main(void)
 {
+    test_body_budget();
     test_turns();
     test_limits();
     test_what_it_carries();

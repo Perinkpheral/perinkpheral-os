@@ -95,7 +95,7 @@ static bool encode_list_in_place(char *value, size_t capacity)
 }
 
 static bool fill(const char *template_text, text_template_value_fn value_of, void *context,
-                 char *filled, size_t filled_size, bool for_url)
+                 char *filled, size_t filled_size, bool for_url, bool for_body)
 {
     size_t used = 0;
     const char *rest = template_text;
@@ -135,12 +135,13 @@ static bool fill(const char *template_text, text_template_value_fn value_of, voi
         /* A list setting goes in as its items with commas between them. */
         char *value = filled + used;
         bool  is_list = strchr(value, LIST_SEPARATOR) != NULL;
-        if (is_list && is_verbatim) {
+        if (is_list && is_verbatim && !for_body) {
             for (char *at = value; (at = strchr(at, LIST_SEPARATOR)) != NULL;) {
                 *at = LIST_JOINED;
             }
         }
-        if (is_verbatim ? !is_printable(value)
+        if (for_body ? strchr(value, '\r') != NULL
+            : is_verbatim ? !is_printable(value)
             : is_list   ? !encode_list_in_place(value, filled_size - used)
                         : !encode_in_place(value, filled_size - used)) {
             return false;
@@ -151,12 +152,12 @@ static bool fill(const char *template_text, text_template_value_fn value_of, voi
 }
 
 static bool fill_or_empty(const char *template_text, text_template_value_fn value_of,
-                          void *context, char *filled, size_t filled_size, bool for_url)
+                          void *context, char *filled, size_t filled_size, bool for_url, bool for_body)
 {
     if (filled_size == 0) {
         return false;
     }
-    if (!fill(template_text, value_of, context, filled, filled_size, for_url)) {
+    if (!fill(template_text, value_of, context, filled, filled_size, for_url, for_body)) {
         filled[0] = '\0';
         return false;
     }
@@ -166,13 +167,19 @@ static bool fill_or_empty(const char *template_text, text_template_value_fn valu
 bool text_template_fill(const char *template_text, text_template_value_fn value_of,
                         void *context, char *filled, size_t filled_size)
 {
-    return fill_or_empty(template_text, value_of, context, filled, filled_size, false);
+    return fill_or_empty(template_text, value_of, context, filled, filled_size, false, false);
 }
 
 bool text_template_fill_url(const char *template_text, text_template_value_fn value_of,
                             void *context, char *filled, size_t filled_size)
 {
-    return fill_or_empty(template_text, value_of, context, filled, filled_size, true);
+    return fill_or_empty(template_text, value_of, context, filled, filled_size, true, false);
+}
+
+bool text_template_fill_body(const char *template_text, text_template_value_fn value_of,
+                             void *context, char *filled, size_t filled_size)
+{
+    return fill_or_empty(template_text, value_of, context, filled, filled_size, false, true);
 }
 
 text_request_result_t text_template_prepare_request(app_poll_t *poll, const char *manifest,
@@ -205,5 +212,10 @@ text_request_result_t text_template_prepare_request(app_poll_t *poll, const char
         }
         memcpy(poll->headers[i].value, expanded, strlen(expanded) + 1);
     }
+    char body[APP_POLL_BODY_MAX + 1];
+    if (!text_template_fill_body(poll->body, value_of, context, body, sizeof body)) {
+        return TEXT_REQUEST_NOT_READY;
+    }
+    memcpy(poll->body, body, strlen(body) + 1);
     return TEXT_REQUEST_READY;
 }

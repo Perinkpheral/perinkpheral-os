@@ -67,7 +67,8 @@ int main(void)
     free_job(job);
     set_value("server", "http://first.example");
 
-    app_poll_t poll = { .header_count = 1 };
+    app_poll_t poll = { .header_count = 1, .method = HOST_HTTP_POST };
+    snprintf(poll.body, sizeof poll.body, "{{item}}={{token}}");
     snprintf(poll.url, sizeof poll.url, "{{server}}/api/{{item}}");
     snprintf(poll.headers[0].name, sizeof poll.headers[0].name, "Authorization");
     snprintf(poll.headers[0].value, sizeof poll.headers[0].value, "Bearer {{token}} {{item}}");
@@ -81,7 +82,20 @@ int main(void)
     assert(job->status == 0);
     assert(strcmp(job->url, "http://changed.example/api/a%2Fb") == 0);
     assert(strcmp(job->headers, "Authorization: Bearer new-server-token a/b\n") == 0);
-    assert(job->item == 2);
+    s_mocks = json_parse("{\"http://changed.example/api/a%2Fb\":{\"method\":\"POST\","
+                         "\"request_body\":\"a/b=new-server-token\",\"body\":\"ok\"}}");
+    assert(mock_for(job) != NULL);
+    job->method = HOST_HTTP_GET;
+    assert(mock_for(job) == NULL);
+    job->method = HOST_HTTP_POST;
+    job->body[0] = 'b';
+    assert(mock_for(job) == NULL);
+    job->body[0] = 'a';
+    json_free(s_mocks);
+    s_mocks = NULL;
+    assert(job->item == 2 && job->method == HOST_HTTP_POST);
+    assert(job->body_length == strlen("a/b=new-server-token"));
+    assert(memcmp(job->body, "a/b=new-server-token", job->body_length) == 0);
     free_job(job);
 
     snprintf(poll.url, sizeof poll.url, "{{missing}}");
@@ -111,6 +125,26 @@ int main(void)
     FILE *answered = fdopen(answers[1], "w");
     pthread_t worker;
     assert(pthread_create(&worker, NULL, network_thread, NULL) == 0);
+    snprintf(poll.url, sizeof poll.url, "{{server}}/post");
+    snprintf(poll.body, sizeof poll.body, "token={{token}}");
+    snprintf(poll.headers[0].value, sizeof poll.headers[0].value, "Bearer {{token}}");
+    start_poll_request(&poll, 0, NULL, -1);
+    set_value("token", "send-time");
+    dispatch_job();
+    json_t *post = read_request(asked);
+    assert(strcmp(json_get(post, "method")->text, "POST") == 0);
+    assert(strcmp(json_get(json_get(post, "headers"), "Authorization")->text, "Bearer send-time") == 0);
+    size_t body_length;
+    uint8_t *sent_body = base64_decode(json_get(post, "body")->text, &body_length);
+    assert(body_length == strlen("token=send-time") && memcmp(sent_body, "token=send-time", body_length) == 0);
+    free(sent_body);
+    json_free(post);
+    reply(answered, "{\"status\":307,\"next\":\"http://second.example/replay\",\"body\":\"\"}");
+    assert(read(s_jobs_done[0], &job, sizeof job) == sizeof job);
+    assert(job->status == 307);
+    free_job(job);
+    s_job_active = false;
+    set_value("token", "rotated");
     assert(services_request("probe", &request) == HOST_OK);
     dispatch_job();
     json_t *sent = read_request(asked);

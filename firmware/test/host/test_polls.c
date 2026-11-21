@@ -34,7 +34,7 @@ static void test_polls_in_the_manifest(void)
 
     CHECK(app_manifest_parse_poll(json, 1, &poll) == APP_MANIFEST_OK);
     CHECK_STR(poll.url, "https://example.org/x");
-    CHECK(poll.header_count == 0);
+    CHECK(poll.header_count == 0 && poll.method == 0 && poll.body[0] == '\0');
 
     /* a number that is not there */
     CHECK(app_manifest_parse_poll(json, 2, &poll) == APP_MANIFEST_BAD_POLL);
@@ -488,16 +488,19 @@ static void test_queued_destination_after_settings_change(void)
     strcpy(request->headers[0].value, "Bearer {{token}}");
     /* The queued, expanded URL still names the old server. Current KV
      * names another: the new token must not reach the old destination. */
+    strcpy(request->body, "{{token}}");
     strcpy(request->url, "http://old.example/api");
     char url[APP_URL_MAX + 1];
     CHECK(text_template_prepare_request(request, manifest, settings_value, NULL, url, sizeof url) ==
           TEXT_REQUEST_NOT_ALLOWED);
     CHECK_STR(request->headers[0].value, "Bearer {{token}}");
+    CHECK_STR(request->body, "{{token}}");
     strcpy(request->url, "http://10.0.0.2:8123/api");
     CHECK(text_template_prepare_request(request, manifest, settings_value, NULL, url, sizeof url) ==
           TEXT_REQUEST_READY);
     CHECK_STR(url, "http://10.0.0.2:8123/api");
     CHECK_STR(request->headers[0].value, "Bearer s3cret");
+    CHECK_STR(request->body, "s3cret");
     strcpy(request->url, "http://10.0.0.2:8123/api?literal={{evil}}");
     CHECK(text_template_prepare_request(request, manifest, settings_value, NULL, url, sizeof url) ==
           TEXT_REQUEST_READY);
@@ -517,8 +520,81 @@ static void test_queued_destination_after_settings_change(void)
     free(request);
 }
 
+
+static void test_poll_methods_and_body_limits(void)
+{
+    const char *methods[] = { "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "PROPFIND", "REPORT" };
+    char json[2048], body[APP_POLL_BODY_MAX + 2];
+    app_manifest_t manifest;
+    app_poll_t poll;
+    for (unsigned index = 0; index < sizeof methods / sizeof methods[0]; index++) {
+        snprintf(json, sizeof json, MANIFEST_START
+                 "[{\"url\":\"https://example.org\",\"every\":60,\"method\":\"%s\",\"pick\":[\"value\"]}]}", methods[index]);
+        CHECK(app_manifest_parse(json, &manifest) == APP_MANIFEST_OK);
+        CHECK(app_manifest_parse_poll(json, 0, &poll) == APP_MANIFEST_OK);
+        CHECK(poll.method == (int)index && poll.body[0] == '\0' && poll.pick_count == 1);
+    }
+    const char *bad[] = { "\"get\"", "\"OPTIONS\"", "\"\"", "null", "1", "{}" };
+    for (unsigned index = 0; index < sizeof bad / sizeof bad[0]; index++) {
+        snprintf(json, sizeof json, MANIFEST_START
+                 "[{\"url\":\"https://example.org\",\"every\":60,\"method\":%s}]}", bad[index]);
+        CHECK(app_manifest_parse(json, &manifest) == APP_MANIFEST_BAD_POLL);
+    }
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"every\":60,\"body\":\"\"}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"every\":60,\"method\":\"GET\",\"body\":\"x\"}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"every\":60,\"method\":\"HEAD\",\"body\":\"\"}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"every\":60,\"method\":\"POST\",\"body\":null}]") == APP_MANIFEST_BAD_POLL);
+    memset(body, 'x', APP_POLL_BODY_MAX + 1);
+    body[APP_POLL_BODY_MAX] = '\0';
+    snprintf(json, sizeof json, MANIFEST_START
+             "[{\"url\":\"http://x\",\"every\":60,\"method\":\"POST\",\"body\":\"%s\"}]}", body);
+    CHECK(app_manifest_parse(json, &manifest) == APP_MANIFEST_OK);
+    CHECK(app_manifest_parse_poll(json, 0, &poll) == APP_MANIFEST_OK);
+    CHECK(strlen(poll.body) == APP_POLL_BODY_MAX);
+    body[APP_POLL_BODY_MAX] = 'x';
+    body[APP_POLL_BODY_MAX + 1] = '\0';
+    snprintf(json, sizeof json, MANIFEST_START
+             "[{\"url\":\"http://x\",\"every\":60,\"method\":\"POST\",\"body\":\"%s\"}]}", body);
+    CHECK(app_manifest_parse(json, &manifest) == APP_MANIFEST_BAD_POLL);
+}
+
+static bool body_value(void *context, const char *key, char *value, size_t size)
+{
+    (void)key;
+    return snprintf(value, size, "%s", (const char *)context) < (int)size;
+}
+
+static void test_body_expansion(void)
+{
+    char body[APP_POLL_BODY_MAX + 1];
+    CHECK(text_template_fill_body("{\"v\":\"{{token}}\"}", body_value, "a\"b\\c\nПривет", body, sizeof body));
+    CHECK_STR(body, "{\"v\":\"a\"b\\c\nПривет\"}");
+    CHECK(!text_template_fill_body("{{token}}", body_value, "bad\rvalue", body, sizeof body));
+    CHECK_STR(body, "");
+    CHECK(!text_template_fill_body("{{missing}}", settings_value, NULL, body, sizeof body));
+    CHECK(!text_template_fill_body("{{token", settings_value, NULL, body, sizeof body));
+    char large[APP_POLL_BODY_MAX + 1];
+    memset(large, 'x', APP_POLL_BODY_MAX);
+    large[APP_POLL_BODY_MAX] = '\0';
+    CHECK(text_template_fill_body("{{token}}", body_value, large, body, sizeof body));
+    CHECK(strlen(body) == APP_POLL_BODY_MAX);
+    CHECK(!text_template_fill_body("x{{token}}", body_value, large, body, sizeof body));
+    CHECK_STR(body, "");
+
+    app_poll_t poll = { .header_count = 1 };
+    strcpy(poll.url, "https://example.org");
+    strcpy(poll.headers[0].value, "{{token}}");
+    strcpy(poll.body, "value={{token}}");
+    char url[APP_URL_MAX + 1];
+    CHECK(text_template_prepare_request(&poll, NULL, body_value, "current", url, sizeof url) == TEXT_REQUEST_READY);
+    CHECK_STR(poll.headers[0].value, "current");
+    CHECK_STR(poll.body, "value=current");
+}
+
 int main(void)
 {
+    test_poll_methods_and_body_limits();
+    test_body_expansion();
     test_queued_destination_after_settings_change();
     test_setting_interval_restored();
     test_pick_paths();

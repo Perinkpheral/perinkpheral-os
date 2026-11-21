@@ -86,3 +86,10 @@ val appCheckTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.check.AppCheckTest")
 }
 tasks.check { dependsOn(appCheckTest) }
+
+val pollManifestTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.PollManifestTest")
+}
+tasks.check { dependsOn(pollManifestTest) }

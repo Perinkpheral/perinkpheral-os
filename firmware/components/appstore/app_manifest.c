@@ -262,6 +262,31 @@ static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *pa
         }
         strcpy(parsed->each_prefix, prefix->text);
     }
+    static const char *const METHODS[] = {
+        "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "PROPFIND", "REPORT"
+    };
+    _Static_assert(sizeof METHODS / sizeof METHODS[0] == HOST_HTTP_METHOD_LAST + 1,
+                   "poll methods match http_send");
+    parsed->method = HOST_HTTP_GET;
+    const json_t *method = json_get(poll, "method");
+    if (method != NULL) {
+        if (!json_is_string(method)) {
+            return false;
+        }
+        int index = 0;
+        while (index <= HOST_HTTP_METHOD_LAST && strcmp(method->text, METHODS[index]) != 0) {
+            index++;
+        }
+        if (index > HOST_HTTP_METHOD_LAST) {
+            return false;
+        }
+        parsed->method = index;
+    }
+    if (!read_string(poll, "body", parsed->body, sizeof parsed->body) ||
+        (json_get(poll, "body") != NULL &&
+         (parsed->method == HOST_HTTP_GET || parsed->method == HOST_HTTP_HEAD))) {
+        return false;
+    }
     return read_headers(json_get(poll, "headers"), parsed) &&
            read_pick(json_get(poll, "pick"), parsed);
 }

@@ -51,3 +51,8 @@ Build: `make` for this computer (a C compiler and Java 21 or later for import ge
 builds what the CLion plugin carries: `build/macos` (arm64 and x86_64, on macOS),
 `build/linux-x86_64` and `build/linux-aarch64` (static, musl, cross-built with
 [zig](https://ziglang.org)). Windows is not supported yet.
+
+Mocks may add `"method": "POST"` and `"request_body": "the expanded text"` to
+match a request as well as its URL. `"body"` remains the response body. Manifest
+poll bodies are expanded with current settings at dispatch, including the selected
+`each` item; picked and streamed responses use the same method and body.

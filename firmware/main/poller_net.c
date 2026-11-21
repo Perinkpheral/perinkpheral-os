@@ -335,7 +335,7 @@ static esp_err_t attach_trust(void *conf)
 }
 
 /* The host loop is the sole writer of application KV values. Expanding
- * the URL, authorizing it and copying every header in one call gives the
+ * the URL, authorizing it and expanding headers and body in one call gives the
  * request one settings snapshot, including multi-key page saves. */
 typedef struct {
     request_t *request;
@@ -683,6 +683,10 @@ static void ask_network(request_t *request, const char *app_name, int number, in
     }
     int64_t   started_ms = now_ms();
     cut_at(started_ms + REQUEST_WITH_REDIRECTS_MS);
+    if (!only_listed_hosts) {
+        body = (const uint8_t *)request->poll.body;
+        body_length = (int)strlen(request->poll.body);
+    }
     esp_err_t err = esp_http_client_open(client, body_length);
     if (err == ESP_OK) {
         cut_watch(client);
@@ -743,8 +747,16 @@ static void ask_network(request_t *request, const char *app_name, int number, in
                                        : (int32_t)esp_http_client_get_content_length(client);
         if (method == HOST_HTTP_HEAD) {
             /* There is no body to wait for: the headers are the answer. */
-            hand_over_piece(app_name, number, http_status, &request->response, &request->headers, request->piece,
-                            0, HOST_DATA_FIRST | HOST_DATA_LAST);
+            if (wants_values) {
+                for (int i = 0; i < request->poll.pick_count; i++) {
+                    request->paths[i] = request->poll.pick[i];
+                }
+                json_pick_init(&request->pick, request->paths, request->poll.pick_count);
+                hand_over_values(app_name, number, http_status, &request->response, &request->headers, &request->pick);
+            } else {
+                hand_over_piece(app_name, number, http_status, &request->response, &request->headers, request->piece,
+                                0, HOST_DATA_FIRST | HOST_DATA_LAST);
+            }
         } else if (wants_values) {
             fetch_values(request, client, app_name, number, http_status);
         } else {
@@ -828,7 +840,7 @@ int poller_net_poll(const char *app_name, int poll_number, int item)
         if (items == 0 && request->poll.each_key[0] != '\0') {
             request->poll.each_key[0] = '\0';
         }
-        perform(request, app_name, poll_number, HOST_HTTP_GET, NULL, 0, false);
+        perform(request, app_name, poll_number, request->poll.method, NULL, 0, false);
         s_item = -1;
     }
     free(request);

@@ -4404,3 +4404,31 @@ Handled by Perinkpheral OS: opens the previous or next application in menu order
 
 Recognized translation codes
 Распознаваемые коды переводов
+
+The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports/exports, manifest features and an explicit manifest minimum. A non-GET poll method or any poll body automatically requires the firmware named by <code>HOST_SINCE_POLL_METHOD</code> (0.1.80). Other new flags or manifest behaviour need an explicit minimum. Older firmware refuses installation and startup with "Update the firmware."
+Минимальная версия прошивки. Сборка выбирает наибольшую из начальной версии ABI 3 (0.1.30), версий появления используемых импортов/экспортов и возможностей манифеста и явно указанного минимума. Метод опроса, отличный от GET, или любое тело опроса автоматически требуют прошивку из <code>HOST_SINCE_POLL_METHOD</code> (0.1.80). Для других новых флагов или возможностей манифеста минимум нужно указать явно. Более старая прошивка отказывает в установке и запуске: «Обновите прошивку.»
+
+Optional request method; defaults to GET. Only GET follows redirects, up to three times; another method delivers its redirect response without sending again. <code>pick</code> works with every method; HEAD delivers no response values.
+Необязательный метод запроса; по умолчанию GET. Только GET следует перенаправлениям, не более трёх раз; другой метод передаёт ответ с перенаправлением приложению без повторной отправки. <code>pick</code> работает с любым методом; HEAD передаёт ответ без значений.
+
+Up to 1024 bytes before and after expansion
+До 1024 байт до и после подстановки
+
+Optional text, with <code>{{key}}</code> templates; refused with GET or HEAD, even when empty. Content-Type comes from <code>headers</code>.
+Необязательный текст с шаблонами <code>{{key}}</code>; запрещён с GET и HEAD, даже если пуст. Content-Type задаётся в <code>headers</code>.
+
+Immediately before sending a poll, Perinkpheral OS expands its URL, headers and body in one operation using current KV values and manifest defaults. A body value is inserted as stored, including line feeds and UTF-8; a carriage return in a value fails the request with <code>HOST_FAILED_NOT_READY</code>. The developer supplies JSON, form or other body escaping. With <code>each</code>, the list key substitutes the selected item, without its prefix, in the body as in the URL and headers. A body over 1024 bytes after expansion fails with <code>HOST_FAILED_NOT_READY</code>.
+Непосредственно перед отправкой опроса Perinkpheral OS раскрывает его URL, заголовки и тело одной операцией по текущим значениям KV и значениям по умолчанию из манифеста. Значение в теле вставляется как сохранено, включая переводы строк и UTF-8; возврат каретки в значении завершает запрос с <code>HOST_FAILED_NOT_READY</code>. Разработчик сам экранирует тело для JSON, формы или другого формата. При <code>each</code> ключ списка подставляет выбранный элемент без префикса в тело так же, как в URL и заголовки. Тело длиннее 1024 байт после подстановки завершает запрос с <code>HOST_FAILED_NOT_READY</code>.
+
+
+method
+=
+
+body
+=
+
+MANIFEST_POLL_BODY_MAX
+=
+
+Poll body, before and after expansion
+Тело опроса до и после подстановки
