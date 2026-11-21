@@ -14,7 +14,6 @@
     "address": "192.168.1.42",
     "rssi": -54,
     "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
-    "time": "Sat 21 Nov 14:25",
     "hostname": "perinkpheral-a7d2",
     "idf": "v5.5.5",
     "built": "Nov 21 2026",
@@ -29,6 +28,10 @@
     "usb_host": true,
     "memory_refusals": 0,
     "failed_allocations": 0
+  },
+  "status_time": {
+    "en": "Sat 21 Nov 14:25",
+    "ru": "Сб 21 ноя 14:25"
   },
   "settings": {
     "device_name": "Perinkpheral-A7D2",

@@ -19,7 +19,7 @@ const run = (args) => {
 function answer(url, language, method) {
     if (method !== 'GET' && method !== 'HEAD') throw Error('Unexpected write to mock: ' + url.pathname);
     switch (url.pathname) {
-        case '/api/status': return json({...device.status,time:language === 'ru' ? 'Сб 21 ноя 14:25':'Sat 21 Nov 14:25'});
+        case '/api/status': return json({...device.status,time:device.status_time[language]});
         case '/api/settings': return json({...device.settings,language});
         case '/api/apps': return json(fixture('apps-' + language));
         case '/api/apps/removed': return json([]);
@@ -117,26 +117,24 @@ async function main() {
                 await page.evaluate(hash=>{for(const dialog of document.querySelectorAll('dialog[open]')) dialog.close();location.hash=hash;scrollTo(0,0);},'#'+hash);
                 await page.waitForSelector(`section[data-section="${hash.split(':')[0]}"].current`);
             };
+            const pomodoro=catalog.apps.find(app=>app.name==='pomodoro');
+            const title=pomodoro.translations?.[language]?.title || pomodoro.title;
             const install=page.locator('#catalog-rows .offer').filter({has:page.locator('b',{
-                hasText:language==='ru'?'Помодоро':'Pomodoro'
-            })}).getByRole('button',{name:language==='ru'?'Установить':'Install',exact:true});
+                hasText:title
+            })}).locator('button[class~="quiet"]');
             await install.waitFor({state:'visible'});
             if(!await install.isEnabled()) throw Error('Pomodoro installation is unavailable.');
             await shot('web-catalog','section[data-section="catalog"]');
-            await go('apps');await shot('web-apps');
             await go('apps:weather');await page.waitForSelector('#app-dialog[open]');
-            await shot('web-place','#app-dialog');
             const city=page.locator('#app-fields [data-key="city"]');
             await city.fill('Lyo');
             await page.waitForSelector('.place li');
             await shot('web-place-search','#app-dialog');
             await go('apps:stocks');await page.waitForSelector('#app-dialog[open]');
             await shot('web-list','#app-dialog','#app-fields [data-type="list"]');
-            await go('settings:network');await shot('web-wifi');
-            await go('settings');await shot('web-settings');
             await go('firmware');await page.locator('#check-release').click();
             await page.waitForSelector('#ota-update:visible');await shot('web-firmware','section[data-section="firmware"]');
-            // The same English recovery form is used in both manuals.
+            // The English and Russian manual editions use the same English recovery form.
             if(language==='en') {
                 await page.goto(origin+'/recovery');
                 // Show a chosen filename rather than the machine's empty-file label.

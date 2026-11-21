@@ -564,6 +564,8 @@ docs/
                        tools/perinkpheral guide prints with a Chromium browser - CI attaches them to every
                        release, git does not keep them - made of source/ - guide.html,
                        its Russian (guide.ru.txt) and the pictures of the screens
+  manual/              the user manual: source/manual.html, manual.ru.txt and reviewed pictures;
+                       tools/perinkpheral manual prints PDFs in both languages, attached to releases, not committed
   api/                 the device's web API (openapi.yaml)
 hardware/              everything about the physical device
   README.md            panel, datasheet, bench notes
@@ -594,7 +596,7 @@ Open:
 
 - **Code partition.** A module header whose check reads erased is taken as an older firmware's, unchecked, so an erase of its first sector cut short that restores the cleared 32-bit mark bit for bit can grow its size over the next module, which the next start then erases.
 
-Firmware updates keep installed packages. ABI 2 packages must be rebuilt for ABI 3; a newer firmware minimum gives "Update the firmware." The developer guide is built from `docs/guide/source/guide.html`; Russian comes from `docs/guide/source/guide.ru.txt`. The user manual is separate: `docs/manual/source/manual.html` and `manual.ru.txt`, built with `tools/perinkpheral manual [--language ru]`. Both manuals are built in CI and attached to releases. The English source governs. An API addition is documented in the application guide; a changed signature or meaning needs a new ABI.
+Firmware updates keep installed packages. ABI 2 packages must be rebuilt for ABI 3; a newer firmware minimum gives "Update the firmware." The developer guide is built from `docs/guide/source/guide.html`; Russian comes from `docs/guide/source/guide.ru.txt`. The user manual is separate: `docs/manual/source/manual.html` and `manual.ru.txt`, built with `tools/perinkpheral manual [--language ru]`. The application guide and user manual are each built in English and Russian in CI and attached to releases. The English source governs. An API addition is documented in the application guide; a changed signature or meaning needs a new ABI.
 
 ## Acceptance changes, 2026-11-18
 
@@ -632,15 +634,16 @@ whether that shortens the wait has to be seen on a phone.
 
 The owner's rule (2026-11-17): every push of every repository is built and tested; a push to `main` is also a release, with the version raised by itself; a push to another branch builds the same and releases nothing. The version of a release is the greater of the one the repository writes down (`VERSION`, `pluginVersion`, the integration's manifest; none for the catalog and the portal) and the last release's with its patch one up; a build of another branch is `<version>-<commit>`. Runs of `main` go one at a time, so each takes the version the one before released. The notes of a release are the commits since the one before - for the firmware, the version's section of `CHANGES.md` when there is one.
 - **This repository** (`.github/workflows/ci.yml`): the host tests with the layers and the languages; Kotlin tests of the shared firmware-update client and of the capability checks (`app-check` on its specimen and on broken copies of it) and Node.js tests of the firmware-update and manual-recovery pages; the applications of `firmware/test/sim` in the simulator, each frame held against a PNG that was looked at and kept (`tools/perinkpheral sim-test`; a frame that differs is the run's artifact, `--update` writes the pictures anew; the scenarios run several at a time, one a processor or `--jobs N`, and are told in their own order - each has a simulator, a port the system picked and a state folder of its own, its `wait` is real time, and one marked `"serial": true` runs while no other does); the firmware built twice in ESP-IDF's container - for release, and with the development tools for debugging (`<version>-debug`) - each with its separate recovery image and the files of a first flash, both with the same preinstalled applications, taken from a checkout of the catalog repository at the commit `firmware/preinstalled.properties` pins, which the job reads from there (`preinstalled pin`); the size of the image and of the RAM against the last build of `main`, in the run's summary and on a pull request. The printable-enclosure job checks the STEP source, 3MF geometry and archive with Python 3.12 and the CAD dependencies in `tools/case/requirements.txt`. A release carries both firmware builds and enclosure print files; then `flasher.yml` puts every release's firmware files on this repository's Pages for the flasher.
-- **Generated files and guides** runs on Ubuntu 24.04, Java 21 and a C compiler. Chromium prints both PDFs; poppler-utils extracts their text; fonts-dejavu-core, fonts-liberation and fonts-noto-core supply fallbacks, with Departure Mono in `assets/fonts`. CI requires a complete Russian translation and matching guide limits, compares committed generated fonts, icons, marks and guide screen pixels, and checks the OpenAPI paths and methods against the firmware route tables. Both PDFs and glyph packs are release assets; glyph sheets are run artifacts.
+- **Generated files and guides** runs on Ubuntu 24.04, Java 21 and a C compiler. Chromium prints the English and Russian editions of the application guide and user manual; poppler-utils extracts their text; fonts-dejavu-core, fonts-liberation and fonts-noto-core supply fallbacks, with Departure Mono in `assets/fonts`. CI requires complete Russian translations and matching guide limits, compares committed generated fonts, icons, marks and guide screen pixels, and checks the OpenAPI paths and methods against the firmware route tables. All four PDFs and glyph packs are release assets; glyph sheets are run artifacts.
 
 | Output | CI policy |
 |---|---|
-| Guide PDFs | Build both languages from source into CI artifacts and attach to every release; PDFs are not committed. `check-pdf` remains available for comparing two local builds |
+| Application guide and user manual PDFs (`docs/guide`, `docs/manual`) | Build each in English and Russian from source into CI artifacts and attach to every release; PDFs are not committed. `check-pdf` remains available for comparing two local builds |
+| User manual pictures (`docs/manual/source/pictures`) | Print from committed, visually reviewed pictures; CI does not regenerate them |
 | Guide screens and icon sheets | Native `preview`; compare every committed PNG by pixels |
 | Fonts, `gfx_icon_art.c`, spelling and cities | Regenerate in scratch storage; compare committed text by bytes |
 | Marks | Regenerate SVG/PNG; compare bytes or pixels and the page's embedded mark; compare embedded wordmark with its SVG master |
-| Russian HTML | Generate from the English guide and translation pairs; ignored intermediate, no second committed copy |
+| Russian HTML | Generate from each document's English source and translation pairs; ignored intermediate, no second committed copy |
 | Device page and gzip | Assemble in CI and each firmware build; no committed assembled copy |
 | Glyph packs and sheets | Generate from bundled fonts and `sdk/languages.json`; packs attached to releases, sheets kept with the run. This repository commits no packs; the catalog copies perinkpheral-apps/glyphs, maintained in that repository |
 | ABI snapshot and frozen packages | Existing host-test `contract check`: append-only contract and fixture hashes. Fixtures are compatibility inputs, never refreshed by CI |

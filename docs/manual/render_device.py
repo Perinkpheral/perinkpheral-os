@@ -75,7 +75,6 @@ anchors = {'buttons': [(98.25, y, 19) for y in (54, 66.7, 79.4, 92.1)],
 result = {}
 for name, position, target, scale in [
     ('device-base', (188, 193, 179), (98.25, 73.05, 19), 84),
-    ('device-front', (200, -240, 180), (55, 40, 35), 180),
     ('device-port', (235, -40, 65), (111.5, 33.53, 9), 64),
 ]:
     camera.location = position

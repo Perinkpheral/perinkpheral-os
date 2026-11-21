@@ -2,8 +2,8 @@
 
 The English original is `source/manual.html`. Russian lives beside it in
 `source/manual.ru.txt`, using the application guide's translation pairs.
-Both documents use `docs/guide/source/print.css` and `cover.html`, extracted
-unchanged from the guide. `Guide.kt` expands the stylesheet and cover before
+The application guide and user manual use `docs/guide/source/print.css` and
+`cover.html`, extracted unchanged from the guide. `Guide.kt` expands the stylesheet and cover before
 translation and uses the same numbered headings, linked contents and two-pass
 Chromium printing. The manual's own CSS only arranges its pictures and page breaks.
 
@@ -24,7 +24,7 @@ all documentation PDFs. Printing refuses missing pictures.
 
 ## Rebuilding pictures
 
-Run outside a restricted sandbox. Requirements: the normal tools environment
+Requirements: the normal tools environment
 (Java 21+, C compiler, wasi-sdk), Python 3, Node.js, Blender, Playwright with
 Chromium, and a Python environment with `tools/case/requirements.txt` installed.
 The Python used for CAD is separate from Blender's bundled Python.
@@ -42,6 +42,8 @@ BMP captures and rendered PNG/SVG files all stay under that folder. Final
 pictures are also copied beside the manual source. Review them before keeping
 them. Before copying, the script checks every PNG against the accepted source
 dimensions and writes `picture-dimensions.json`; a size change stops the build.
+Renders and browser captures depend on tool and font versions, so reruns may
+change committed pictures; commit only changes that have been visually reviewed.
 The normal PDF build and CI consume these pictures; they do not require
 Blender or silently regenerate reviewed artwork.
 
@@ -52,6 +54,7 @@ Blender or silently regenerate reviewed artwork.
   dashed for a press, solid for a hold. There are no fingers. Numbers 1-4 and
   the outline convention are explained in both languages in the manual.
   Raster dimensions and quality are preserved; SVGs embed the original PNG bytes.
+  The base and USB-port PNG renders stay in the review folder as SVG inputs.
 - `screen_pictures.py` runs the real Settings and Weather applications through
   `tools/perinkpheral sim`, captures `/api/dev/screen`, and uses
   `tools/perinkpheral press` for navigation. Weather answers are fictional,
@@ -73,8 +76,8 @@ Blender or silently regenerate reviewed artwork.
   unrelated settings below it are outside the capture. Recovery's upload form is captured without surrounding
   page whitespace. Its page is decoded directly from
   `recovery/main/page.h`. That page is currently English in both languages, so
-  both manuals use the same English capture. Playwright selects a dummy
-  `perinkpheral.bin` with `setInputFiles` before capture. The machine-localized native
+  the English and Russian manual editions use the same English capture.
+  Playwright selects a dummy `perinkpheral.bin` with `setInputFiles` before capture. The machine-localized native
   chooser button is clipped out for this illustration of the step after file selection.
   The selected filename and real Install firmware button stay visible. The original
   input height is retained and the form dimensions must match before and after the
@@ -87,10 +90,15 @@ Blender or silently regenerate reviewed artwork.
 - `review_pictures.cjs` makes PNG copies of the SVG overlays for review. These
   copies are not PDF inputs.
 
-The external review entry point builds the CLI, runs the picture scripts,
-prints both PDFs, and rasterizes every PDF page with `pdftoppm`. Inspect every
-page in both languages as well as the individual pictures. When
-`MANUAL_GUIDE_REFERENCE` names the folder with the released guide PDFs,
-`review_pictures.cjs` also makes same-scale comparisons of the cover, contents,
-headings and tables. Automatic checks cannot establish whether an outline,
-port leader or page break is clear.
+After rebuilding the pictures, print both manual editions with the commands
+above, then rasterize their pages and the SVG overlays for review:
+
+```sh
+pdftoppm -scale-to 1400 -png docs/manual/perinkpheral-manual.pdf /tmp/manual-review-round/manual-en
+pdftoppm -scale-to 1400 -png docs/manual/perinkpheral-manual.ru.pdf /tmp/manual-review-round/manual-ru
+node docs/manual/review_pictures.cjs /tmp/manual-review-round
+```
+
+Inspect every page in both languages as well as the individual pictures.
+Automatic checks cannot establish whether an outline, port leader or page
+break is clear.

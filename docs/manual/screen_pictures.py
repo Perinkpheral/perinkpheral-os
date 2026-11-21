@@ -90,10 +90,9 @@ for language in ('en', 'ru'):
         target = work / (name + '-' + language + '.pbm')
         run(work / 'capture-recovery', language, work / 'glyphs/cyrillic.glyphs', state, release, target)
         pbm(target, output / (name + '-' + language + '.png'))
-for language in ('en', 'ru'):
-    target = work / ('setup-' + language + '.pbm')
-    run(work / 'capture-setup', language, work / 'glyphs/cyrillic.glyphs', target)
-    pbm(target, output / ('setup-' + language + '.png'))
+target = work / 'setup-en.pbm'
+run(work / 'capture-setup', 'en', work / 'glyphs/cyrillic.glyphs', target)
+pbm(target, output / 'setup-en.png')
 
 randomizer = random.Random(417)
 weather = {'current': {'temperature_2m': randomizer.randint(90, 170) / 10, 'weather_code': 2, 'wind_speed_10m': randomizer.randint(8, 20)},

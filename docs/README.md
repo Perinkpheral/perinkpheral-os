@@ -12,6 +12,7 @@ The site's source lives in [perinkpheral-dev-portal](https://github.com/Perinkph
 | Architecture, constraints and current state | [CLAUDE.md](../CLAUDE.md) |
 | Build, flash and bench recipes | [AGENTS.md](../AGENTS.md) |
 | Application development guide | [English HTML](guide/source/guide.html), [Russian translation](guide/source/guide.ru.txt) |
+| User manual | [English HTML](manual/source/manual.html), [Russian translation](manual/source/manual.ru.txt), [picture and PDF recipes](manual/README.md) |
 | Perinkpheral OS ABI and compatibility | [host_api.h](../sdk/host_api.h), [frozen ABI notes](../sdk/abi/README.md) |
 | Device HTTP API, including recovery | [OpenAPI](api/openapi.yaml) |
 | Security model | [SECURITY.md](../SECURITY.md) |
@@ -24,10 +25,12 @@ The site's source lives in [perinkpheral-dev-portal](https://github.com/Perinkph
 
 ## Generated and local material
 
-Guide PDFs are built from the sources above and attached to
+The application guide and user manual PDFs are each built in English and Russian
+from the sources above and attached to
 [firmware releases](https://github.com/Perinkpheral/perinkpheral-os/releases/latest).
-They are not committed. Fonts, icon tables, guide screenshots and frozen ABI
-fixtures are deliberate tracked inputs or outputs; see [the checking recipes](../AGENTS.md).
+They are not committed. Fonts, icon tables, guide screenshots, reviewed manual
+pictures and frozen ABI fixtures are deliberate tracked inputs or outputs;
+see [the checking recipes](../AGENTS.md).
 Do not remove them as build debris.
 
 Build products belong under `build/` or a tool's ignored build directory.

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# Run outside the sandbox. Write every intermediate and review image under the chosen folder.
+# Write every intermediate and review image under the chosen folder.
 set -eu
 manual_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$manual_dir/../.." && pwd)
@@ -41,15 +41,13 @@ for source in sorted(sources.glob('*.png')):
 (output / 'picture-dimensions.json').write_text(json.dumps(dimensions, indent=2) + '\n')
 PY
 # Reviewed assets beside the source let CI print without CAD, Blender or simulator dependencies.
-for name in device-base device-front device-port; do
-    cp "$output/$name.png" "$manual_dir/source/pictures/"
-done
 for name in device-buttons device-back device-switch device-rescue device-recovery device-usb; do
     cp "$output/$name.svg" "$manual_dir/source/pictures/"
 done
+cp "$output/setup-en.png" "$manual_dir/source/pictures/"
 for language in en ru; do
-    for name in setup settings appearance not-set-up weather recovery confirm-update \
-        web-catalog web-apps web-place web-place-search web-list web-wifi web-settings web-firmware web-recovery; do
+    for name in settings appearance not-set-up weather recovery confirm-update \
+        web-catalog web-place-search web-list web-firmware web-recovery; do
         cp "$output/$name-$language.png" "$manual_dir/source/pictures/"
     done
 done
