@@ -562,7 +562,7 @@ function drawCatalog() {
   /* Until the sources answer the catalog says so, over whatever it has to show meanwhile. */
   const state = stateOf("catalog") === "failed" ? "failed"
     : catalogsRead ? (offers.length ? "" : "empty") : stateOf("catalog");
-  const failedSource = state === "failed" && offers.length ? catalogFailedSource : "";
+  const failedSource = state === "failed" && (offers.length || catalogsRead) ? catalogFailedSource : "";
   let note = state ? sameNote(view, state) : null;
   if (note && (note.dataset.source || "") !== failedSource) note = null;
   if (!note && failedSource) {
@@ -757,6 +757,7 @@ async function readCatalogs(redrawSources = true) {
     await loadSources(redrawSources);
   } catch (error) {
     if (started !== catalogGeneration || sourcesSaving) return;
+    catalogFailedSource = ""; /* the device did not answer: no source is to blame */
     if (!catalogsRead) loadState.catalog = "failed";
     drawTiles();
     throw error;

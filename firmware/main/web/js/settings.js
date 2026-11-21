@@ -133,12 +133,13 @@ const isNetworkTime = () => byId("time_auto").getAttribute("aria-pressed") === "
 byId("time-zone").addEventListener("submit", async event => {
   event.preventDefault();
   const networkTime = isNetworkTime();
-  const moment = clockTyped ? new Date(byId("clock-value").value).getTime() : Date.now();
+  const typed = clockTyped ? new Date(byId("clock-value").value).getTime() : null;
   const isSaved = await busy(event.submitter, async () => {
-    if (!networkTime && isNaN(moment)) throw new Error("Invalid value.");
+    if (!networkTime && typed !== null && isNaN(typed)) throw new Error("Invalid value.");
     await ask("/api/settings", post({ ...chosenZone(), ntp_server: byId("ntp_server").value,
                                       time_auto: networkTime }));
-    if (!networkTime) await ask("/api/clock", post({ unix: Math.round(moment / 1000) }));
+    /* An untouched field is the browser's time at the moment the clock is sent. */
+    if (!networkTime) await ask("/api/clock", post({ unix: Math.round((typed ?? Date.now()) / 1000) }));
   });
   if (isSaved) {
     clockTyped = false;
@@ -221,7 +222,8 @@ function localNow() {
  * cannot be typed. Typed, they are this computer's wall time, and the moment goes to the device. */
 function drawClock() {
   byId("clock-value").disabled = isNetworkTime();
-  if (!clockTyped || isNetworkTime()) byId("clock-value").value = localNow();
+  const now = localNow();
+  if ((!clockTyped || isNetworkTime()) && byId("clock-value").value !== now) byId("clock-value").value = now;
 }
 
 byId("time_auto").addEventListener("click", () => {
