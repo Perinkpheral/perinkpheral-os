@@ -22,6 +22,13 @@ static int rank(const gfx_icon_drawing_t *drawing, int side)
 
 static const gfx_icon_drawing_t *drawing_for(gfx_icon_id_t id, int side, int *scale)
 {
+    /* The project mark keeps its original grid, including at 99 pixels where a
+     * finer drawing would shrink it to 88 and change its stroke and spacing. */
+    if (id == GFX_ICON_UPDATE) {
+        const gfx_icon_drawing_t *mark = &GFX_ICON_ART[id].drawings[0];
+        *scale = side / mark->cells;
+        return mark;
+    }
     const gfx_icon_drawing_t *best = NULL;
     int best_rank = -1;
     for (int i = 0; i < GFX_ICON_DRAWINGS; i++) {

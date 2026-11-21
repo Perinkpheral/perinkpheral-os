@@ -502,6 +502,16 @@ static void test_icons(void)
     CHECK(without_eleven == 0);
     CHECK(wrong == 0);
 
+    /* Finer copies of the project mark must not change its pixel geometry at
+     * sizes that are not multiples of 22 or 44, especially the 99-pixel notice. */
+    for (int cell = 1; cell <= 9; cell++) {
+        CHECK(drawn_from(GFX_ICON_UPDATE, cell, &GFX_ICON_ART[GFX_ICON_UPDATE].drawings[0], cell));
+        gfx_icon_ink_t mark_ink;
+        CHECK(gfx_icon_ink(GFX_ICON_UPDATE, cell, &mark_ink));
+        CHECK(mark_ink.first_x == cell && mark_ink.last_x == 10 * cell - 1);
+        CHECK(mark_ink.first_y == cell && mark_ink.last_y == 10 * cell - 1);
+    }
+
     /* Where an icon has ink is where it was drawn. */
     gfx_icon_ink_t ink;
     CHECK(gfx_icon_ink(GFX_ICON_PLUS, 2, &ink));
