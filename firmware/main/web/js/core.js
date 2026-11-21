@@ -333,10 +333,11 @@ for (const tab of byId("tabs").children)
 for (const close of document.querySelectorAll("[data-close]"))
   close.addEventListener("click", () => close.closest("dialog").close());
 
-const iconPositions = new ResizeObserver(() => {
-  for (const svg of document.querySelectorAll("button.icon > svg")) centreIcon(svg);
-});
-for (const area of document.querySelectorAll("main, .head, .tiles")) iconPositions.observe(area);
+const centreAllIcons = () => { for (const svg of document.querySelectorAll("button.icon > svg")) centreIcon(svg); };
+const iconPositions = new ResizeObserver(centreAllIcons);
+/* The menu above main on a phone moves it without resizing it, when it rewraps or its font arrives. */
+for (const area of document.querySelectorAll("nav, main, .head, .tiles")) iconPositions.observe(area);
+document.fonts.ready.then(centreAllIcons);
 
 /* A dialog taller than the screen scrolls above its buttons, which stay at its bottom edge
  * (style.css); a line over them says there is more under it. */
