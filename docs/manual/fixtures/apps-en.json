@@ -1,0 +1,208 @@
+[
+  {
+    "name": "stocks",
+    "title": "Stocks",
+    "version": "0.2.11",
+    "description": "Stock prices",
+    "polls": [
+      {
+        "url": "https://query1.finance.yahoo.com/v8/finance/chart/{{tickers}}?range=1d&interval=5m",
+        "every": "{{refresh}}",
+        "each": "tickers",
+        "headers": {
+          "User-Agent": "perinkpheral"
+        },
+        "pick": [
+          "chart.result[0].meta.longName",
+          "chart.result[0].meta.shortName",
+          "chart.result[0].meta.symbol",
+          "chart.result[0].meta.regularMarketPrice",
+          "chart.result[0].meta.chartPreviousClose",
+          "chart.result[0].meta.priceHint",
+          "chart.result[0].meta.regularMarketTime",
+          "chart.result[0].meta.currency",
+          "chart.result[0].indicators.quote[0].close[*]"
+        ]
+      },
+      {
+        "url": "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{{tickers}}.json?iss.meta=off&iss.only=securities,marketdata&securities.columns=SECID,LATNAME,PREVPRICE,DECIMALS,CURRENCYID&marketdata.columns=LAST,UPDATETIME,SYSTIME",
+        "every": "{{refresh}}",
+        "each": "tickers",
+        "prefix": "MOEX:",
+        "pick": [
+          "securities.data[0][0]",
+          "securities.data[0][1]",
+          "securities.data[0][2]",
+          "securities.data[0][3]",
+          "securities.data[0][4]",
+          "marketdata.data[0][0]",
+          "marketdata.data[0][1]",
+          "marketdata.data[0][2]"
+        ]
+      },
+      {
+        "url": "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{{tickers}}/candles.json?interval=10&from={{day}}&till={{day}}&iss.meta=off&candles.columns=close",
+        "every": "{{refresh}}",
+        "each": "tickers",
+        "prefix": "MOEX:",
+        "pick": [
+          "candles.data[*][0]"
+        ]
+      }
+    ],
+    "writes_files": true,
+    "fullscreen": false,
+    "icon": [
+      "...........",
+      ".........#.",
+      "........##.",
+      ".......#.#.",
+      "..#...#..#.",
+      ".#.#.#...#.",
+      "#...#....#.",
+      "#........#.",
+      "#........#.",
+      "##########.",
+      "..........."
+    ],
+    "settings": [
+      {
+        "key": "tickers",
+        "type": "list",
+        "default": [
+          "AAPL",
+          "IBM",
+          "7203.T",
+          "MOEX:SBER",
+          "MOEX:GAZP"
+        ],
+        "title": "Tickers",
+        "help": "AAPL, IBM, 7203.T (Tokyo), MOEX:SBER (Moscow)"
+      },
+      {
+        "key": "refresh",
+        "type": "choice",
+        "options": [
+          "5 min",
+          "15 min",
+          "30 min",
+          "1 h"
+        ],
+        "default": "15 min",
+        "title": "Refresh"
+      },
+      {
+        "key": "rotate",
+        "type": "choice",
+        "options": [
+          "1 min",
+          "2 min",
+          "5 min",
+          "10 min"
+        ],
+        "default": "1 min",
+        "title": "Rotation"
+      }
+    ],
+    "values": {
+      "tickers": "AAPL\nMSFT\nIBM",
+      "refresh": "15 min",
+      "rotate": "2 min"
+    },
+    "author": "Perinkpheral"
+  },
+  {
+    "name": "weather",
+    "title": "Weather",
+    "version": "0.2.16",
+    "description": "Weather now and for three days",
+    "polls": [
+      {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude={{lat}}&longitude={{lon}}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto",
+        "every": "{{every}}",
+        "pick": [
+          "current.temperature_2m",
+          "current.weather_code",
+          "current.wind_speed_10m",
+          "daily.weather_code[0]",
+          "daily.weather_code[1]",
+          "daily.weather_code[2]",
+          "daily.temperature_2m_max[0]",
+          "daily.temperature_2m_max[1]",
+          "daily.temperature_2m_max[2]",
+          "daily.temperature_2m_min[0]",
+          "daily.temperature_2m_min[1]",
+          "daily.temperature_2m_min[2]",
+          "daily.precipitation_probability_max[0]"
+        ]
+      }
+    ],
+    "icon": [
+      "...#.......",
+      ".#...#.....",
+      "...##......",
+      "#.####.....",
+      "..####.###.",
+      "...#.######",
+      ".....######",
+      "...########",
+      "..#########",
+      "..#########",
+      "...#######."
+    ],
+    "settings": [
+      {
+        "key": "city",
+        "type": "place",
+        "latitude": "lat",
+        "longitude": "lon",
+        "title": "City"
+      },
+      {
+        "key": "lat",
+        "type": "number",
+        "title": "Latitude"
+      },
+      {
+        "key": "lon",
+        "type": "number",
+        "title": "Longitude"
+      },
+      {
+        "key": "units",
+        "type": "choice",
+        "options": [
+          "celsius",
+          "fahrenheit"
+        ],
+        "title": "Units"
+      },
+      {
+        "key": "every",
+        "type": "choice",
+        "options": [
+          "15 min",
+          "30 min",
+          "1 hour",
+          "3 hours"
+        ],
+        "title": "Refresh"
+      },
+      {
+        "key": "header_city",
+        "type": "toggle",
+        "default": "1",
+        "title": "City in header"
+      }
+    ],
+    "values": {
+      "city": "Lyon, Auvergne-Rhone-Alpes, France",
+      "lat": "45.76",
+      "lon": "4.84",
+      "units": "celsius",
+      "every": "30 min",
+      "header_city": "1"
+    },
+    "author": "Perinkpheral"
+  }
+]

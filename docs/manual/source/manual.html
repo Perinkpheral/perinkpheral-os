@@ -1,0 +1,217 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>perINKpheral: user manual</title>
+<!--PRINT_STYLE-->
+<style>
+  /* Manual pagination and picture sizes; typography comes from the shared guide stylesheet. */
+  #recovery { break-before: page; margin-top: 0; }
+  h1[id] { break-before: page; margin-top: 0; }
+  figure { flex: 1 1 0; min-width: 0; }
+  figure img { box-sizing: border-box; width: 100%; height: auto; }
+  .hardware-pair img[src$=".svg"], .hardware img { border: 0; image-rendering: auto; }
+  .web-wide img, .web-pair img, .update-pair img, .recovery-form img { image-rendering: auto; }
+  .web-wide figure { flex: 0 1 150mm; }
+  .small figure { flex: 0 1 56mm; }
+  .update-pair { display: block; }
+  .update-pair figure:first-child { width: 128mm; }
+  .update-pair figure:nth-child(2) { width: 76mm; margin-top: 4mm; }
+  .recovery-form figure { flex: 0 1 120mm; }
+  /* Keep the translated button names on one line, leaving room for the restart note. */
+  .button-actions td:first-child { width: 25%; }
+  html[lang="en"] .russian, html[lang="ru"] .english { display: none; }
+</style>
+</head>
+<body>
+<template id="cover">
+<p class="what">User manual</p>
+<ul class="steps">
+<li><b>1</b>First start</li>
+<li><b>2</b>Installing applications</li>
+<li><b>3</b>Setting up applications</li>
+<li><b>4</b>Device settings</li>
+<li><b>5</b>Gestures and buttons</li>
+<li><b>6</b>Updates</li>
+</ul>
+<p>A quiet screen for your desk.<br>Start here, then make it yours.</p>
+<div class="facts">Perinkpheral OS / 2026-11-21<br>perinkpheral.dev</div>
+</template>
+
+<h1 id="contents" notoc>Contents</h1>
+<!--CONTENTS-->
+<h1 id="first-start">1. First start</h1>
+<p>perINKpheral shows time, weather and other information on an e-paper screen. There is no backlight. Read it in room light. A brief flash when the picture changes is normal.</p>
+<div class="screens start">
+<figure class="hardware"><img src="{{ROOT}}/docs/manual/source/pictures/device-usb.svg" alt="">
+<figcaption>Connect power to USB-C.</figcaption>
+</figure>
+<figure class="hardware"><img src="{{ROOT}}/docs/manual/source/pictures/device-buttons.svg" alt=""><figcaption>Rear view. Buttons 1-4: UP, OK, DOWN, BACK.</figcaption></figure>
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/setup-en.png" alt="">
+<figcaption>The QR code joins the device's Wi-Fi.</figcaption>
+</figure>
+</div>
+<ol>
+<li>Connect a USB-C cable to a USB power supply or a computer. The device starts and charges its battery. It can run without the cable when charged.</li>
+<li>On your phone, scan the QR code on the screen and join <b>Perinkpheral-XXXX</b>. You can also choose that network in the phone's Wi-Fi settings. Stay connected even if the phone says there is no internet.</li>
+<li>Open the setup page offered by your phone. It may take a little while to appear. If it does not, open <b>http://192.168.4.1</b> in a browser.</li>
+<li>Open <b>Settings > Network</b>. Click <b>Scan networks</b>, choose your home network, enter its password and click <b>Connect</b>. Use a 2.4 GHz Wi-Fi network. Confirm with <code>OK</code> on the device when it asks to join.</li>
+<li>After the restart, reconnect your phone to the same home network. Hold <code>BACK</code> for about a second and release it to open the menu. Select <b>About</b> with <code>UP</code> or <code>DOWN</code> and press <code>OK</code> to open it. Press <code>OK</code> again for its second page. Open the address shown there in your browser. Bookmark this device page.</li>
+</ol>
+<p class="note">If joining fails for two minutes, the device offers its setup network again. Join it and check the network name and password.</p>
+<p>A new device starts in English. To change it, open <b>Settings > Language</b> on its page, choose your language and click <b>Save</b>. Install <b>Cyrillic</b> there for Russian letters on the screen.</p>
+<p>You can now open the applications already installed from the menu. Some need settings in <b>Installed apps</b> on the device page (section 3).</p>
+<h1 id="installing">2. Installing applications</h1>
+<p>Eight applications are already installed: Weather, Clock, ISS, Calendar, Timer, Stopwatch, Stocks and Air quality. Open them from the device's menu or configure them in <b>Installed apps</b> on its page. Use <b>Catalog</b> to add more. The device downloads them itself.</p>
+<div class="screens web-wide">
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/web-catalog-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/web-catalog-ru.png" alt="">
+<figcaption>Catalog: choose an application and click Install.</figcaption>
+</figure>
+</div>
+<ol>
+<li>Open the device page from a phone or computer on the same Wi-Fi network. Choose <b>Catalog</b> and read the application's description.</li>
+<li>Click <b>Install</b> and wait for completion. A newly installed application opens on the device and appears in its menu. If asked to install a system app, confirm with <code>OK</code> on the device.</li>
+<li>Open <b>Installed apps</b> to manage your applications. The information icon on a tile shows its connections and access. Click <b>Update</b> when offered. <b>Update all</b> appears for several compatible updates. Updates keep settings and the current screen.</li>
+<li>To remove an application, click <b>Remove</b> and confirm in the browser. Its settings are kept for a later installation; they may be cleared if the device needs space.</li>
+</ol>
+<h2 id="app-updates">Keeping applications current</h2>
+<p><b>Auto-update</b> in Installed apps checks daily. It updates installed applications; it does not add new ones or grant new access. If an application needs newer firmware, update the firmware first (section 6).</p>
+<p>The official catalog is already included. The gear at the upper right of Catalog opens <b>Sources</b>. Use it to add another publisher's catalog address.</p>
+<h1 id="app-settings">3. Setting up applications</h1>
+<p>In <b>Installed apps</b>, click the gear on an application. Fill in its settings and click <b>Save</b>. Each application has its own fields. Some work immediately and have no settings.</p>
+<div class="screens web-pair">
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/web-place-search-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/web-place-search-ru.png" alt="">
+<figcaption>Places: type a name, then select a suggestion.</figcaption>
+</figure>
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/web-list-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/web-list-ru.png" alt="">
+<figcaption>Lists: add an item in each row.</figcaption>
+</figure>
+</div>
+<h2 id="places-lists">Places and lists</h2>
+<p>For a place, start typing its name and choose the matching result from the list. Typing a name alone is not enough. For a list, press <b>+</b> to add a row and <b>-</b> to remove one. Save when finished.</p>
+<h2 id="companion-pages">Companion pages</h2>
+<p>Some applications offer <b>Set up</b> in their settings. It opens a separate page for choosing data or connecting a service. Allow the pop-up if your browser blocks it. Follow that page's steps, then return to the device page and click <b>Save</b> to save the received settings.</p>
+<h2 id="not-set-up">When the screen says Not set up</h2>
+<p>The application needs information you have not supplied yet, such as a place, a list or a service address. Open its settings on the device page, complete them and save. It is installed already; you do not need to install it again.</p>
+<p>A saved password or token is not shown again. Leave its field unchanged to keep it. Use its <b>Remove</b> button only to clear it.</p>
+<div class="screens small">
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/not-set-up-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/not-set-up-ru.png" alt=""><figcaption>Before setup: complete the settings on the page.</figcaption></figure>
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/weather-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/weather-ru.png" alt=""><figcaption>After saving: the application can fetch its data.</figcaption></figure>
+</div>
+<h1 id="device-settings">4. Device settings</h1>
+<p>Hold <code>BACK</code> for about a second and release it to open the menu. Select <b>Settings</b> with <code>UP</code> or <code>DOWN</code> and press <code>OK</code>. Select a row the same way. Change its value with UP/DOWN; <code>OK</code> saves it and <code>BACK</code> cancels.</p>
+<div class="screens ">
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/settings-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/settings-ru.png" alt="">
+<figcaption>Settings on the device.</figcaption>
+</figure>
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/appearance-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/appearance-ru.png" alt="">
+<figcaption>Appearance: choose the look and default app.</figcaption>
+</figure>
+</div>
+<table>
+<tr><th>Setting</th><th>What it does</th></tr>
+<tr>
+<td><b>General</b></td>
+<td>Date, time, time zone and power saving. With automatic time off, set the clock by hand: UP/DOWN change a field, OK moves to the next, BACK to the previous. OK on the last field saves; BACK on the first cancels.</td>
+</tr>
+<tr>
+<td><b>Apps</b></td>
+<td>Remove an installed application.</td>
+</tr>
+<tr>
+<td><b>Appearance</b></td>
+<td>Font, clock in header, default app and idle timeout. The default app opens after restart and when you leave the menu idle.</td>
+</tr>
+<tr>
+<td><b>Display</b></td>
+<td>Refresh interval and full refresh. A full refresh clears faint traces of the previous picture.</td>
+</tr>
+<tr>
+<td><b>Wi-Fi</b></td>
+<td>Network and address. Forget network turns Wi-Fi off. Connect to Wi-Fi starts setup again.</td>
+</tr>
+<tr>
+<td><b>Restart / Reset</b></td>
+<td>Restart keeps your settings. Reset erases device settings and application data, then starts Wi-Fi setup. Installed applications stay. Both ask for confirmation.</td>
+</tr>
+</table>
+<p>Power saving: <b>Disabled</b> keeps Wi-Fi and the page available. <b>Always</b> saves power between data requests. <b>Auto</b> saves when no computer is connected by USB; a USB charger is treated like battery operation. While saving, data is fetched no more often than every five minutes.</p>
+<h2 id="page-settings">More on the device page</h2>
+<p><b>Settings</b> also lets you change the device name, enter a Wi-Fi password, set the time server, choose a language and manage character packs in <b>Language</b>. Install <b>Cyrillic</b> for Russian letters; without it, the device spells words in Latin letters. <b>Settings > Log</b> controls logging preferences. The main <b>Log</b> section displays the entries. Use <b>Device</b> for status, restart, recovery and factory reset.</p>
+<p class="note">With power saving, the page may be unavailable between requests for data. Press a button to keep it reachable for two minutes. With Wi-Fi off, use Settings > Wi-Fi > Connect to Wi-Fi on the device.</p>
+<h1 id="buttons">5. Gestures and buttons</h1>
+<div class="screens hardware-pair">
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/device-buttons.svg" alt="">
+<figcaption>Rear view. Buttons 1-4: UP, OK, DOWN, BACK.</figcaption>
+</figure>
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/device-back.svg" alt="">
+<figcaption>Rear view. Long BACK: hold, then release. A dashed circle means press; a solid circle means hold.</figcaption>
+</figure>
+</div>
+<p>A short press is a tap. For a long press, hold for at least 0.6 seconds - about a second is enough. The screen takes a moment to change; wait for it before pressing again.</p>
+<div class="button-actions">
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr>
+<td><code>UP / DOWN</code></td>
+<td>Move through a menu or change a value. A long press moves a page in menus and Settings. Applications may use these buttons differently.</td>
+</tr>
+<tr>
+<td><code>OK</code></td>
+<td>Open the selected row or confirm a choice.</td>
+</tr>
+<tr>
+<td><code>BACK</code></td>
+<td>Go back within an application, or leave it. In the menu, open the default app if one is chosen.</td>
+</tr>
+<tr>
+<td><b>Long BACK</b></td>
+<td>Open the menu when you release BACK.</td>
+</tr>
+</table>
+</div>
+<div class="keep">
+<div class="screens hardware-pair">
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/device-switch.svg" alt="">
+<figcaption>Rear view. Hold BACK; tap UP or DOWN.</figcaption>
+</figure>
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/device-rescue.svg" alt="">
+<figcaption>Rear view. Hold UP + BACK for ten seconds.</figcaption>
+</figure>
+</div>
+<p><b>Switch applications:</b> while an application is open, hold <code>BACK</code> and tap <code>UP</code> for the previous application or <code>DOWN</code> for the next, in menu order. Keep BACK held to switch again. Release it when done. Settings and About are skipped.</p>
+<p><b>Move a menu row:</b> select it, hold <code>OK</code>, then use <code>UP</code> and <code>DOWN</code>. Press <code>OK</code> to keep the new order or <code>BACK</code> to cancel.</p>
+<p class="note"><b>If the device stops responding:</b> hold <code>UP + BACK</code> together for ten seconds. This restarts the device. In recovery, this combination is unavailable.</p>
+</div>
+<h1 id="updates">6. Updates</h1>
+<h2 id="firmware">Firmware on the device page</h2>
+<ol>
+<li>Connect USB power or make sure the battery is charged. Open <b>Firmware</b> on the device page and click <b>Check for updates</b>. Read the release notes, then click <b>Update</b> when offered.</li>
+<li>Keep the page open. It downloads the update and restarts the device into recovery, a separate mode that installs firmware. Applications and their settings are kept.</li>
+<li>When the device asks to update, check the version and press <code>OK</code> within one minute. <code>BACK</code> cancels. Wait for installation, restart and the page's final check. Keep power connected.</li>
+</ol>
+<div class="screens update-pair">
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/web-firmware-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/web-firmware-ru.png" alt="">
+<figcaption>Firmware: check the available release.</figcaption>
+</figure>
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/confirm-update-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/confirm-update-ru.png" alt="">
+<figcaption>Confirm on the device with OK.</figcaption>
+</figure>
+</div>
+<h2 id="recovery">Recovery: update or return</h2>
+<p>Recovery works even when the usual firmware cannot start. It does not run applications. To enter it from the page, choose <b>Device > Enter recovery</b>.</p>
+<p>To enter with buttons, hold <code>BACK</code> during a restart and keep it held through the first three seconds. If the device is stuck, hold <code>UP + BACK</code> for ten seconds, then release UP as it restarts and keep BACK held for three more seconds.</p>
+<div class="screens hardware-pair">
+<figure><img src="{{ROOT}}/docs/manual/source/pictures/device-recovery.svg" alt="">
+<figcaption>Rear view. Keep BACK held through the restart.</figcaption>
+</figure>
+<figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/recovery-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/recovery-ru.png" alt="">
+<figcaption>Recovery shows the address of its page.</figcaption>
+</figure>
+</div>
+<p>While you have internet access, download <b>perinkpheral.bin</b> from the project's latest <a href="https://github.com/Perinkpheral/perinkpheral-os/releases/latest">release</a>. Then open the address on the device's screen. If needed, join <b>perink-recovery</b> and open <b>http://192.168.4.1</b>. Choose the file under <b>Firmware file</b>, click <b>Install firmware</b> and press <code>OK</code> on the device within one minute. Wait for installation and restart. The recovery page is in English.</p>
+<div class="screens recovery-form"><figure><img class="english" src="{{ROOT}}/docs/manual/source/pictures/web-recovery-en.png" alt=""><img class="russian" src="{{ROOT}}/docs/manual/source/pictures/web-recovery-ru.png" alt=""><figcaption>After choosing perinkpheral.bin, click Install firmware.</figcaption></figure></div>
+<p>To leave without uploading, press <code>BACK</code>, labelled <b>Exit recovery</b>. It tries the installed firmware. If it is damaged or the new firmware fails its checks, the device stays in or returns to recovery. Upload a working file there; the previous firmware is not restored automatically.</p>
+</body>
+</html>

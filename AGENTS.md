@@ -136,6 +136,12 @@ tools/perinkpheral guide
 tools/perinkpheral guide --language ru
 ```
 
+The user manual shares the guide builder: `tools/perinkpheral manual` and
+`tools/perinkpheral manual --language ru`. Its English source and translation pairs
+are `docs/manual/source/manual.html` and `manual.ru.txt`; `manual-units missing ru`
+checks translation coverage. Rebuild and visually review its pictures with the
+scripts described in `docs/manual/README.md`. PDFs are local outputs, not committed.
+
 `check-generated` compares the committed fonts, icon table, marks, spelling table,
 city table and guide screens with fresh output. Text files compare by bytes; PNGs
 compare by pixels. It also checks the page's embedded mark and wordmark. The

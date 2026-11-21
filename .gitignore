@@ -31,3 +31,8 @@ docs/guide/*.pdf
 recovery/managed_components/
 recovery/sdkconfig
 recovery/sdkconfig.old
+
+# User manual translations and local PDFs.
+docs/manual/source/manual.*.html
+docs/manual/*.pdf
+docs/manual/.work/

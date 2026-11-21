@@ -9,18 +9,21 @@ import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 /**
- * The application guide, docs/guide: source/guide.html, written by hand, into a PDF, and its
- * translations.
+ * Printed documents: the application guide and user manual, with translations beside each
+ * English source. Both use the same translation units, contents and PDF printing.
  *
  * A translation is made of pieces: a paragraph, a list item, a heading, a caption, a table cell
- * or a comment in a code block. guide.<language>.txt holds pairs: a piece as `units list` prints
+ * or a comment in a code block. <document>.<language>.txt holds pairs: a piece as `units list` prints
  * it, its translation on the next line, an empty line. A piece that is not there stays as it is -
  * a name, a number, code; a translation of "=" says so on purpose.
  */
-class Guide(root: File) {
-    private val folder = File(root, "docs/guide")
-    /** What the guide is made of, written by hand: guide.html, its translations, the screens. */
+class Guide(root: File, private val document: String = "guide") {
+    private val pdfName = if (document == "guide") "perinkpheral-app-guide" else "perinkpheral-manual"
+    private val footer = if (document == "guide") "application guide" else "user manual"
+    private val folder = File(root, "docs/$document")
+    /** The English source, translation pairs and pictures live beside each other. */
     private val sources = File(folder, "source")
+    private val templates = File(root, "docs/guide/source")
     private val rootUrl = "file://" + root.absoluteFile.normalize().path
 
     // ---- the pieces ----
@@ -69,7 +72,7 @@ class Guide(root: File) {
 
     private fun translations(language: String): Map<String, String> {
         val pairs = HashMap<String, String>()
-        val lines = File(sources, "guide.$language.txt").readLines()
+        val lines = File(sources, "$document.$language.txt").readLines()
         var at = 0
         while (at < lines.size) {
             if (lines[at].isBlank()) {
@@ -77,7 +80,7 @@ class Guide(root: File) {
                 continue
             }
             if (at + 1 >= lines.size || lines[at + 1].isBlank()) {
-                throw BuildError("guide.$language.txt, line ${at + 1}: a piece without a translation")
+                throw BuildError("$document.$language.txt, line ${at + 1}: a piece without a translation")
             }
             pairs[flat(lines[at])] = lines[at + 1]
             at += 2
@@ -89,7 +92,15 @@ class Guide(root: File) {
     private fun isText(piece: String) =
         Regex("[A-Za-z]{2}").containsMatchIn(Regex("<code>.*?</code>|<[^>]+>|&[a-z]+;").replace(piece, ""))
 
-    private fun source() = File(sources, "guide.html").readText()
+    /** Both documents are made from the guide's print stylesheet and cover. */
+    private fun source(): String {
+        val style = File(templates, "print.css").readText().replace("{{FOOTER}}", "perINKpheral / $footer")
+        val cover = File(templates, "cover.html").readText()
+        val source = File(sources, "$document.html").readText().replace("<!--PRINT_STYLE-->", "<style>\n$style</style>")
+        return Regex("<template id=\"cover\">(.*?)</template>", RegexOption.DOT_MATCHES_ALL).replace(source) {
+            cover.replace("{{COVER_BODY}}", it.groupValues[1].trim())
+        }
+    }
 
     /** The pieces of guide.html, one a line. */
     fun list(): List<String> = pieces(source()).map { flat(it.text) }
@@ -129,10 +140,10 @@ class Guide(root: File) {
         // A reference to a section at the end of a line of code is outside the comment before it.
         pairs["(section"]?.let { word -> result = Regex("\\(section (\\d+)\\)").replace(result) { "$word ${it.groupValues[1]})" } }
         // The running foot is in the style sheet, not in the text.
-        val foot = "perINKpheral / application guide"
+        val foot = "perINKpheral / $footer"
         pairs[foot]?.let { result = result.replace("content: \"$foot\"", "content: \"$it\"") }
-        File(sources, "guide.$language.html").writeText(result)
-        return "guide.$language.html: $done pieces translated of ${found.size}"
+        File(sources, "$document.$language.html").writeText(result)
+        return "$document.$language.html: $done pieces translated of ${found.size}"
     }
 
     // ---- the PDF ----
@@ -194,15 +205,21 @@ class Guide(root: File) {
      * table of limits that the headers have otherwise stops it.
      */
     fun pdf(contract: Contract, language: String, outFile: File?): String {
-        ContractTools.checkLimits(contract, File(sources, "guide.html"))
+        if (document == "guide") ContractTools.checkLimits(contract, File(sources, "$document.html"))
         val suffix = if (language == "en") "" else ".$language"
-        val out = outFile ?: File(folder, "perinkpheral-app-guide$suffix.pdf")
+        val out = outFile ?: File(folder, "$pdfName$suffix.pdf")
         // A translation is made of guide.html and guide.<language>.txt each time: it is never edited.
         if (suffix.isNotEmpty()) apply(language)
-        var source = File(sources, "guide$suffix.html").readText()
+        var source = if (suffix.isEmpty()) source() else File(sources, "$document$suffix.html").readText()
         val found = headings(source)
         // Where the fonts, the mark and the screens are: the page is printed from a scratch folder.
         source = source.replace("{{ROOT}}", rootUrl)
+        if (document == "manual") {
+            val pictures = Regex("<img[^>]+src=\"([^\"]+)\"").findAll(source)
+                .map { it.groupValues[1] }.filter { it.startsWith("file://") }
+            val missingPictures = pictures.filter { !File(it.removePrefix("file://")).isFile }.toList()
+            if (missingPictures.isNotEmpty()) throw BuildError("manual pictures missing: ${missingPictures.joinToString(", ")}; run docs/manual/pictures.sh")
+        }
         // A table's first row is its head, and is said again on every page the table runs to.
         source = Regex("<table>\\s*(<tr><th.*?</tr>)", RegexOption.DOT_MATCHES_ALL).replace(source) { "<table><thead>${it.groupValues[1]}</thead>" }
         // A section's number on a plate of its own: "4. A first application".
@@ -211,9 +228,9 @@ class Guide(root: File) {
         // in the one print - a print joined from two would lose the links to the sections.
         source = source.replace("</head>", "<style>@page cover { margin: 0; @bottom-left { content: none; border: 0; } " +
             "@bottom-right { content: none; border: 0; } } .cover { page: cover; }</style>\n</head>")
-        val scratch = Files.createTempDirectory("perinkpheral-guide").toFile()
+        val scratch = Files.createTempDirectory("perinkpheral-$document").toFile()
         try {
-            val page = File(scratch, "guide.html")
+            val page = File(scratch, "$document.html")
             val first = File(scratch, "first.pdf")
             // A marker inside every heading, for the first print to be searched for.
             val marked = Regex("(<h[12][^>]*id=\"([^\"]+)\"[^>]*>)").replace(source) { "${it.groupValues[1]}<span class=\"mark\">[[${it.groupValues[2]}]]</span>" }

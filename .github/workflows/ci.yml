@@ -265,11 +265,18 @@ jobs:
             cat "$RUNNER_TEMP/missing-ru.txt"
             exit 1
           fi
+      - name: Manual Russian translation
+        run: |
+          tools/perinkpheral manual-units missing ru > "$RUNNER_TEMP/manual-missing-ru.txt"
+          if [ -s "$RUNNER_TEMP/manual-missing-ru.txt" ]; then
+            cat "$RUNNER_TEMP/manual-missing-ru.txt"
+            exit 1
+          fi
       - name: The device page
         run: tools/perinkpheral page firmware/main/web "$RUNNER_TEMP/page.html" "$RUNNER_TEMP/page.html.gz"
       - name: Glyph packs and sheets
         run: tools/perinkpheral glyph-packs --out generated/glyphs --sheet generated/sheets
-      - name: Both guides
+      - name: Guides and user manuals
         env:
           PDF_CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: |
@@ -283,6 +290,8 @@ jobs:
           export CHROME="$RUNNER_TEMP/guide-chrome"
           tools/perinkpheral guide --out generated/perinkpheral-app-guide.pdf
           tools/perinkpheral guide --language ru --out generated/perinkpheral-app-guide.ru.pdf
+          tools/perinkpheral manual --out generated/perinkpheral-manual.pdf
+          tools/perinkpheral manual --language ru --out generated/perinkpheral-manual.ru.pdf
       - name: Guides, glyph packs and sheets
         if: always()
         uses: actions/upload-artifact@v4

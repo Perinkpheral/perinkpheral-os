@@ -1,0 +1,74 @@
+{
+  "status": {
+    "name": "Perinkpheral-A7D2",
+    "firmware": "0.1.79",
+    "mode": "application",
+    "ota_protocol": 1,
+    "supported_abis": [
+      3
+    ],
+    "slot": "ota_0",
+    "on_probation": false,
+    "wifi": "online",
+    "ssid": "Paper House",
+    "address": "192.168.1.42",
+    "rssi": -54,
+    "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
+    "time": "Sat 21 Nov 14:25",
+    "hostname": "perinkpheral-a7d2",
+    "idf": "v5.5.5",
+    "built": "Nov 21 2026",
+    "uptime_s": 780,
+    "free_memory": 102400,
+    "least_free_memory": 63200,
+    "reset_reason": 3,
+    "storage_ok": true,
+    "storage_used": 163840,
+    "storage_total": 655360,
+    "largest_free_block": 81920,
+    "usb_host": true,
+    "memory_refusals": 0,
+    "failed_allocations": 0
+  },
+  "settings": {
+    "device_name": "Perinkpheral-A7D2",
+    "wifi_ssid": "Paper House",
+    "wifi_off": false,
+    "ntp_server": "pool.ntp.org",
+    "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
+    "tz_city": "Paris",
+    "refresh_min_data_s": 60,
+    "refresh_min_button_ms": 0,
+    "refresh_full_every": 255,
+    "refresh_keepalive_h": 24,
+    "refresh_fast": true,
+    "dither": true,
+    "font": 0,
+    "time_auto": true,
+    "log_enabled": true,
+    "log_level": 3,
+    "app_auto_update": false,
+    "power_saving": 0,
+    "default_app": "weather",
+    "menu_idle_min": 5,
+    "header_clock": true,
+    "language": "en",
+    "hostname": "perinkpheral-a7d2",
+    "languages": [
+      {
+        "code": "en",
+        "name": "English"
+      },
+      {
+        "code": "ru",
+        "name": "Russian"
+      }
+    ],
+    "menu_order": [
+      "weather",
+      "stocks",
+      "sys.settings",
+      "sys.about"
+    ]
+  }
+}

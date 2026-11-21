@@ -61,6 +61,9 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
     perinkpheral check-limits <guide.html>    the guide's table of limits against the headers
     perinkpheral guide [--language ru] [--out <pdf>]
                                               the application guide into a PDF (Chromium, poppler)
+    perinkpheral manual [--language ru] [--out <pdf>]
+                                              the user manual into a PDF (Chromium, poppler)
+    perinkpheral manual-units list|missing <language>|apply <language>
     perinkpheral guide-units list|missing <language>|apply <language>
                                               the guide's pieces: what a translation is made of
     perinkpheral icons                        Perinkpheral OS's icons into gfx_icon_art.c
@@ -300,11 +303,11 @@ private fun run(raw: Array<String>): Int {
         "video" -> println(Video.make(File(arguments.word(1, "the video")), File(arguments.option("out") ?: fail("--out is required")),
             (arguments.option("width") ?: "200").toInt(), (arguments.option("height") ?: "150").toInt(),
             (arguments.option("fps") ?: "1.5").toDouble(), (arguments.option("threshold") ?: "128").toInt()))
-        "guide" -> println(Guide(root()).pdf(Sdk(root()).contract, arguments.option("language") ?: "en", arguments.option("out")?.let { File(it) }))
-        "guide-units" -> when (arguments.word(1, "list, missing or apply")) {
-            "list" -> Guide(root()).list().forEach { println(it) }
-            "missing" -> Guide(root()).missing(arguments.word(2, "the language")).forEach { println(it) }
-            "apply" -> println(Guide(root()).apply(arguments.word(2, "the language")))
+        "guide", "manual" -> println(Guide(root(), arguments.word(0, "the document")).pdf(Sdk(root()).contract, arguments.option("language") ?: "en", arguments.option("out")?.let { File(it) }))
+        "guide-units", "manual-units" -> when (arguments.word(1, "list, missing or apply")) {
+            "list" -> Guide(root(), arguments.word(0, "the document").removeSuffix("-units")).list().forEach { println(it) }
+            "missing" -> Guide(root(), arguments.word(0, "the document").removeSuffix("-units")).missing(arguments.word(2, "the language")).forEach { println(it) }
+            "apply" -> println(Guide(root(), arguments.word(0, "the document").removeSuffix("-units")).apply(arguments.word(2, "the language")))
             else -> fail(USAGE)
         }
         "sim-test" -> {
