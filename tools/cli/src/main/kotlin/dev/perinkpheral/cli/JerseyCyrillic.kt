@@ -41,7 +41,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
                 'к' -> render('k'.code)!!.width
                 'д' -> metrics.width + 2 * metrics.overhang
                 'У' -> width
-                'З' -> render('3'.code)!!.width
+                'З' -> metrics.width + 1
                 else -> metrics.width
             }
             require(rows[0].length == expectedWidth) { "Jersey $cap $letter: expected width $expectedWidth" }
@@ -300,13 +300,33 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
         return rows
     }
 
-    /** A wider counter than the figures' narrow zero, preserving the Latin O's corners. */
+    /** Short shoulders and a wider counter separate О from the narrow oval zero. */
     private fun roundCapital(): MutableList<BooleanArray> {
-        val source = latin('O').first
-        val middle = source[0].size / 2
-        return source.map { row ->
-            row.copyOfRange(0, middle) + BooleanArray(2) { row[middle] } + row.copyOfRange(middle, row.size)
-        }.toMutableList()
+        val roundWidth = render('O'.code)!!.width + 2
+        val corner = (stem + 1) / 2
+        val rows = canvas(roundWidth, cap)
+        for (row in 0 until cap) {
+            val edge = minOf(row, cap - 1 - row)
+            val inset = maxOf(0, corner - edge)
+            if (edge < stem) {
+                fill(rows, inset, row, roundWidth - 2 * inset, 1)
+            } else {
+                val shoulder = if (edge == stem) 1 else 0
+                fill(rows, inset, row, stem + shoulder, 1)
+                fill(rows, roundWidth - inset - stem - shoulder, row, stem + shoulder, 1)
+            }
+        }
+        return rows
+    }
+
+    /** Crossbars distinguish the capital Ukrainian and Kazakh I from Latin l and 1. */
+    private fun iCapital(): MutableList<BooleanArray> {
+        val overhang = maxOf(1, stem - 1)
+        val rows = canvas(stem + 2 * overhang, cap)
+        fill(rows, overhang, 0, stem, cap)
+        fill(rows, 0, 0, rows[0].size, metrics.crossbar)
+        fill(rows, 0, cap - metrics.crossbar, rows[0].size, metrics.crossbar)
+        return rows
     }
 
     /** The bar of Ұ needs a shaft below the fork, with clear paper on either side. */
@@ -326,13 +346,19 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
         rows, (rows[0].size - stem) / 2, stem, rows.size - metrics.crossbar - maxOf(1, stem - 1),
     )
 
-    /** Һ has a lower shoulder than һ, while both reach the ascender line. */
+    /** A projecting ascender keeps Һ h-shaped; its lower shoulder distinguishes it from һ. */
     private fun haCapital(): MutableList<BooleanArray> {
-        val shoulderTop = (cap - stem) / 2
+        val shoulderTop = cap - xHeight + maxOf(1, stem / 2)
         val shoulder = squash(latin('n').first, cap - shoulderTop)
-        val rows = canvas(shoulder[0].size, cap)
+        val rows = canvas(width, cap)
+        val extraWidth = width - shoulder[0].size
+        val middle = shoulder[0].size / 2
+        val wider = beside(columns(shoulder, 0, middle), canvas(extraWidth, shoulder.size), columns(shoulder, middle))
+        for (row in wider.indices) {
+            if (shoulder[row][middle]) fill(wider, middle, row, extraWidth, 1)
+        }
         fill(rows, 0, 0, stem, cap)
-        blit(rows, shoulder, 0, shoulderTop)
+        blit(rows, wider, 0, shoulderTop)
         return rows
     }
 
@@ -487,10 +513,13 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
         return rows
     }
 
-    private fun be(soft: List<BooleanArray>) = copy(soft).also {
-        // A square flag and a straight spine distinguish Б from the rounded entry of 6.
-        fill(it, 0, 0, it[0].size, stem)
-        fill(it, it[0].size - maxOf(1, stem - 1), stem, maxOf(1, stem - 1), 1)
+    private fun be(soft: List<BooleanArray>): MutableList<BooleanArray> {
+        val flagOverhang = maxOf(1, stem - 1)
+        val rows = canvas(soft[0].size + flagOverhang, cap)
+        blit(rows, soft, 0, 0)
+        // The flag projects beyond the bowl; the figure 6 turns back into its body.
+        fill(rows, 0, 0, rows[0].size, stem)
+        return rows
     }
 
     private fun gheUpturn(ghe: List<BooleanArray>): MutableList<BooleanArray> {
@@ -511,6 +540,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
 
 
     // These are native-pixel drawings, not scaled copies of another Jersey face.
+    // З/з have a smaller upper bowl and flat entry terminals beside the rounded digit 3.
     private fun drawings(): Map<Char, String> = when (cap) {
         10 -> mapOf(
             'б' to """
@@ -536,14 +566,14 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
                 #####..
             """,
             'з' to """
-                .####..
-                ##..##.
-                ....##.
-                ..###..
-                .....##
-                ##...##
-                .######
+                ####...
+                #####..
+                ...##..
                 ..####.
+                .....##
+                .....##
+                #######
+                ######.
             """,
             'и' to """
                 ##...##
@@ -650,23 +680,23 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
                 ##.....
             """,
             'З' to """
-            #####..
-            ##..##.
-            ....##.
-            ...###.
-            ..###..
-            .....##
-            .....##
-            ##...##
-            #######
-            .#####.
-        """,
+                #####...
+                ######..
+                ....##..
+                ...###..
+                ..#####.
+                ......##
+                ......##
+                ......##
+                ########
+                #######.
+            """,
         )
         15 -> mapOf(
             'б' to """
                 ..########
                 .#########
-                ###.......
+                ##########
                 ###.......
                 #########.
                 ##########
@@ -694,39 +724,39 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
                 ########..
             """,
             'з' to """
-                ..#####...
-                .#######..
-                ###...###.
-                ......###.
-                ...#####..
-                ......###.
+                ######....
+                ########..
+                .....###..
+                .....###..
+                ...####...
+                ...######.
                 .......###
-                ###....###
-                ###....###
-                .########.
-                ..######..
+                .......###
+                .......###
+                ##########
+                #########.
             """,
             'и' to """
-                ###....###
-                ###...####
                 ###...####
                 ###..#####
                 ###..#####
-                ###.######
-                ######.###
-                ######.###
-                #####..###
+                ###.##.###
+                ###.##.###
                 #####..###
                 ####...###
+                ####...###
+                ###....###
+                ###....###
+                ###....###
             """,
             'ж' to """
                 ###...###...###
                 ###...###...###
                 ###...###...###
                 .###..###..###.
-                ..###.###.###..
+                ..###########..
                 ...#########...
-                ..###.###.###..
+                ..###########..
                 .###..###..###.
                 ###...###...###
                 ###...###...###
@@ -844,22 +874,22 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
                 ###.......
             """,
             'З' to """
-            #######...
-            ########..
-            ###...###.
-            ......###.
-            ......###.
-            .....####.
-            ...#####..
-            ...######.
-            ......####
-            .......###
-            .......###
-            ###....###
-            ##########
-            .########.
-            ..######..
-        """,
+                #######....
+                ########...
+                #########..
+                ......###..
+                ......###..
+                .....####..
+                ...#####...
+                ...#######.
+                .......####
+                ........###
+                ........###
+                ........###
+                ###########
+                ##########.
+                #########..
+            """,
         )
         20 -> drawings20()
         else -> drawings25()
@@ -870,7 +900,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
         'б' to """
             ..###########
             .############
-            ####.........
+            #############
             ####.........
             ####.........
             ##########...
@@ -907,38 +937,38 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             ##########...
         """,
         'з' to """
-            ...#######...
-            .##########..
-            ####.....####
-            .........####
-            .........####
-            ........#####
-            ....#######..
+            ########.....
+            ##########...
+            ###########..
+            .......####..
+            .......####..
+            ......#####..
+            ....######...
             ....########.
-            ........#####
             .........####
             .........####
-            ####.....####
-            #####...#####
-            ..#########..
-            ...#######...
+            .........####
+            .........####
+            #############
+            ############.
+            ##########...
         """,
         'и' to """
-            ####.....####
-            ####.....####
             ####....#####
             ####...######
             ####...######
             ####..#######
             ####..#######
-            ####.########
-            ########.####
+            ####.###.####
+            ####.###.####
             #######..####
             ######...####
             ######...####
-            ######...####
             #####....####
             #####....####
+            ####.....####
+            ####.....####
+            ####.....####
         """,
         'ж' to """
             ####....####....####
@@ -947,9 +977,9 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             .####...####...####.
             .####...####...####.
             ..####..####..####..
-            ...####.####.####...
+            ...##############...
             ....############....
-            ...####.####.####...
+            ...##############...
             ..####..####..####..
             .####...####...####.
             .####...####...####.
@@ -1102,26 +1132,26 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             ####.........
         """,
         'З' to """
-            #########....
-            ###########..
-            ####....####.
-            ####....####.
-            ........####.
-            ........####.
-            .......#####.
-            ......#####..
-            ....######...
-            ....#######..
-            ........#####
-            .........####
-            .........####
-            .........####
-            .........####
-            .........####
-            ####.....####
-            #####...#####
-            ..#########..
-            ...#######...
+            #########.....
+            ###########...
+            ############..
+            ############..
+            ........####..
+            ........####..
+            .......#####..
+            .....######...
+            ....######....
+            ....########..
+            .........####.
+            ..........####
+            ..........####
+            ..........####
+            ..........####
+            ..........####
+            ##############
+            #############.
+            ############..
+            ##########....
         """,
     )
 
@@ -1130,7 +1160,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             ..##############
             .###############
             ################
-            #####...........
+            ################
             #####...........
             #####...........
             ############....
@@ -1175,39 +1205,36 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             ############....
         """,
         'з' to """
-            ...#########....
-            .#############..
-            ###############.
-            #####......#####
-            ...........#####
-            ...........#####
-            ..........######
-            .....##########.
+            ##########......
+            ############....
+            #############...
+            #############...
+            ........#####...
+            ........#####...
+            .......######...
+            .....#######....
             .....#########..
-            .....##########.
-            ..........######
+            ..........#####.
             ...........#####
             ...........#####
             ...........#####
-            #####......#####
-            ######....######
-            .##############.
-            ..############..
-            ....########....
+            ...........#####
+            ...........#####
+            ################
+            ###############.
+            ###############.
+            #############...
         """,
         'и' to """
-            #####......#####
-            #####......#####
-            #####.....######
             #####.....######
             #####....#######
             #####....#######
             #####...########
             #####...########
             #####..#########
-            #####.##########
-            ##########.#####
-            #########..#####
+            #####..#########
+            #####.####.#####
+            #####.####.#####
             #########..#####
             ########...#####
             ########...#####
@@ -1215,6 +1242,9 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             #######....#####
             ######.....#####
             ######.....#####
+            #####......#####
+            #####......#####
+            #####......#####
         """,
         'ж' to """
             #####....#####....#####
@@ -1225,9 +1255,9 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             .#####...#####...#####.
             ..#####..#####..#####..
             ...#####.#####.#####...
-            ...#####.#####.#####...
+            ...#################...
             .....#############.....
-            ...#####.#####.#####...
+            ...#################...
             ...#####.#####.#####...
             ..#####..#####..#####..
             .#####...#####...#####.
@@ -1416,38 +1446,41 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             #####............
         """,
         'З' to """
-            ############....
-            #############...
-            ##############..
-            #####....######.
-            #####.....#####.
-            ..........#####.
-            ..........#####.
-            .........######.
-            ........######..
-            .....########...
-            .....#######....
-            .....########...
-            .....#########..
-            ..........######
-            ...........#####
-            ...........#####
-            ...........#####
-            ...........#####
-            ...........#####
-            ...........#####
-            #####......#####
-            ######....######
-            .##############.
-            ..############..
-            ....########....
+            ###########......
+            #############....
+            ##############...
+            ##############...
+            ##############...
+            .........#####...
+            .........#####...
+            .........#####...
+            ........######...
+            ......#######....
+            .....#######.....
+            .....#########...
+            ..........######.
+            ...........######
+            ............#####
+            ............#####
+            ............#####
+            ............#####
+            ............#####
+            ............#####
+            #################
+            ################.
+            ################.
+            ###############..
+            #############....
         """,
     )
 
     /** The letters made, by code point. */
     fun glyphs(): Map<Int, FontFace.Glyph> {
         val small = xHeight
-        for ((cyrillic, source) in "АВЕКМНОРСТХЁІЇЈЅаеорсухёіїјѕ".zip("ABEKMHOPCTXËIÏJSaeopcyxëiïjs")) same(cyrillic, source)
+        for ((cyrillic, source) in "АВЕКМНОРСТХЁЈЅаеорсухёіїјѕ".zip("ABEKMHOPCTXËJSaeopcyxëiïjs")) same(cyrillic, source)
+        val capitalI = iCapital()
+        put('І', capitalI)
+        put('Ї', accent(capitalI, 'Ï', 'I'))
 
         val capital = "BCHKLMNORTU".associateWith { if (it == 'O') roundCapital() else latin(it).first }
         put('О', capital.getValue('O'))

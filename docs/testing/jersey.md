@@ -88,12 +88,18 @@ all four faces, including Jersey 20 for the largest SDK size. Only that face's e
 Latin remains omitted for space. ASCII headers, SDK size identifiers and font selection
 are unchanged.
 
-- Б has a square flag with a terminal; the smallest б has a heavier flag and a clear neck.
-- З has a smaller upper bowl with a flat terminal, distinct from the round-topped digit 3.
-- О has two more columns of counter than the Latin O, separating it from the narrow zero.
-  Ө and Ю share that round construction.
+- Б has a square flag projecting beyond its bowl; the smallest б has a heavier flag and a clear neck.
+- З/з have a smaller upper bowl, a larger lower bowl and flat entry terminals beside
+  the rounded digit 3. Each face has independent capital and lowercase drawings.
+- О has compact shoulders and a wider counter beside the narrow oval zero; its width
+  follows Latin O with two added columns, rather than the capital height.
+  Ө, Ә, Ю and Ф share that round construction.
+- І has top and bottom crossbars to distinguish it from Latin l and 1; Ї shares the base.
 - Ә has a clearer upper opening. Ұ/ұ have a separate bar below the fork of Ү/ү.
-- Һ has a lower shoulder than һ; it no longer duplicates the lowercase Latin h.
+- Һ has a projecting left ascender, a shoulder below lowercase h's, and the width
+  of a capital H. The shortened n shoulder retains the face's curve and stem weight.
+- Lowercase б has a stronger flag at 15, 20 and 25; ж has fuller central joins, and и
+  has a lighter diagonal. З/з use the face's stem weight in their bowl sides.
 - Jersey 20 has its own lowercase masters, with four-pixel stems and corrected joins
   in в, ж, м and У. The other reviewed letters retain their established constructions,
   including Ч's vertical entry and rounded shoulder, and the tails of Қ and Ң.
@@ -107,8 +113,8 @@ WASI_SDK_PATH="$HOME/opt/wasi-sdk" tools/perinkpheral sim <application> --font j
 ```
 
 The generator checks coverage, counters, selected confusable pairs and sector-rounded
-partition use. Latin is 31,964 bytes (8 sectors), Cyrillic 24,676 (7), Greek 1,428 (1):
-58,068 bytes of data occupying 65,536 bytes. There are no unallocated sectors when all
+partition use. Latin is 31,964 bytes (8 sectors), Cyrillic 24,796 (7), Greek 1,428 (1):
+58,188 bytes of data occupying 65,536 bytes. There are no unallocated sectors when all
 three packs are installed. The pack format and partition layout are unchanged.
 
 The review included all four face sheets, Russian and Kazakh text, the weather, calendar,
@@ -117,3 +123,12 @@ sizes. Local socket restrictions required a scratch simulator harness using its 
 Wasm interpreter, mock delivery, event loop and renderer with file-based controls.
 `check-generated` and the host suite passed. Physical-panel acceptance remains to be
 performed; no device was connected during this pass.
+
+The owner rejected the first pass: З still resembled 3, О was too close to 0, and Б
+was too close to 6. Round 1 was also rejected for З, an oversized О/Ю, uneven
+lowercase weight and a low Һ shoulder. Round 2 was rejected for digit-like З/з
+with conspicuous terminal hooks, and a Һ shoulder too close to the cap line.
+Round 3 removes the hooks, changes the bowl proportions and lowers Һ's shoulder
+to expose the left ascender. These are review candidates, not production acceptance.
+Cross-script equivalents such as Ѕ/S and һ/h retain their shared forms; the proofs
+include them explicitly.
