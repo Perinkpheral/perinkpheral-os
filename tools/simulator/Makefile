@@ -43,11 +43,12 @@ SOURCES := sim.c \
 WASM3_SOURCES := $(filter-out $(WASM3)/m3_compile.c,$(wildcard $(WASM3)/*.c)) $(COMP)/wasm3/m3_budget_compile.c
 
 WASM3_DEPS := $(WASM3_SOURCES) $(WASM3)/m3_compile.c $(wildcard $(WASM3)/*.h)
+FONT_HEADERS := $(wildcard $(GFX)/fonts/*.h)
 
 # The page of the tools, which the simulator serves at its address.
 PAGE := $(ROOT)/tools/cli/src/main/resources/dev/perinkpheral/cli/page.html
 
-$(BUILD)/perinkpheral-sim: $(SOURCES) $(WASM3_DEPS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
+$(BUILD)/perinkpheral-sim: $(SOURCES) $(WASM3_DEPS) $(FONT_HEADERS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
 	mkdir -p $(BUILD)/wasm3
 	for source in $(WASM3_SOURCES); do \
 		object=$$(basename $$source .c); \
@@ -56,7 +57,7 @@ $(BUILD)/perinkpheral-sim: $(SOURCES) $(WASM3_DEPS) $(BUILD)/host_imports.inc $(
 	done
 	$(CC) $(CFLAGS) $(ARCH) -o $@ $(SOURCES) $(BUILD)/wasm3/*.o $(LDLIBS) $(LDFLAGS)
 
-$(BUILD)/test-jobs: test_jobs.c $(SOURCES) $(WASM3_DEPS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
+$(BUILD)/test-jobs: test_jobs.c $(SOURCES) $(WASM3_DEPS) $(FONT_HEADERS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
 	$(MAKE) $(BUILD)/perinkpheral-sim
 	$(CC) $(CFLAGS) -o $@ test_jobs.c $(filter-out sim.c,$(SOURCES)) $(BUILD)/wasm3/*.o $(LDLIBS) $(LDFLAGS)
 

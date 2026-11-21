@@ -428,10 +428,28 @@ static void test_text_fit(void)
 
 static void test_digits_in_columns(void)
 {
-    /* a typeface whose digits are of their own widths: a time that changes
-     * is as wide as any other, once its digits keep their columns */
     gfx_font_use(GFX_FAMILY_JERSEY);
-    const gfx_font_t *jersey = gfx_font(GFX_FONT_HUGE);
+    for (int size = 0; size < GFX_FONT_COUNT; size++) {
+        const gfx_font_t *font = gfx_font(size);
+        int advance = gfx_text_font_width(font, "0");
+        for (char digit = '0'; digit <= '9'; digit++) {
+            char text[] = {digit, '\0'};
+            CHECK(gfx_text_font_width(font, text) == advance);
+            CHECK(gfx_text_tabular_width(font, text) == advance);
+        }
+    }
+
+    /* Jersey now has tabular figures. Keep a proportional fixture to exercise
+     * the renderer's padding for fonts whose figures have different advances. */
+    gfx_font_t proportional = *gfx_font(GFX_FONT_HUGE);
+    gfx_glyph_t glyphs[95];
+    CHECK(proportional.count == sizeof glyphs / sizeof glyphs[0]);
+    memcpy(glyphs, proportional.glyphs, sizeof glyphs);
+    for (int index = 0; index < proportional.count; index++) {
+        if (glyphs[index].cp == '1') glyphs[index].advance -= 2;
+    }
+    proportional.glyphs = glyphs;
+    const gfx_font_t *jersey = &proportional;
     CHECK(gfx_text_font_width(jersey, "11:11") != gfx_text_font_width(jersey, "00:00"));
     CHECK(gfx_text_tabular_width(jersey, "11:11") == gfx_text_tabular_width(jersey, "00:00"));
     CHECK(gfx_text_tabular_width(jersey, "12:34") == gfx_text_tabular_width(jersey, "56:78"));

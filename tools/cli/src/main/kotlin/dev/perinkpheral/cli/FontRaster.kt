@@ -17,13 +17,15 @@ import java.io.File
  * scales it - 26.6 fixed point, the scale in 16.16 - and a pixel ink when its centre is inside.
  * The fonts are drawn for the pixel grid, their outlines on it at the sizes they are made at,
  * so a centre is never on an edge; a TrueType face's points are put on the grid, as its
- * instructions have FreeType do. Every glyph of the five faces and of the three glyph packs
- * came out as FreeType drew them, to the byte, when this took its place.
+ * instructions have FreeType do. The outline rasterizer matches FreeType byte for byte;
+ * Jersey's native digit masters are applied afterward for legibility beside Cyrillic.
  */
 class FontFace(file: File, private val px: Double) {
     private val font: TrueTypeFont = RandomAccessReadBufferedFile(file).let {
         if (file.name.lowercase().endsWith(".otf")) OTFParser().parse(it) else TTFParser().parse(it)
     }
+    private val jerseyDigits = JerseyDigits.matches(file.name, px)
+    private val digitReference by lazy { rasterGlyph('8'.code)!! }
     private val upem = font.header.unitsPerEm
     private val cmap = font.getUnicodeCmapLookup(false) ?: throw BuildError("${file.name}: no Unicode cmap")
     private val scale: Long
@@ -43,6 +45,12 @@ class FontFace(file: File, private val px: Double) {
     fun hasGlyph(codePoint: Int): Boolean = cmap.getGlyphId(codePoint) != 0
 
     fun glyph(codePoint: Int): Glyph? {
+        val original = rasterGlyph(codePoint) ?: return null
+        return if (jerseyDigits && codePoint in '0'.code..'9'.code)
+            JerseyDigits.glyph(codePoint, original, digitReference) else original
+    }
+
+    private fun rasterGlyph(codePoint: Int): Glyph? {
         val gid = cmap.getGlyphId(codePoint)
         if (gid == 0) return null
         val advance = ((mulFix(font.getAdvanceWidth(gid).toLong(), scale) + 32) and 63L.inv()) shr 6
