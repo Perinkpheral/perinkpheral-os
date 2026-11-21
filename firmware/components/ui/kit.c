@@ -188,14 +188,21 @@ void kit_actions(gfx_t *g, const char *ok, const char *back)
     }
     gfx_fill(g, 0, g->h - KIT_ACTIONS_HEIGHT, g->w, 1, true);
     int baseline = kit_actions_baseline(g);
+    int margin = KIT_ACTIONS_MARGIN;
+    if (ok != NULL && back != NULL &&
+        kit_button_width("OK", ok) + kit_button_width("BACK", back) + KIT_MARGIN >
+            g->w - 2 * margin) {
+        /* Long translations can use the page margin to keep the keys apart. */
+        margin = KIT_MARGIN;
+    }
     /* A button alone stands in the middle: there is no other to balance. */
     if (ok != NULL) {
-        int left = back != NULL ? KIT_ACTIONS_MARGIN : (g->w - kit_button_width("OK", ok)) / 2;
+        int left = back != NULL ? margin : (g->w - kit_button_width("OK", ok)) / 2;
         kit_button(g, left, baseline, "OK", ok, true);
     }
     if (back != NULL) {
         int width = kit_button_width("BACK", back);
-        int left = ok != NULL ? g->w - KIT_ACTIONS_MARGIN - width : (g->w - width) / 2;
+        int left = ok != NULL ? g->w - margin - width : (g->w - width) / 2;
         kit_button(g, left, baseline, "BACK", back, false);
     }
 }
@@ -249,7 +256,7 @@ static void chart_label(char *text, size_t size, int32_t value, int decimals)
     if (scale == 1) {
         snprintf(text, size, "%s%lu", value < 0 ? "-" : "", magnitude);
     } else {
-        snprintf(text, size, "%s%lu.%0*lu", value < 0 ? "-" : "", magnitude / scale, digits,
+        snprintf(text, size, "%s%lu%s%0*lu", value < 0 ? "-" : "", magnitude / scale, word(WORD_DECIMAL_POINT), digits,
                  magnitude % scale);
     }
 }
@@ -608,6 +615,16 @@ void kit_cell(gfx_t *g, const kit_cell_t *cell)
                  sizeof value);
     int row_width = gfx_text_tabular_width(font, value) + (side > 0 ? side + CELL_PICTURE_GAP : 0);
     int row_left = cell->left + (cell->width - row_width) / 2;
+    gfx_icon_ink_t icon_ink;
+    if (side > 0 && cell_has_icon(cell) &&
+        gfx_icon_ink((gfx_icon_id_t)cell->icon, side / GFX_ICON_CELLS, &icon_ink)) {
+        int value_first, value_end;
+        gfx_text_tabular_ink(font, value, &value_first, &value_end);
+        int row_end = value_end > value_first ? side + CELL_PICTURE_GAP + value_end
+                                             : icon_ink.last_x + 1;
+        /* Center the visible group, excluding blank columns inside the icon and text. */
+        row_left = cell->left + (cell->width - icon_ink.first_x - row_end) / 2;
+    }
     int middle = cell->top + CELL_PADDING + name_height +
                  (cell->height - 2 * CELL_PADDING - name_height) / 2;
     if (side > 0 && cell_has_icon(cell)) {

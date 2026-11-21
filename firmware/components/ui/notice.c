@@ -5,6 +5,7 @@
 #include "notice.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "kit.h"
 
@@ -22,7 +23,7 @@
 #define NOTICE_STROKE_GAP      24
 #define NOTICE_STROKE_HEIGHT   6
 #define NOTICE_TEXT_BUFFER     128
-#define NOTICE_DETAIL_BUFFER   48
+#define NOTICE_DETAIL_BUFFER   128
 #define NOTICE_DETAIL_STEP     34 /* from the second line's baseline to the detail's */
 
 void notice_draw(gfx_t *g, const notice_t *notice)
@@ -48,33 +49,49 @@ void notice_draw(gfx_t *g, const notice_t *notice)
         gfx_draw_icon(g, (gfx_icon_id_t)notice->icon, x, y, NOTICE_ICON_CELL, true);
         text_right = icon_left - NOTICE_TEXT_ICON_GAP;
     }
-    const gfx_font_t *large = gfx_font(GFX_FONT_MEDIUM);
     const char *const lines[] = { notice->first, notice->second };
-    /* The two lines stand around the middle of what is above the footer. */
     int line_count = notice->second != NULL ? 2 : 1;
-    int baseline = body_height / 2 - (line_count - 1) * NOTICE_LINE_STEP / 2 +
-                   gfx_font_cap_height(large) / 2;
-    if (notice->detail != NULL) {
-        baseline -= NOTICE_DETAIL_STEP / 2;
+    int room = text_right - NOTICE_MARGIN;
+    const gfx_font_t *font = gfx_font(GFX_FONT_MEDIUM);
+    for (int line = 0; line < line_count; line++) {
+        if (lines[line] != NULL && gfx_text_font_width(font, lines[line]) > room) {
+            font = gfx_font_system();
+        }
     }
+    char detail[NOTICE_DETAIL_BUFFER];
+    const char *detail_lines[] = { notice->detail, NULL };
+    int detail_count = notice->detail != NULL ? 1 : 0;
+    if (notice->detail != NULL && gfx_text_font_width(gfx_font_system(), notice->detail) > room) {
+        snprintf(detail, sizeof detail, "%s", notice->detail);
+        char *split = NULL;
+        for (char *letter = detail; *letter; letter++) {
+            if (*letter != ' ') continue;
+            *letter = '\0';
+            if (gfx_text_font_width(gfx_font_system(), detail) <= room) split = letter;
+            *letter = ' ';
+        }
+        if (split != NULL) {
+            *split = '\0';
+            detail_lines[0] = detail;
+            detail_lines[1] = split + 1;
+            detail_count = 2;
+        }
+    }
+    /* Keep the sentence and its explanation centered beside the icon. */
+    int baseline = body_height / 2 - (line_count - 1) * NOTICE_LINE_STEP / 2 +
+                   gfx_font_cap_height(font) / 2 - detail_count * NOTICE_DETAIL_STEP / 2;
     for (int line = 0; line < line_count; line++, baseline += NOTICE_LINE_STEP) {
         const char *text = lines[line] != NULL ? lines[line] : "";
-        int         room = text_right - NOTICE_MARGIN;
-        /* A name too long for the large letters - a network's - is set in
-         * the host's own before it is cut. */
-        const gfx_font_t *font = gfx_text_font_width(large, text) <= room ? large
-                                                                            : gfx_font_system();
         char fitted[NOTICE_TEXT_BUFFER];
         gfx_fit_text(font, text, room, fitted, sizeof fitted);
         gfx_text_font(g, NOTICE_MARGIN, baseline, font, fitted, true);
     }
-
-    if (notice->detail != NULL) {
-        const gfx_font_t *font = gfx_font_system();
+    baseline -= NOTICE_LINE_STEP;
+    for (int line = 0; line < detail_count; line++) {
         char fitted[NOTICE_DETAIL_BUFFER];
-        gfx_fit_text(font, notice->detail, text_right - NOTICE_MARGIN, fitted, sizeof fitted);
-        gfx_text_font(g, NOTICE_MARGIN, baseline - NOTICE_LINE_STEP + NOTICE_DETAIL_STEP, font,
-                      fitted, true);
+        gfx_fit_text(gfx_font_system(), detail_lines[line], room, fitted, sizeof fitted);
+        baseline += NOTICE_DETAIL_STEP;
+        gfx_text_font(g, NOTICE_MARGIN, baseline, gfx_font_system(), fitted, true);
     }
 
     if (notice->is_working) {
