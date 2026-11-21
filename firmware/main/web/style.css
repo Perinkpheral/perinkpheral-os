@@ -223,8 +223,7 @@ button.icon > svg { overflow: visible; }
 .offer button { margin: 0; }
 
 /* ---- settings: tabs over forms; a tab is never out of sight: without room they take another row ---- */
-.tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--ink); margin-bottom: 1.5rem;
-        max-width: none; }
+.tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--ink); margin-bottom: 1.5rem; }
 .tabs button { margin: 0; flex: none; min-width: 7rem; color: var(--ink); background: transparent;
                border: 1px solid transparent; border-bottom: none; }
 .tabs button:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--ink); }
