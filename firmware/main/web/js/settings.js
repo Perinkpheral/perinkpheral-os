@@ -326,8 +326,12 @@ async function loadGlyphs() {
   rows.replaceChildren(...offers.map(offer => {
     const row = make("div", { className: "offer" }), text = make("div");
     const isThere = have.packs.some(pack => pack.name === offer.name);
-    text.append(make("b", { textContent: offer.title }),
-                make("small", { textContent: offer.languages.split(", ").map(language => t(language)).join(", ") }));
+    text.append(make("b", { textContent: offer.title }));
+    const languages = offer.languages.split(", ").map((language, index) => {
+      const name = t(language);
+      return pageLanguage === "ru" && index > 0 ? name.toLocaleLowerCase("ru") : name;
+    }).join(", ");
+    if (languages !== t(offer.title)) text.append(make("small", { textContent: languages }));
     const button = make("button", { textContent: isThere ? "Remove" : "Install" });
     if (isThere) button.className = "quiet";
     button.addEventListener("click", () => busy(button, async () => {

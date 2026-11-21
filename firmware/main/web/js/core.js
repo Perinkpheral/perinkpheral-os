@@ -251,7 +251,8 @@ function afterRestart(why = "Restarting", wait = 9000) {
 const sectionShown = [];  /* what a section does when it comes into view: (name) => void */
 
 function currentSection() {
-  const wanted = (location.hash.slice(1) || "apps").split(":")[0];
+  const requested = (location.hash.slice(1) || "apps").split(":")[0];
+  const wanted = requested === "about" ? "credits" : requested;
   /* A section is named by data-section, not an id: an id would be the target of its own address,
    * which the browser scrolls to whenever the page is opened at it. */
   return document.querySelector(`section[data-section="${CSS.escape(wanted)}"]`) ? wanted : "apps";
@@ -372,7 +373,7 @@ function editableList(box, { values, most = Infinity, fixedFirst = false, wraps 
     field.disabled = isFixed;
     line.append(field);
     if (!isFixed) {
-      const remove = make("button", { type: "button", className: "quiet", textContent: "−",
+      const remove = make("button", { type: "button", className: "quiet symbol minus",
                                       title: "Remove" });
       remove.addEventListener("click", () => { line.remove(); drawAdd(); });
       line.append(remove);
@@ -382,7 +383,7 @@ function editableList(box, { values, most = Infinity, fixedFirst = false, wraps 
   const drawAdd = () => {
     for (const old of box.querySelectorAll(".add")) old.remove();
     if (box.querySelectorAll(FIELDS).length >= most) return;
-    const add = make("button", { type: "button", className: "quiet add", textContent: "+", title: "Add" });
+    const add = make("button", { type: "button", className: "quiet add symbol plus", title: "Add" });
     add.addEventListener("click", () => {
       const line = row("", false);
       add.before(line);

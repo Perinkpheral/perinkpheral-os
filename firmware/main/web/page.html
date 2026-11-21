@@ -25,7 +25,7 @@
   <a href="#log">Log</a>
   <a href="#control" id="nav-control" hidden>Control</a>
   <a href="#settings">Settings</a>
-  <a href="#about">Credits</a>
+  <a href="#credits">Credits</a>
   </div>
   <p translate="no"><a id="nav-name" href="https://perinkpheral.dev" target="_blank" rel="noopener"></a><br><a id="nav-firmware" href="https://github.com/Perinkpheral/perinkpheral-os/releases" target="_blank" rel="noopener"></a></p>
 </nav>
@@ -33,9 +33,13 @@
 
 <section data-section="apps">
   <div class="head apps-head">
-    <h2><span class="apps-heading"><span id="apps-heading-text">Installed apps</span><span id="app-capacity" role="progressbar" aria-labelledby="apps-heading-text" aria-valuemin="0"><span></span></span></span></h2>
+    <h2 id="apps-heading-text">Installed apps</h2>
     <button class="quiet toggle" id="auto-update-apps" aria-pressed="false">Auto-update</button>
     <button class="quiet" id="update-all" hidden>Update all</button>
+  </div>
+  <div class="app-usage" id="app-usage" hidden>
+    <span id="app-count"></span>
+    <span id="app-capacity" role="meter" aria-labelledby="apps-heading-text" aria-valuemin="0"><span></span></span>
   </div>
   <div class="tiles" id="tiles"><p class="note state" data-state="loading">Loading...</p></div>
 </section>
@@ -50,15 +54,15 @@
     <label for="catalog-search">Search</label>
     <div class="rows"><div>
       <input id="catalog-search" type="search" placeholder="name" autocomplete="off" spellcheck="false">
-      <button type="button" class="quiet" id="clear-catalog-search" title="Clear">&times;</button>
+      <button type="button" class="quiet symbol cross" id="clear-catalog-search" title="Clear" aria-label="Clear"></button>
     </div></div>
   </div>
   <div class="catalog" id="catalog-rows"><p class="note state" data-state="loading">Loading...</p></div>
 </section>
 
 <section data-section="device">
-  <div class="narrow">
-    <div class="head"><h2>Device</h2></div>
+  <div class="head"><h2>Device</h2></div>
+  <div>
     <div class="groups" id="status"><p class="note state" data-state="loading">Loading...</p></div>
 
     <h3>Reset</h3>
@@ -71,8 +75,8 @@
 </section>
 
 <section data-section="firmware">
-  <div class="narrow">
-    <div class="head"><h2>Firmware</h2></div>
+  <div class="head"><h2>Firmware</h2></div>
+  <div>
     <dl class="ota">
       <dt>Version</dt><dd id="ota-installed">Loading...</dd>
     </dl>
@@ -102,12 +106,11 @@
     <label for="log-search">Search</label>
     <div class="rows"><div>
       <input id="log-search" type="search" placeholder="tag, text, address" autocomplete="off" spellcheck="false">
-      <button type="button" class="quiet" id="clear-search" title="Clear">&times;</button>
+      <button type="button" class="quiet symbol cross" id="clear-search" title="Clear" aria-label="Clear"></button>
     </div></div>
   </div>
   <div class="log-panel">
     <div class="log-tools">
-      <h3>Device log</h3>
       <button type="button" class="quiet toggle" id="follow-log" aria-pressed="true">Follow</button>
       <button class="quiet" id="load-log">Refresh</button>
       <button class="quiet" id="clear-log">Clear</button>
@@ -130,8 +133,8 @@
 </section>
 
 <section data-section="settings">
-  <div class="head narrow"><h2>Settings</h2></div>
-  <div class="tabs narrow" id="tabs">
+  <div class="head"><h2>Settings</h2></div>
+  <div class="tabs" id="tabs">
     <button data-pane="general">General</button>
     <button data-pane="time">Time</button>
     <button data-pane="display">Display</button>
@@ -139,7 +142,7 @@
     <button data-pane="language">Language</button>
     <button data-pane="logging">Log</button>
   </div>
-  <div class="narrow" id="settings-state"><p class="note state" data-state="loading">Loading...</p></div>
+  <div id="settings-state"><p class="note state" data-state="loading">Loading...</p></div>
 
   <form class="pane" id="general">
     <label for="device_name">Device name</label>
@@ -228,8 +231,8 @@
 
   <div class="pane" id="network">
     <dl class="panel" id="network-now"><dd class="note state" data-state="loading">Loading...</dd></dl>
+    <h3>Change network</h3>
     <form id="wifi">
-      <h3>Change network</h3>
       <label for="wifi-networks">Wi-Fi network</label>
       <div class="rows"><div>
         <select id="wifi-networks" required></select>
