@@ -24,7 +24,7 @@ nav { border-right: 1px solid var(--ink); padding: 1.5rem 0; display: flex; flex
 .brand { display: flex; align-items: center; gap: .7rem; margin: 0 1.25rem 2rem; color: var(--ink); }
 .brand .mark { width: 22px; height: 22px; flex: none; } /* two pixels a cell: every stroke as thick */
 .brand .wordmark { height: .95rem; width: auto; }
-nav .links a { display: block; padding: 9px 1.25rem; line-height: 26px; color: var(--ink); text-decoration: none; }
+nav .links a { display: block; padding: .55rem 1.25rem; color: var(--ink); text-decoration: none; }
 nav .links a:hover { background: var(--line); }
 nav .links a.current { background: var(--ink); color: var(--paper); }
 nav p { margin: auto 1.25rem 0; color: var(--dim); font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere;
@@ -38,14 +38,12 @@ main { padding: 2rem 2.5rem 4rem; min-width: 0; }
 section { display: none; }
 section.current { display: block; }
 /* A section's head: its name, and on the right what belongs to all of it. */
-.head { display: flex; align-items: center; gap: 1rem; min-height: 2.75rem; margin-bottom: 1.5rem;
-        padding-bottom: .75rem; border-bottom: 1px solid var(--ink); }
+.head { display: flex; align-items: center; gap: 1rem; min-height: 2.75rem; margin-bottom: 1.5rem; }
 .head h2 { font-size: 1.75rem; flex: 1; }
 .head button { margin: 0; } /* in the line of the title, not under it */
 .apps-head { flex-wrap: wrap; }
-.app-usage { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem;
-             margin-bottom: 1.25rem; color: var(--dim); font-size: .85rem; line-height: 22px; }
-#app-capacity { display: block; width: 8rem; height: .5rem; border: 1px solid var(--ink); }
+.apps-heading { display: inline-block; white-space: nowrap; }
+#app-capacity { display: block; height: 3px; margin-top: 6px; background: var(--line); }
 #app-capacity > span { display: block; height: 100%; width: 0; background: var(--ink); }
 h3 { font-size: 1rem; margin: 2.25rem 0 .9rem; padding-bottom: .4rem; border-bottom: 1px solid var(--ink); }
 .count { color: var(--dim); }
@@ -55,6 +53,8 @@ h3 { font-size: 1rem; margin: 2.25rem 0 .9rem; padding-bottom: .4rem; border-bot
          text-align: left; }
 .state button { margin: 0; }
 #settings-state:not(:empty) ~ .pane { display: none; }
+/* Tiles take all the room there is; text and forms keep a line a person can read. */
+.narrow { max-width: 58rem; }
 
 /* ---- a box of ink lines ---- */
 .panel { border: 1px solid var(--ink); padding: 1.1rem 1.25rem; background: var(--paper); min-width: 0; }
@@ -91,7 +91,7 @@ dd { margin: 0; text-align: right; overflow-wrap: break-word; white-space: pre-l
 #info-dialog { width: min(42rem, calc(100vw - 2rem)); }
 
 /* ---- forms ---- */
-label { display: block; margin: 1rem 0 5px; line-height: 26px; color: var(--dim); }
+label { display: block; margin: 1rem 0 .3rem; color: var(--dim); }
 input, select, textarea { width: 100%; padding: .5rem .7rem; font: inherit; color: var(--ink);
                           background: transparent; border: 1px solid var(--ink); border-radius: 0; }
 input, select { height: 2.75rem; }
@@ -111,10 +111,10 @@ input::placeholder { color: var(--dim); opacity: 1; }
 /* A box with a square of ink in it, the way the panel would draw one. */
 label.check { display: flex; align-items: center; gap: .75rem; margin: 1rem 0; color: var(--ink);
               cursor: pointer; user-select: none; }
-/* Whole-pixel frames and equal padding keep both edges on the same raster grid. */
-input[type=checkbox] { appearance: none; flex: none; width: 22px; height: 22px; margin: 0;
-                       padding: 4px; background-clip: content-box; cursor: pointer; }
-input[type=checkbox]:checked { background-color: var(--ink); }
+input[type=checkbox] { appearance: none; flex: none; display: grid; place-content: center;
+                       width: 1.4rem; height: 1.4rem; margin: 0; padding: 0; cursor: pointer; }
+input[type=checkbox]::before { content: ""; width: .7rem; height: .7rem; background: var(--ink); transform: scale(0); }
+input[type=checkbox]:checked::before { transform: scale(1); }
 input[type=checkbox]:focus-visible { outline-offset: 2px; }
 /* A file is chosen with a button of the page's own; what was chosen is named beside it. */
 label.file { display: flex; align-items: center; gap: .9rem; margin: 0; color: var(--ink); cursor: pointer; }
@@ -129,15 +129,13 @@ label.file .name { color: var(--dim); overflow: hidden; text-overflow: ellipsis;
 .file-row label.file { flex: 1; min-width: 0; }
 .file-row > button { margin: 0; flex: none; }
 .place { position: relative; }
-.place textarea { display: block; min-height: 2.75rem; resize: none; overflow: hidden; overflow-wrap: anywhere; }
 .place ul { position: absolute; z-index: 1; left: 0; right: 0; top: 100%; margin: -1px 0 0; padding: 0;
-            max-height: 12rem; overflow-y: auto;
             list-style: none; background: var(--paper); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
 .place ul:empty { display: none; }
 .place li { padding: .5rem .7rem; cursor: pointer; }
 .place li:hover, .place li.current { background: var(--ink); color: var(--paper); }
 /* Lines a person adds and takes away: a field and its button a line. */
-.rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: .75rem; }
+.rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; margin-top: .75rem; }
 label + .rows { margin-top: 0; } /* under its label as an input is */
 .rows div { display: flex; gap: .6rem; }
 .rows div > input, .rows div > select, .rows div > textarea { flex: 1; min-width: 0; } /* the field gives way, its button stays whole */
@@ -148,7 +146,7 @@ label + .rows { margin-top: 0; } /* under its label as an input is */
 .rows div:has(> input[type=datetime-local]) { flex-wrap: wrap; }
 .rows div > input[type=datetime-local] { min-width: 13.5rem; }
 /* The time pane's buttons stand in one column: Network time over Detect. */
-#time-zone .rows div > button { width: 13rem; }
+#time-zone .rows div > button { width: 10.5rem; }
 .rows button { margin: 0; min-width: 2.75rem; padding: 0 .9rem; flex: none; }
 .rows button.add { width: 100%; }
 #logging .rows select { min-width: min(11rem, 45%); }
@@ -163,56 +161,39 @@ button:hover:not(:disabled) { transform: translate(calc(-1 * var(--lift)), calc(
                               box-shadow: var(--lift) var(--lift) 0 var(--ink); }
 button:active:not(:disabled) { transform: none; box-shadow: none; }
 button.quiet { color: var(--ink); background: var(--paper); }
+/* A button that stays down while what it names is on: in ink, as a chosen tab. */
+button.toggle[aria-pressed=true] { color: var(--paper); background: var(--ink); }
 button:disabled { opacity: .45; cursor: default; }
 button.busy, button.done { opacity: 1; }
 button.busy::after { content: ""; width: 1.9em; text-align: left; animation: dots 1.2s steps(1) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 button.done::before { content: ""; width: .35em; height: .7em; margin: 0 .6em .2em 0;
                       border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); }
-/* Persistent choices share the square indicator of the form's checkboxes. */
-button.toggle { justify-content: flex-start; gap: .75rem; padding-left: 0; padding-right: 0;
-                text-align: left; white-space: normal; color: var(--ink); background: transparent;
-                border-color: transparent; }
-button.toggle::before { content: ""; flex: none; width: 22px; height: 22px; margin: 0; padding: 4px;
-                        border: 1px solid var(--ink); box-sizing: border-box; transform: none;
-                        background-clip: content-box; }
-button.toggle[aria-pressed=true]::before { background-color: var(--ink); }
-button.toggle:hover:not(:disabled) { transform: none; box-shadow: none; text-decoration: underline;
-                                    text-underline-offset: .2em; }
 /* A picture for a button: no box until the pointer is over it. */
-button.icon { margin: 0; padding: 0; width: 44px; height: 44px; flex: none; line-height: 0; color: var(--ink);
+button.icon { margin: 0; padding: .35rem; height: auto; line-height: 0; color: var(--ink);
               background: transparent; border-color: transparent; }
 button.icon:hover:not(:disabled) { border-color: var(--ink); background: var(--paper); }
-/* Small action marks have their own geometry, independent of a font's baseline. */
-button.symbol { padding: 0; width: 44px; height: 44px; min-height: 44px; flex: none; }
-button.symbol::before { content: ""; display: block; width: 10px; height: 10px; background: currentColor; }
-button.symbol.minus::before { height: 2px; }
-button.symbol.plus::before { background: center / 10px 10px no-repeat
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23141413' d='M4 0h2v4h4v2H6v4H4V6H0V4h4z'/%3E%3C/svg%3E"); }
-button.symbol.cross::before { background: center / 10px 10px no-repeat
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23141413' d='M0 0h2l3 3 3-3h2v2L7 5l3 3v2H8L5 7l-3 3H0V8l3-3-3-3z'/%3E%3C/svg%3E"); }
 /* A row of buttons is one line: whatever stands in it, a button or a box to tick. */
 .buttons { display: flex; gap: .9rem; flex-wrap: wrap; align-items: center; margin-top: 1.25rem; }
 .buttons > button, .buttons > label.check { margin: 0; }
 
 /* ---- applications ---- */
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1.25rem; }
-/* Whole CSS pixels keep the hit areas and crisp SVG artwork on the same raster grid. */
-.tile { border: 1px solid var(--ink); background: var(--paper); padding: 18px; display: flex;
-        flex-direction: column; position: relative; min-height: 15rem; min-width: 0; line-height: 26px;
+.tile { border: 1px solid var(--ink); background: var(--paper); padding: 1.1rem; display: flex;
+        flex-direction: column; position: relative; min-height: 15rem; min-width: 0;
         transition: transform .08s ease-out, box-shadow .08s ease-out; }
 .tile:hover { transform: translate(calc(-1 * var(--lift)), calc(-1 * var(--lift)));
               box-shadow: var(--lift) var(--lift) 0 var(--ink); }
 .tile .picture { margin-bottom: 1rem; }
-.tile b { display: block; font-weight: 400; font-size: 1.1rem; line-height: 23px; overflow-wrap: anywhere; }
-.tile small { color: var(--dim); line-height: 22px; }
-.tile small.needs { color: var(--ink); margin-bottom: 10px; }
-.tile .mark { align-self: flex-start; margin-top: .5rem; padding: 0 .45rem; font-size: .8rem; line-height: 22px;
+.tile b { display: block; font-weight: 400; font-size: 1.1rem; line-height: 1.3; overflow-wrap: anywhere; }
+.tile small { color: var(--dim); }
+.tile small.needs { color: var(--ink); margin-bottom: .6rem; }
+.tile .mark { align-self: flex-start; margin-top: .5rem; padding: 0 .45rem; font-size: .8rem;
               color: var(--paper); background: var(--ink); }
 .tile .spring { flex: 1; min-height: .75rem; }
 .tile button.action { width: 100%; margin: 0; }
-.tile .action + .action { margin-top: 10px; }
-.tile .tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; }
+.tile .action + .action { margin-top: .6rem; }
+.tile .tools { position: absolute; top: .6rem; right: .6rem; display: flex; gap: .2rem; }
 .picture { flex: none; }
 .picture.none { border: 1px solid var(--line); }
 /* The catalog: what the sources offer, in columns. */
@@ -231,16 +212,13 @@ button.symbol.cross::before { background: center / 10px 10px no-repeat
 .offer button { margin: 0; }
 
 /* ---- settings: tabs over forms; a tab is never out of sight: without room they take another row ---- */
-.tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .25rem;
-        border-bottom: 1px solid var(--ink); margin-bottom: 1.5rem; }
-.tabs button { margin: 0; min-width: 0; padding: 0 .5rem; color: var(--ink); background: transparent;
+.tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--ink); margin-bottom: 1.5rem; }
+.tabs button { margin: 0; flex: none; min-width: 7rem; color: var(--ink); background: transparent;
                border: 1px solid transparent; border-bottom: none; }
 .tabs button:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--ink); }
 .tabs button.current { color: var(--paper); background: var(--ink); }
-.pane { display: none; }
+.pane { display: none; max-width: 36rem; }
 .pane.current { display: block; }
-/* Section rules span the content column; fields keep a comfortable reading width. */
-form.pane, .pane > form, .pane > .panel { max-width: 36rem; }
 .pane > :first-child, .pane > form:first-child > :first-child { margin-top: 0; }
 
 /* ---- the device ---- */
@@ -255,17 +233,18 @@ html:lang(ru) pre:empty::before { content: "Пусто."; }
 .search .rows { margin-top: .5rem; }
 .search input[type=search] { -webkit-appearance: none; appearance: none; }
 .search input[type=search]::-webkit-search-cancel-button { display: none; }
-.log-tools { display: flex; align-items: center; justify-content: flex-end;
-             gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.log-tools { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.log-tools h3 { flex: 1; margin: 0; padding: 0; border: none; font-size: .85rem; letter-spacing: .08em;
+                text-transform: uppercase; color: var(--dim); }
 .log-tools button { margin: 0; }
 .log-view { height: max(20rem, calc(100vh - 21rem)); overflow: auto; border: 1px solid var(--ink);
             padding: .5rem 0; font-size: .8rem; line-height: 1.6; }
 .log-view .note { margin: 0; padding: 0 1rem; }
-.log-row { display: grid; grid-template-columns: 4.5rem 1ch 20ch minmax(0, 1fr); gap: .9rem; padding: 0 1rem; }
+.log-row { display: grid; grid-template-columns: 4.5rem 1ch 8rem minmax(0, 1fr); gap: .9rem; padding: 0 1rem; }
 .log-row:hover { background: var(--line); }
 .log-row .when { color: var(--dim); }
 .log-row .level, .log-row .tag { color: var(--ink); }
-.log-row .tag { overflow-wrap: anywhere; }
+.log-row .tag { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log-row .text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .log-row.i .text, .log-row.d .text, .log-row.v .text { color: var(--dim); }
 /* A warning stands out; an error is ink over the whole line. */
@@ -285,7 +264,7 @@ html:lang(ru) pre:empty::before { content: "Пусто."; }
 .keys button.held { background: var(--ink); color: var(--paper); }
 
 /* ---- dialogs: a box above the page ---- */
-dialog { --side: 1.5rem; --foot: 1.5rem;
+dialog { --side: 1.6rem; --foot: 1.5rem;
          width: min(34rem, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); padding: 1.5rem var(--side) var(--foot);
          color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0;
          box-shadow: 8px 8px 0 var(--ink); }
@@ -300,7 +279,7 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); }
 .updating .buttons { justify-content: center; }
 .ota { grid-template-columns: max-content minmax(0, 1fr); margin-bottom: .9rem; }
 .ota dd { text-align: left; }
-dialog h2 { font-size: 1.35rem; line-height: 26px; margin-bottom: 1rem; }
+dialog h2 { font-size: 1.35rem; margin-bottom: 1rem; }
 dialog p { margin: 0 0 .5rem; }
 dialog .notes { margin: .75rem 0 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; font: inherit; font-size: .9rem; }
 /* The buttons stand at the dialog's bottom edge, whatever its height: a form taller than the
@@ -322,7 +301,7 @@ table.credits { width: 100%; border-collapse: collapse; table-layout: fixed; }
  * that none stands a row away from the line it opens. Without room for the longest name in the
  * first column a part is a block: its name, who wrote it, its license, one under the other. */
 @media (max-width: 60rem) {
-  .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: none; }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: none; }
   .tabs button { min-width: 0; padding: 0 .25rem; border: 1px solid var(--ink); white-space: nowrap; }
   .credits, .credits tbody, .credits tr, .credits td { display: block; }
   .credits thead { display: none; }
@@ -338,9 +317,6 @@ summary { cursor: pointer; padding-bottom: .4rem; border-bottom: 1px solid var(-
 summary::-webkit-details-marker { display: none; }
 summary::before { content: "+ "; }
 details[open] summary::before { content: "- "; }
-.license { padding: .9rem 1rem; border: 1px solid var(--ink); font-size: .8rem; line-height: 1.5; }
-.license p { margin: 0 0 1em; }
-.license p:last-child { margin-bottom: 0; }
 
 /* ---- a phone: the menu on top, one column, nothing wider than the screen ----
  * One rule for every row: what does not fit beside its neighbour goes under it and takes the
@@ -349,36 +325,30 @@ details[open] summary::before { content: "- "; }
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   nav { border-right: none; border-bottom: 1px solid var(--ink); padding: 1rem 0 0; flex-direction: row;
         flex-wrap: wrap; align-items: center; position: static; height: auto; }
-  .brand { margin: 0 1rem 14px; width: 100%; }
+  .brand { margin: 0 1rem .9rem; width: 100%; }
   /* Every section in sight: the links take as many rows as they need. */
   nav .links { display: flex; flex-wrap: wrap; width: 100%; padding: 0 .25rem; }
-  nav .links a { white-space: nowrap; padding: 9px .75rem; }
+  nav .links a { white-space: nowrap; padding: .55rem .75rem; }
   nav p { display: none; }
   main { padding: 1.5rem 1rem 3rem; }
-  .head { flex-wrap: wrap; gap: 10px 1rem; }
-  .head h2 { font-size: 1.4rem; line-height: 28px; }
+  .head { flex-wrap: wrap; gap: .6rem 1rem; }
+  .head h2 { font-size: 1.4rem; }
   .apps-head h2 { flex-basis: 100%; }
-  button { height: auto; min-height: 2.75rem; padding-top: 5px; padding-bottom: 5px; white-space: normal;
-           line-height: 21px; }
+  button { height: auto; min-height: 2.75rem; padding-top: .3rem; padding-bottom: .3rem; white-space: normal;
+           line-height: 1.3; }
   button:hover:not(:disabled), label.file:hover .button { transform: none; box-shadow: none; }
-  button.icon { padding: 0; min-height: 44px; }
+  button.icon { padding: .5rem; min-height: 0; }
   .head > button:not(.icon), .buttons > button, .log-tools button { flex: 1 1 auto; }
   label.check { min-height: 2.75rem; margin: .25rem 0; }
   summary { padding-top: .6rem; }
-  .tiles { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 14px; }
-  .tile { padding: 14px; min-height: 13rem; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .9rem; }
+  .tile { padding: .85rem; min-height: 13rem; }
   .tile:hover { transform: none; box-shadow: none; }
-  .tile .tools { top: 6px; right: 6px; gap: 0; }
-  /* Every catalog action follows its description, regardless of the label's length. */
+  .tile .tools { top: .35rem; right: .35rem; gap: 0; }
+  /* An offer's button under its words, at the right, when the two do not fit a line. */
   .offer { flex-wrap: wrap; gap: .6rem 1rem; }
   .offer > div:not(.picture) { flex-basis: 12rem; }
-  .offer > button { margin-left: auto; }
-  .catalog .offer { display: grid; grid-template-columns: 2rem minmax(0, 1fr); }
-  .catalog .offer > .picture { align-self: start; margin-top: .25rem; }
-  .catalog .offer > div:not(.picture) { grid-column: 2; }
-  .catalog .offer > button { grid-column: 2; width: 100%; margin: 0; }
-  #glyph-rows .offer { display: block; }
-  #glyph-rows .offer > button { width: 100%; margin-top: .75rem; }
+  .offer > button, .catalog .offer button { margin-left: auto; }
   /* A field and the button that belongs to it: the button under the field. */
   .pane .rows div, .file-row, label.file { flex-direction: column; align-items: stretch; }
   .pane .rows div > * { flex: none; }
@@ -389,26 +359,13 @@ details[open] summary::before { content: "- "; }
   /* A value under its name: a name of the device or a fault does not fit beside it. */
   .facts, #status dl, #network-now { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .facts dd, #status dd, #network-now dd { text-align: left; margin-bottom: .55rem; }
-  /* A log line's text under when and who. */
+  /* The window's own name gives its room to the buttons; a line's text under when and who. */
+  .log-tools h3 { display: none; }
   .log-tools { gap: .5rem; }
   .log-tools button { padding-left: .7rem; padding-right: .7rem; }
   .log-row { grid-template-columns: auto 1ch minmax(0, 1fr); gap: .5rem; padding: .2rem 1rem; }
   .log-row .text { grid-column: 1 / -1; }
   dialog .buttons > button { padding-left: .5rem; padding-right: .5rem; }
-  /* A phone dialog replaces the page cleanly; its actions stay above the screen edge. */
-  body:has(dialog[open]) { overflow: hidden; }
-  dialog, #info-dialog { --side: 1.25rem; --foot: max(1.25rem, env(safe-area-inset-bottom));
-                        width: 100%; max-width: none; height: 100dvh; max-height: 100dvh;
-                        inset: 0; margin: 0; padding: max(1.25rem, env(safe-area-inset-top)) var(--side) var(--foot);
-                        border: none; box-shadow: none; overscroll-behavior: contain; }
-  dialog[open] { display: flex; flex-direction: column; }
-  dialog > * { flex-shrink: 0; }
-  dialog > form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-  dialog > form > h2 { flex: none; }
-  /* Only the fields scroll, so a form can never push its actions below the viewport. */
-  #app-fields, #source-rows { min-height: 0; overflow-y: auto; flex: 1; }
-  #source-rows { align-content: start; }
-  dialog > form > .buttons { position: static; }
-  dialog .buttons { margin-top: auto; padding-top: 1.25rem; flex-shrink: 0; }
-  dialog.tall .buttons { margin-top: 1.25rem; }
+  dialog { --side: 1.25rem; --foot: 1.25rem; padding: 1.25rem; box-shadow: 4px 4px 0 var(--ink);
+           max-height: calc(100dvh - 2rem); }
 }

@@ -110,8 +110,7 @@ function drawStatus() {
   else byId("status").replaceChildren(...statusFacts().map(([name, facts]) => {
     const group = make("div", { className: "panel" }), list = make("dl");
     list.append(...factList(facts));
-    if (name !== "Device") group.append(make("h3", { textContent: name }));
-    group.append(list);
+    group.append(make("h3", { textContent: name }), list);
     return group;
   }));
   drawNetworkNow();

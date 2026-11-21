@@ -24,13 +24,6 @@ function placeField(input, latitude, longitude) {
   const list = make("ul"), box = make("div", { className: "place" });
   let found = [], current = -1, pause = 0, asked = 0;
   input.dataset.chosen = input.value;
-  /* The stored place stays whole inside its field, including on a phone. */
-  const fit = () => {
-    if (!input.clientWidth) return;
-    input.style.height = "auto";
-    input.style.height = input.scrollHeight + 2 + "px";
-  };
-  new ResizeObserver(fit).observe(input);
   const offer = places => {
     found = places;
     current = -1;
@@ -45,19 +38,13 @@ function placeField(input, latitude, longitude) {
     latitude.value = found[index].latitude;
     longitude.value = found[index].longitude;
     offer([]);
-    input.setSelectionRange(0, 0);
-    input.scrollLeft = 0;
-    fit();
   };
   const point = index => {
     current = (index + found.length) % found.length;
     [...list.children].forEach((row, at) => row.classList.toggle("current", at === current));
-    list.children[current].scrollIntoView({ block: "nearest" });
   };
   input.addEventListener("input", () => {
     clearTimeout(pause);
-    input.value = input.value.replace(/[\r\n]+/g, " ");
-    fit();
     const name = input.value.trim(), question = ++asked;
     if (!name) {
       input.dataset.chosen = latitude.value = longitude.value = "";
@@ -82,13 +69,7 @@ function placeField(input, latitude, longitude) {
     }, PLACE_TYPING_PAUSE_MS);
   });
   input.addEventListener("keydown", event => {
-    if (!found.length) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (input.form) input.form.requestSubmit(input.form.querySelector("button:not([type])") || undefined);
-      }
-      return;
-    }
+    if (!found.length) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       point(current + (event.key === "ArrowDown" ? 1 : -1));
@@ -102,7 +83,6 @@ function placeField(input, latitude, longitude) {
     }
   });
   input.addEventListener("blur", () => offer([]));
-  input.fit = fit;
   box.append(input, list);
   return box;
 }
@@ -163,9 +143,6 @@ function settingField(app, setting) {
   let input;
   if (setting.type === "list") {
     input = listField(value);
-  } else if (setting.type === "place") {
-    input = make("textarea", { rows: 1, value, maxLength: MANIFEST_SETTING_VALUE_MAX,
-                               autocomplete: "off", spellcheck: false });
   } else if (setting.type === "choice") {
     input = make("select");
     /* An option is what is stored; its label, when the device gives one, what is read. */
@@ -259,10 +236,7 @@ function fillFromCompanion(values) {
     if (input.dataset.type === "toggle") input.checked = value === "1";
     else if (input.dataset.type === "list") input.setValue(value);
     else input.value = value;
-    if (input.dataset.type === "place") {
-      input.dataset.chosen = value;
-      input.fit();
-    }
+    if (input.dataset.type === "place") input.dataset.chosen = value;
     filled++;
   }
   toast(filled ? "Filled in. Save to apply." : "Nothing to fill in.", filled ? "" : "error");
@@ -527,15 +501,10 @@ function appFacts(app) {
   ];
 }
 
-/* Older Russian descriptions may contain quotes; catalog descriptions are shown without them. */
-function descriptionText(text) {
-  return pageLanguage === "ru" && /[А-Яа-яЁё]/.test(text) ? text.replace(/["«»„“”]/g, "") : text;
-}
-
 function openAppInfo(app) {
   show("info-dialog-title", app.title);
-  show("info-description", descriptionText(app.description || ""));
-  byId("info-description").hidden = !app.description || app.description === app.title;
+  show("info-description", app.description || "");
+  byId("info-description").hidden = !app.description;
   byId("info-facts").replaceChildren(...appFacts(app).flatMap(([name, value]) =>
     [make("dt", { textContent: name }), make("dd", { textContent: value })]));
   byId("info-dialog").showModal();
@@ -545,10 +514,8 @@ function openAppInfo(app) {
 
 /* What a catalog says of an application - its title, its description - in the page's language
  * when the application has it so, in English otherwise. */
-const offerSays = (offer, what) => {
-  const text = ((offer.app.translations || {})[pageLanguage] || {})[what] || offer.app[what] || "";
-  return what === "description" ? descriptionText(text) : text;
-};
+const offerSays = (offer, what) =>
+  ((offer.app.translations || {})[pageLanguage] || {})[what] || offer.app[what] || "";
 
 /* Whether the sources were read: until then the catalog says it is loading, and nothing is
  * installed or updated from it. */
@@ -575,10 +542,9 @@ function drawCatalog() {
       const row = make("div", { className: "offer" }), text = make("div");
       const needed = compatibilityProblem(offer.app);
       /* Already in the page's language, from the index: nothing to put into it. */
-      const title = offerSays(offer, "title"), description = offerSays(offer, "description");
-      text.append(make("b", { textContent: title, translate: false }));
-      if (description && description !== title)
-        text.append(make("span", { className: "about", textContent: description, translate: false }));
+      text.append(make("b", { textContent: offerSays(offer, "title"), translate: false }));
+      if (offerSays(offer, "description"))
+        text.append(make("span", { className: "about", textContent: offerSays(offer, "description"), translate: false }));
       if (offer.app.author)
         text.append(make("small", { textContent: offer.app.author, translate: false }));
       text.append(make("small", { textContent: offer.app.version + (kept(offer) ? " - " + t("settings kept") : "") +
@@ -631,8 +597,6 @@ function drawTiles() {
   else if (!tiles.length) sayState(byId("tiles"), "empty");
   else byId("tiles").replaceChildren(...tiles);
   const capacity = byId("app-capacity");
-  byId("app-usage").hidden = stateOf("apps") !== "ready";
-  byId("app-count").textContent = t("Installed: {0} of {1}", installed.length, CATALOG_INSTALLED_MAX);
   capacity.setAttribute("aria-valuemax", String(CATALOG_INSTALLED_MAX));
   capacity.setAttribute("aria-valuenow", String(installed.length));
   capacity.setAttribute("aria-valuetext", t("{0} of {1}", installed.length, CATALOG_INSTALLED_MAX));
