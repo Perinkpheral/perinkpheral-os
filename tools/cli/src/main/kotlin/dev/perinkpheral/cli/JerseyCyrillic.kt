@@ -34,7 +34,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             require(rows.isNotEmpty() && rows.all { row -> row.length == rows[0].length && row.all { it == '#' || it == '.' } }) {
                 "Jersey $cap $letter: invalid drawing"
             }
-            val expectedHeight = when (letter) { 'б', 'У', 'З' -> cap; 'д' -> xHeight + metrics.tailDepth; else -> xHeight }
+            val expectedHeight = when (letter) { 'Б', 'б', 'У', 'З' -> cap; 'д' -> xHeight + metrics.tailDepth; else -> xHeight }
             require(rows.size == expectedHeight) { "Jersey $cap $letter: expected $expectedHeight rows, got ${rows.size}" }
             val expectedWidth = when (letter) {
                 'ж', 'м' -> metrics.wide
@@ -92,7 +92,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
     }
 
     private fun checkCounters(letter: Char, rows: List<BooleanArray>) {
-        if (letter !in "бвьяъыљњЬЪЫЉЊфФ") return
+        if (letter !in "БбвьяъыљњЬЪЫЉЊфФ") return
         val spaces = counters(rows)
         val expected = if (letter in "вфФ") 2 else 1
         require(spaces.size == expected) { "Jersey $cap $letter: expected $expected enclosed counters" }
@@ -513,15 +513,6 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
         return rows
     }
 
-    private fun be(soft: List<BooleanArray>): MutableList<BooleanArray> {
-        val flagOverhang = maxOf(1, stem - 1)
-        val rows = canvas(soft[0].size + flagOverhang, cap)
-        blit(rows, soft, 0, 0)
-        // The flag projects beyond the bowl; the figure 6 turns back into its body.
-        fill(rows, 0, 0, rows[0].size, stem)
-        return rows
-    }
-
     private fun gheUpturn(ghe: List<BooleanArray>): MutableList<BooleanArray> {
         val rise = maxOf(1, stem - 1)
         val rows = canvas(ghe[0].size, ghe.size + rise)
@@ -540,9 +531,22 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
 
 
     // These are native-pixel drawings, not scaled copies of another Jersey face.
+    // Б has a raised shoulder and an open square counter; its top bar stays inside the bowl's width.
     // З/з have a smaller upper bowl and flat entry terminals beside the rounded digit 3.
     private fun drawings(): Map<Char, String> = when (cap) {
         10 -> mapOf(
+            'Б' to """
+                #######
+                #######
+                ##.....
+                ######.
+                #######
+                ##...##
+                ##...##
+                ##...##
+                #######
+                ######.
+            """,
             'б' to """
                 .######
                 #######
@@ -693,6 +697,23 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             """,
         )
         15 -> mapOf(
+            'Б' to """
+                ##########
+                ##########
+                ##########
+                ###.......
+                ###.......
+                ########..
+                #########.
+                ##########
+                ###....###
+                ###....###
+                ###....###
+                ###....###
+                ##########
+                #########.
+                ########..
+            """,
             'б' to """
                 ..########
                 .#########
@@ -897,6 +918,28 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
 
 
     private fun drawings20(): Map<Char, String> = mapOf(
+        'Б' to """
+            ############.
+            ############.
+            ############.
+            ############.
+            ####.........
+            ####.........
+            ####.........
+            ##########...
+            ############.
+            ############.
+            #############
+            ####.....####
+            ####.....####
+            ####.....####
+            ####.....####
+            ####.....####
+            #############
+            ############.
+            ############.
+            ##########...
+        """,
         'б' to """
             ..###########
             .############
@@ -1156,6 +1199,33 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
     )
 
     private fun drawings25(): Map<Char, String> = mapOf(
+        'Б' to """
+            ###############.
+            ###############.
+            ###############.
+            ###############.
+            ###############.
+            #####...........
+            #####...........
+            #####...........
+            #####...........
+            ############....
+            ##############..
+            ###############.
+            ###############.
+            ################
+            #####......#####
+            #####......#####
+            #####......#####
+            #####......#####
+            #####......#####
+            #####......#####
+            ################
+            ###############.
+            ###############.
+            ##############..
+            ############....
+        """,
         'б' to """
             ..##############
             .###############
@@ -1540,7 +1610,7 @@ class JerseyCyrillic(private val render: (Int) -> FontFace.Glyph?) {
             letter("Ңң", tick(source.getValue('H')))
             letter("Өө", barredO(roundO))
             if (!isSmall) {
-                put('Б', be(soft))
+                put('Б', master('Б'))
                 same('Ѐ', 'È')
                 put('Ћ', tshe(false))
                 put('Ђ', tshe(true))
