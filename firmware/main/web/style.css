@@ -161,14 +161,22 @@ button:hover:not(:disabled) { transform: translate(calc(-1 * var(--lift)), calc(
                               box-shadow: var(--lift) var(--lift) 0 var(--ink); }
 button:active:not(:disabled) { transform: none; box-shadow: none; }
 button.quiet { color: var(--ink); background: var(--paper); }
-/* A button that stays down while what it names is on: in ink, as a chosen tab. */
-button.toggle[aria-pressed=true] { color: var(--paper); background: var(--ink); }
 button:disabled { opacity: .45; cursor: default; }
 button.busy, button.done { opacity: 1; }
 button.busy::after { content: ""; width: 1.9em; text-align: left; animation: dots 1.2s steps(1) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 button.done::before { content: ""; width: .35em; height: .7em; margin: 0 .6em .2em 0;
                       border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+/* Persistent choices share the square indicator of the form's checkboxes. */
+button.toggle { justify-content: flex-start; gap: .75rem; padding-left: 0; padding-right: 0;
+                text-align: left; white-space: normal; color: var(--ink); background: transparent;
+                border-color: transparent; }
+button.toggle::before { content: ""; flex: none; width: 22px; height: 22px; margin: 0; padding: 4px;
+                        border: 1px solid var(--ink); box-sizing: border-box; transform: none;
+                        background-clip: content-box; }
+button.toggle[aria-pressed=true]::before { background-color: var(--ink); }
+button.toggle:hover:not(:disabled) { transform: none; box-shadow: none; text-decoration: underline;
+                                    text-underline-offset: .2em; }
 /* A picture for a button: no box until the pointer is over it. */
 button.icon { margin: 0; padding: .35rem; height: auto; line-height: 0; color: var(--ink);
               background: transparent; border-color: transparent; }
