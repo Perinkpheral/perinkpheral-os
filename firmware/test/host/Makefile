@@ -15,6 +15,7 @@ UI      := $(COMP)/ui
 APPSYS  := $(COMP)/appsys
 APPSTORE := $(COMP)/appstore
 CFLAGS  += -I$(APPSTORE)/include
+DEADLINES := $(COMP)/deadlines
 NET     := $(COMP)/net
 WASM3   := $(COMP)/wasm3/wasm3
 SDK     := ../../../sdk
@@ -48,7 +49,7 @@ test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c
 
 TESTS   += test_recovery_screen
 TESTS   += test_ota_probation
-TESTS   += test_poll_round test_wifi_credentials test_memory
+TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks
 TESTS   += test_catalog_stream
@@ -95,6 +96,9 @@ test_app_kv: test_app_kv.c tinytest.h $(PERSISTENCE_STUBS) $(MAIN)/app_kv.c $(MA
 test_poll_round: test_poll_round.c tinytest.h $(APPSTORE)/poll_round.c $(APPSTORE)/include/poll_round.h $(APPSTORE)/poll_schedule.c $(APPSTORE)/include/poll_schedule.h
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -o $@ test_poll_round.c $(APPSTORE)/poll_round.c $(APPSTORE)/poll_schedule.c
 
+test_poller: test_poller.c tinytest.h $(MAIN)/poller.c $(MAIN)/poller_net.h $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c $(wildcard poller_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Ipoller_stubs -Iinstall_stubs -Ipersistence_stubs -Imemory_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(NET)/include -I$(DEADLINES)/include -I$(MAIN) -o $@ test_poller.c $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c -lm
+
 test_wifi_credentials: test_wifi_credentials.c tinytest.h $(NET)/wifi_credentials.c $(NET)/include/wifi_credentials.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_credentials.c $(NET)/wifi_credentials.c
 
@@ -137,7 +141,6 @@ test_gfx: test_gfx.c tinytest.h $(GFX_DEPS)
 test_btn_core: test_btn_core.c tinytest.h $(INPUT)/btn_core.c $(INPUT)/include/btn_core.h
 	$(CC) $(CFLAGS) -I$(INPUT)/include -o $@ test_btn_core.c $(INPUT)/btn_core.c
 
-DEADLINES := ../../components/deadlines
 test_deadline_table: test_deadline_table.c tinytest.h $(DEADLINES)/deadline_table.c $(DEADLINES)/include/deadline_table.h
 	$(CC) $(CFLAGS) -I$(DEADLINES)/include -o $@ test_deadline_table.c $(DEADLINES)/deadline_table.c
 

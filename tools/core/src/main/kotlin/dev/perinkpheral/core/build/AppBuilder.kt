@@ -98,6 +98,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             val firmware = if (declared != null && versionNumber(declared)!! > versionNumber(needed)!!) declared else needed
             val firmwareLine = when {
                 declared == firmware -> "  firmware $firmware or later, as the manifest says"
+                byCall == "POLL_METHOD" -> "  firmware $firmware or later, for a poll's method or body"
                 byCall != null -> "  firmware $firmware or later, for $byCall"
                 else -> "  firmware $firmware or later"
             }

@@ -31,8 +31,9 @@ void poller_start(void);
 void poller_poll_is_due(uint32_t app, int poll);
 
 /* The application that was taking the answer to `request` piece by piece
- * was unloaded before its end - a press needed the screen. A poll is asked
- * again in a minute instead of a whole period later. From the host loop. */
+ * was unloaded before its end - a press needed the screen. A GET or HEAD poll
+ * is asked again in a minute, or at its shorter pace; other methods keep their
+ * normal pace. From the host loop. */
 void poller_answer_was_abandoned(const char *app_name, int request);
 
 /* DEADLINE_POLLER_LOOK has come: the moment the poller asked to look at

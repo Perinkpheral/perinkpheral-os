@@ -7,7 +7,6 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 ## next
 
 - Manifest polls support request methods and templated bodies, with the firmware minimum computed by the build.
-
 - Failed firmware rejection restarts into recovery after bounded metadata-write retries.
 - Wi-Fi reconnects after scans despite repeated radio requests from button presses.
 - The rescue access point opens after two minutes without an address, including DHCP failures.

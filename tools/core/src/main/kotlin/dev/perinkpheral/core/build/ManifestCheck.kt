@@ -40,6 +40,7 @@ class ManifestCheck(private val sdk: Sdk) {
     private val certificatesMax = sdk.limit("CERTIFICATES_MAX")
     private val eachPrefixMax = sdk.limit("EACH_PREFIX_MAX")
     private val fileNameMax = sdk.limit("FILE_NAME_MAX")
+    private val storeKeyMax = sdk.contract.number("HOST_KV_KEY_MAX")
 
     /** Checks `<app>/manifest.json`; returns it parsed. */
     fun check(appDir: File): Map<*, *> {
@@ -156,6 +157,7 @@ class ManifestCheck(private val sdk: Sdk) {
         val where = "$path: poll $number"
         if (poll !is Map<*, *>) fail("$where must be an object")
         val url = poll["url"]
+        if (url is String) checkTemplate("$where: url", url)
         if (url !is String || url.toByteArray().size > urlMax ||
             !(url.startsWith("http://") || url.startsWith("https://") || referencesServer(url, servers) != null)) {
             fail("$where: \"url\" must be an http(s) URL of at most $urlMax bytes, or begin with " +
@@ -171,6 +173,7 @@ class ManifestCheck(private val sdk: Sdk) {
             if (body !is String || body.toByteArray().size > bodyMax || method in setOf("GET", "HEAD")) {
                 fail("$where: body must be text of at most $bodyMax bytes, with a method other than GET or HEAD")
             }
+            checkTemplate("$where: body", body)
         }
         val every = poll["every"]
         if (every is String) {
@@ -199,6 +202,7 @@ class ManifestCheck(private val sdk: Sdk) {
                 fail("$where: header \"$name\" has a name over $headerNameMax bytes or a value that is not a " +
                     "string of at most $headerValueMax")
             }
+            checkTemplate("$where: header \"$name\"", value)
         }
         val pick = poll["pick"] ?: emptyList<Any>()
         if (pick !is List<*> || pick.size > pickPathsMax) {
@@ -222,6 +226,22 @@ class ManifestCheck(private val sdk: Sdk) {
                 prefix.length > eachPrefixMax || prefix.any { it <= ' ' || it > '~' })) {
             fail("$where: \"prefix\" is of a poll with \"each\": 1-$eachPrefixMax printable characters " +
                 "without spaces, which the items it takes begin with")
+        }
+    }
+
+    private fun checkTemplate(where: String, text: String) {
+        var at = 0
+        while (true) {
+            val opening = text.indexOf("{{", at)
+            if (opening < 0) return
+            val keyStart = opening + 2
+            val closing = text.indexOf("}}", keyStart)
+            val key = if (closing < 0) "" else text.substring(keyStart, closing)
+            if (key.length !in 1..storeKeyMax || key.any { it < '!' || it > '~' }) {
+                fail("$where: {{ must open a store key of 1-$storeKeyMax characters from '!' to '~'; " +
+                    "a literal \"{{\" cannot be sent")
+            }
+            at = closing + 2
         }
     }
 

@@ -35,10 +35,12 @@ object PollManifestTest {
                 manifest(poll)
                 ManifestCheck(sdk).check(app)
             }
-            fun refused(poll: Map<String, Any?>) {
+            fun refused(poll: Map<String, Any?>, message: String? = null) {
                 manifest(poll)
                 try { ManifestCheck(sdk).check(app); error("invalid poll accepted: $poll") }
-                catch (_: BuildError) { }
+                catch (error: BuildError) {
+                    if (message != null) check(message in error.message.orEmpty()) { error.message.orEmpty() }
+                }
             }
             accepted(get)
             accepted(get + ("method" to "GET"))
@@ -48,7 +50,7 @@ object PollManifestTest {
                 val poll = get + ("method" to method)
                 accepted(poll)
                 check(sdk.firmwareFor(sdk.manifestFeatures(manifest(poll))).first == introduced)
-                if (method != "HEAD") accepted(poll + ("body" to "{{undeclared}}"))
+                if (method != "HEAD") accepted(poll + ("body" to "request"))
             }
             for (method in listOf(null, "get", "OPTIONS", "", 1L, emptyMap<String, Any>())) refused(get + ("method" to method))
             for (body in listOf(null, 1L, emptyList<Any>(), "x".repeat(1025), "é".repeat(513))) {
@@ -63,6 +65,21 @@ object PollManifestTest {
             accepted(get + mapOf("method" to "POST", "body" to "é".repeat(512)))
             check(sdk.manifestFeatures(manifest(get + mapOf("method" to "POST", "body" to ""))) == listOf("POLL_METHOD"))
 
+            fun templates(text: String): List<Map<String, Any?>> = listOf(
+                get + mapOf("method" to "POST", "body" to text),
+                get + ("url" to "https://example.test/$text"),
+                get + ("headers" to mapOf("Authorization" to text))
+            )
+            // Keys need not be declared settings; all printable non-space ASCII is allowed.
+            for (text in listOf("{{undeclared}}", "{{x}}", "{{abcdefghijklmno}}", "{{!~._-+@/#:[]?}}", "{{a}}{{b}}", "plain { text }")) {
+                templates(text).forEach(::accepted)
+            }
+            for (text in listOf("{{", "{{}}", "{{open", "{{abcdefghijklmnop}}", "{{two words}}", "{{é}}",
+                    "{{a\n}}", "{{a\r}}", "{{a\t}}", "{{a\u007f}}", "{{valid}} then {{bad key}}", "{{ states('sensor.x') }}")) {
+                templates(text).forEach { refused(it, "a literal \"{{\" cannot be sent") }
+                refused(get + ("url" to text), "a literal \"{{\" cannot be sent")
+            }
+
             val wasi = System.getenv("WASI_SDK_PATH")?.let(::File)
             if (wasi != null) {
                 File(app, "probe.c").writeText("""
@@ -72,10 +89,12 @@ object PollManifestTest {
                     void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t status) { (void)request; (void)data; (void)length; (void)flags; (void)status; }
                     void app_on_picked(int32_t request, int32_t status) { (void)request; (void)status; }
                 """.trimIndent() + "\n")
-                val builder = AppBuilder(sdk, wasi) {}
+                val buildLines = mutableListOf<String>()
+                val builder = AppBuilder(sdk, wasi) { buildLines.add(it) }
                 val out = File(scratch, "built")
                 fun builtMinimum(poll: Map<String, Any?>, minimum: String? = null): String {
                     manifest(poll, minimum)
+                    buildLines.clear()
                     builder.build(app, out)
                     val packed = Json.parse(File(out, "manifest.json").readText()) as Map<*, *>
                     check(packed["polls"] == listOf(poll))
@@ -87,6 +106,8 @@ object PollManifestTest {
                 check(builtMinimum(get + ("method" to "GET")) == floor)
                 for (method in listOf("POST", "HEAD", "REPORT")) {
                     check(builtMinimum(get + ("method" to method)) == introduced)
+                    check(buildLines.any { "for a poll's method or body" in it })
+                    check(buildLines.none { "POLL_METHOD" in it })
                 }
                 val post = get + mapOf("method" to "POST", "body" to "request", "pick" to listOf("value"))
                 check(builtMinimum(post, floor) == introduced)

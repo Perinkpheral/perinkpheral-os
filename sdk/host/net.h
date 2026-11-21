@@ -29,8 +29,9 @@
  * a background instance can be unloaded by a button press, screen switch,
  * application-list reload or delivery to another application. Only
  * app_on_terminate() is called then. The next HOST_DATA_FIRST starts a
- * new answer. Perinkpheral OS repeats an interrupted poll after one minute, or after
- * its interval when that is shorter; an
+ * new answer. Perinkpheral OS repeats an interrupted GET or HEAD poll after one
+ * minute, or after its interval when that is shorter; other poll methods keep
+ * their normal pace. An
  * interrupted answer to http_send() is dropped, and the application
  * asks again if it still needs it. Discard partially read data.
  *

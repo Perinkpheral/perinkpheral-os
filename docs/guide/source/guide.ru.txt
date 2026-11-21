@@ -670,8 +670,8 @@ Handlers return <code>void</code>. A redraw, the screen or an exit is obtained w
 Button events are delivered in order. There are 16 event slots, four reserved for releases; new non-release events are refused once 12 events are queued. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.
 События кнопок доставляются по порядку. В очереди 16 мест, четыре зарезервированы для отпусканий; новые события других типов отклоняются, когда в очереди уже 12 событий. Ожидающие таймеры с одним номером объединяются. Фрагменты одного ответа доставляются по порядку; между двумя из них может прийти изменение настроек или будильник.
 
-Background delivery of a response can be interrupted. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Only <code>app_on_terminate()</code> is called. The poll is repeated after one minute, or after its interval when that is shorter.
-Фоновая доставка ответа может прерваться. Нажатие кнопки, смена экрана, перечитывание списка приложений или доставка другому приложению могут выгрузить экземпляр и отбросить оставшиеся части. Вызывается только <code>app_on_terminate()</code>. Опрос повторяется через минуту или через свой интервал, если он короче.
+Background delivery of a response can be interrupted. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Only <code>app_on_terminate()</code> is called. A GET or HEAD poll is repeated after one minute, or after its interval when that is shorter; other methods keep their normal pace.
+Фоновая передача ответа может прерваться. Нажатие кнопки, смена экрана, перечитывание списка приложений или доставка другому приложению могут выгрузить экземпляр и отбросить оставшиеся части. Вызывается только <code>app_on_terminate()</code>. Опрос GET или HEAD повторяется через минуту или через свой интервал, если он короче; остальные методы сохраняют обычный интервал.
 
 State
 Состояние
@@ -4432,3 +4432,9 @@ MANIFEST_POLL_BODY_MAX
 
 Poll body, before and after expansion
 Тело опроса до и после подстановки
+
+Every poll, of any method, is also sent after a device start, when the network is back (except a radio wake for power-saving polls), and on <code>poll_run()</code>; a method that changes server state must tolerate these sends.
+Каждый опрос с любым методом также отправляется после запуска устройства, при восстановлении сети (кроме включения радио для опросов в режиме энергосбережения) и по <code>poll_run()</code>; метод, меняющий состояние сервера, должен допускать такие отправки.
+
+In a poll URL, header or body, <code>{{</code> always opens a store key of 1-15 characters from <code>!</code> to <code>~</code>, closed by <code>}}</code>; the build refuses invalid keys or unclosed placeholders, and a literal "{{" cannot be sent.
+В URL, заголовке или теле опроса <code>{{</code> всегда открывает ключ хранилища длиной 1-15 символов от <code>!</code> до <code>~</code>, закрытый <code>}}</code>; сборка отклоняет неверные ключи и незакрытые подстановки, а буквальное "{{" отправить нельзя.

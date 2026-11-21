@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -644,6 +645,7 @@ static bool run_wanted_poll(void)
         return false;
     }
     int items = 0;
+    int method = -1; /* no request prepared */
     if (!is_round) {
         /* Taken now, before its answer: what the application does with that
          * answer - poll_run() of this same poll, when it was not ready - asks
@@ -657,7 +659,7 @@ static bool run_wanted_poll(void)
         begin_answer_locked((uint32_t)app, true);
         unlock();
         if (why_not == 0) {
-            items = poller_net_poll(name, poll, item);
+            items = poller_net_poll(name, poll, item, &method);
         } else {
             poller_net_poll_not_made(name, poll, why_not);
         }
@@ -673,9 +675,11 @@ static bool run_wanted_poll(void)
     bool is_due_soon = poll_schedule_is_due_soon(&s_schedule, app, poll);
     if (s_abandoned.is_one && s_abandoned.app == app && s_abandoned.poll == poll) {
         /* Its answer was cut short by somebody at the device: again when
-         * they are likely done, not a whole period later. */
+         * they are likely done. Other methods keep their pace: repeating
+         * one early could repeat its effect on the server. */
         s_abandoned.is_one = false;
-        if (pace_ms > ABANDONED_AGAIN_MS) {
+        if ((method == HOST_HTTP_GET || method == HOST_HTTP_HEAD) &&
+            pace_ms > ABANDONED_AGAIN_MS) {
             pace_ms = ABANDONED_AGAIN_MS;
         }
     }
@@ -737,9 +741,13 @@ static int schedule_installed(void)
 {
     int count;
     const app_manifest_t *installed = launcher_installed(&count);
-    s_known_count = count < LAUNCHER_INSTALLED_MAX ? count : LAUNCHER_INSTALLED_MAX;
-    for (int i = 0; i < s_known_count; i++) {
-        known_app_t *known = &s_known[i];
+    const char *firmware = esp_app_get_description()->version;
+    s_known_count = 0;
+    for (int i = 0; i < count && s_known_count < LAUNCHER_INSTALLED_MAX; i++) {
+        if (!app_manifest_runs_on(&installed[i], firmware)) {
+            continue;
+        }
+        known_app_t *known = &s_known[s_known_count++];
         strcpy(known->name, installed[i].name);
         known->id = installed[i].id;
         known->poll_count = installed[i].poll_count;

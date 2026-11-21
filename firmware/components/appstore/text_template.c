@@ -4,6 +4,7 @@
  */
 #include "text_template.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define OPENING "{{"
@@ -212,10 +213,20 @@ text_request_result_t text_template_prepare_request(app_poll_t *poll, const char
         }
         memcpy(poll->headers[i].value, expanded, strlen(expanded) + 1);
     }
-    char body[APP_POLL_BODY_MAX + 1];
-    if (!text_template_fill_body(poll->body, value_of, context, body, sizeof body)) {
+    if (poll->body[0] == '\0') {
+        return TEXT_REQUEST_READY;
+    }
+    char *body = malloc(APP_POLL_BODY_MAX + 1);
+    if (body == NULL) {
         return TEXT_REQUEST_NOT_READY;
     }
-    memcpy(poll->body, body, strlen(body) + 1);
+    bool ready = text_template_fill_body(poll->body, value_of, context, body, APP_POLL_BODY_MAX + 1);
+    if (ready) {
+        memcpy(poll->body, body, strlen(body) + 1);
+    }
+    free(body);
+    if (!ready) {
+        return TEXT_REQUEST_NOT_READY;
+    }
     return TEXT_REQUEST_READY;
 }

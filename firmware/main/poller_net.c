@@ -811,7 +811,7 @@ static int list_item(const char *app_name, const char *key, int item, char *text
     }
 }
 
-int poller_net_poll(const char *app_name, int poll_number, int item)
+int poller_net_poll(const char *app_name, int poll_number, int item, int *method)
 {
     request_t *request = calloc(1, sizeof *request);
     if (request == NULL) {
@@ -840,7 +840,8 @@ int poller_net_poll(const char *app_name, int poll_number, int item)
         if (items == 0 && request->poll.each_key[0] != '\0') {
             request->poll.each_key[0] = '\0';
         }
-        perform(request, app_name, poll_number, request->poll.method, NULL, 0, false);
+        *method = request->poll.method;
+        perform(request, app_name, poll_number, *method, NULL, 0, false);
         s_item = -1;
     }
     free(request);
