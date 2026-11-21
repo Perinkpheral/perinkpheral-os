@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 package dev.perinkpheral.cli
 
-/** Native-grid digits: a dotted zero, a footed one and a flat-topped three.
+/** Native-grid digits: a narrow zero, a footed one and a flat-topped three.
  * The other digits retain Jersey's drawings. All figures share the existing widest advance.
  * Separate optical masters keep the face's stem weight and open counters at each size.
  */
@@ -34,8 +34,8 @@ object JerseyDigits {
             #######
             ##...##
             ##...##
-            ##.#.##
-            ##.#.##
+            ##...##
+            ##...##
             ##...##
             ##...##
             #######
@@ -72,9 +72,9 @@ object JerseyDigits {
             ####.####
             ###...###
             ###...###
-            ###.#.###
-            ###.#.###
-            ###.#.###
+            ###...###
+            ###...###
+            ###...###
             ###...###
             ###...###
             ####.####
@@ -125,10 +125,10 @@ object JerseyDigits {
             ####....####
             ####....####
             ####....####
-            ####.##.####
-            ####.##.####
-            ####.##.####
-            ####.##.####
+            ####....####
+            ####....####
+            ####....####
+            ####....####
             ####....####
             ####....####
             ####....####
@@ -193,11 +193,11 @@ object JerseyDigits {
             #####.....#####
             #####.....#####
             #####.....#####
-            #####.###.#####
-            #####.###.#####
-            #####.###.#####
-            #####.###.#####
-            #####.###.#####
+            #####.....#####
+            #####.....#####
+            #####.....#####
+            #####.....#####
+            #####.....#####
             #####.....#####
             #####.....#####
             #####.....#####
