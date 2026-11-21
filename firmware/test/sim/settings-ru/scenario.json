@@ -1,0 +1,20 @@
+{
+  "app": "firmware/system/settings",
+  "at": 1794832230,
+  "tz": "Europe/Moscow",
+  "font": "departure",
+  "language": "ru",
+  "steps": [
+    "shot root",
+    "press 3 3 2",
+    "shot appearance",
+    "press 2",
+    "shot font",
+    "press 4 4 3 2",
+    "shot display",
+    "press 4 3 3 2",
+    "shot restart",
+    "press 4 3 2",
+    "shot reset"
+  ]
+}

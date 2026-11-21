@@ -32,6 +32,8 @@
 #define MARGIN            16
 #define ROW_HEIGHT        34 /* from one baseline to the next; the first is one row down */
 #define VALUE_MAX         47
+#define VALUE_GAP         16
+#define FITTED_MAX        128
 #define MS_PER_MINUTE     60000
 #define MINUTES_PER_HOUR  60
 
@@ -40,6 +42,9 @@ static bool is_state_page;
 
 static void draw_centered(int32_t top, int32_t font, const char *text)
 {
+    if (app_text_width(font, text) > gfx_width() - 2 * MARGIN) {
+        font = HOST_FONT_SMALL;
+    }
     app_draw_centered(gfx_width() / 2, top, font, text);
 }
 
@@ -47,7 +52,14 @@ static void draw_row(int32_t row, const char *label, const char *value)
 {
     int32_t top = (row + 1) * ROW_HEIGHT - gfx_font_ascent(HOST_FONT_TEXT);
     app_draw_text(MARGIN, top, HOST_FONT_TEXT, label);
-    app_draw_right(gfx_width() - MARGIN, top, HOST_FONT_TEXT, value);
+    int32_t room = gfx_width() - 2 * MARGIN - app_text_width(HOST_FONT_TEXT, label) - VALUE_GAP;
+    int32_t font = app_text_width(HOST_FONT_TEXT, value) <= room ? HOST_FONT_TEXT : HOST_FONT_SMALL;
+    char fitted[FITTED_MAX];
+    int32_t length = gfx_fit_text(font, value, app_text_length(value), room, fitted, sizeof fitted);
+    if (length > 0) {
+        gfx_draw_text(gfx_width() - MARGIN - gfx_text_width(font, fitted, length),
+                      (row + 1) * ROW_HEIGHT - gfx_font_ascent(font), font, fitted, length);
+    }
 }
 
 /* What the host knows under `what`, as a string; empty when it is not

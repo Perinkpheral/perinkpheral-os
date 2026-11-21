@@ -207,9 +207,12 @@ int main(int argc, char **argv)
         { "10 min", "15 min", "30 min", "Save", "Cancel" },
         { NULL, "Off", "On", "Save", "Cancel" },
         { "Saint Petersburg", "Stockholm", NULL, "Save", "Cancel" },
+        { NULL, "Departure Mono", "Jersey", "Save", "Cancel" },
     };
-    const char *const picker_names[] = { "kit-picker", "kit-picker-first", "kit-picker-last" };
-    for (int shot = 0; shot < 3; shot++) {
+    const char *const picker_names[] = {
+        "kit-picker", "kit-picker-first", "kit-picker-last", "kit-picker-font",
+    };
+    for (int shot = 0; shot < 4; shot++) {
         start_screen(&online, &content);
         kit_picker(&content, &pickers[shot]);
         if (save(dir, picker_names[shot])) {

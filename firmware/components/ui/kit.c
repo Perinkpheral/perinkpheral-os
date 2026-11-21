@@ -446,9 +446,12 @@ void kit_picker(gfx_t *g, const kit_picker_t *picker)
               has_above, has_below);
 
     const gfx_font_t *chosen_font = kit_font(KIT_TITLE);
+    int text_width = g->w - 2 * PICKER_FRAME_INSET - 2 * KIT_MARGIN;
+    if (gfx_text_font_width(chosen_font, picker->chosen) > text_width) {
+        chosen_font = kit_font(KIT_TEXT);
+    }
     char fitted[TEXT_BUFFER];
-    gfx_fit_text(chosen_font, picker->chosen, g->w - 2 * PICKER_FRAME_INSET - 2 * KIT_MARGIN, fitted,
-                 sizeof fitted);
+    gfx_fit_text(chosen_font, picker->chosen, text_width, fitted, sizeof fitted);
     gfx_text_font(g, (g->w - gfx_text_font_width(chosen_font, fitted)) / 2,
                   frame_top + (PICKER_FRAME_HEIGHT + gfx_font_cap_height(chosen_font)) / 2,
                   chosen_font, fitted, true);

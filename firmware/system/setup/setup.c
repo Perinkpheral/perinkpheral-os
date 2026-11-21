@@ -17,6 +17,7 @@
 #define TEXT_LINES     2
 #define TEXT_DESCENT   10 /* from a line's bottom up to its baseline */
 #define QUIET_MODULES  4  /* the white a reader wants around the code */
+#define TEXT_MARGIN    16
 
 /* Any press is enough to leave it. */
 void app_on_button(int32_t event)
@@ -40,10 +41,14 @@ static void draw_line(int32_t line, const char *verb, const char *what)
     app_text_add(&out, verb);
     app_text_add(&out, what);
     int32_t length = app_text_length(text);
+    int32_t font = HOST_FONT_TEXT;
+    if (gfx_text_width(font, text, length) > gfx_width() - 2 * TEXT_MARGIN) {
+        font = HOST_FONT_SMALL;
+    }
     int32_t baseline = gfx_height() - (TEXT_LINES - line) * LINE_HEIGHT + LINE_HEIGHT -
                        TEXT_DESCENT;
-    gfx_draw_text((gfx_width() - gfx_text_width(HOST_FONT_TEXT, text, length)) / 2,
-             baseline - gfx_font_ascent(HOST_FONT_TEXT), HOST_FONT_TEXT, text, length);
+    gfx_draw_text((gfx_width() - gfx_text_width(font, text, length)) / 2,
+                  baseline - gfx_font_ascent(font), font, text, length);
 }
 
 void app_on_draw(void)
