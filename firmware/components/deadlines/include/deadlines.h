@@ -26,6 +26,7 @@ typedef enum {
     DEADLINE_POWER_LOOK,      /* check of the USB host for the power profile */
     DEADLINE_MEMORY_LOOK,     /* heap check, see memory.h */
     DEADLINE_WIFI_RETRY,
+    DEADLINE_WIFI_RESCUE,
     DEADLINE_STOP,            /* stop of the device, see host_stop_soon() */
     DEADLINE_DATE,            /* change of the date in the header */
     DEADLINE_PANEL_SLEEP,     /* deep sleep of the panel */

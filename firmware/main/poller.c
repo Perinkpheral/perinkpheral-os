@@ -290,7 +290,8 @@ static bool run_pending_request(int why_not)
         taken.body_length = request->body_length;
         memcpy(taken.body, at, (size_t)request->body_length);
         is_taken = true;
-        is_installed = name_of(request->app, app_name);
+        is_installed = name_of(request->app, app_name) &&
+                       request_queue_is_owned_by(request, request->app, app_name);
         begin_answer_locked((uint32_t)taken.app, false);
         request_queue_drop(&s_queue, slot, true);
     }
@@ -335,7 +336,7 @@ int32_t poller_request(const char *app_name, const app_request_t *asked)
     int32_t result = HOST_ERR_NO_SPACE;
     if (memory_has(MEMORY_FOR_A_PAGE)) {
         lock();
-        if (request_queue_add(&s_queue, app, asked->tag, asked->method, url, asked->headers,
+        if (request_queue_add(&s_queue, app, app_name, asked->tag, asked->method, url, asked->headers,
                               asked->header_count, (const uint8_t *)asked->body, asked->body_length,
                               uptime_ms()) == REQUEST_QUEUE_ADDED) {
             result = HOST_OK;
@@ -370,7 +371,8 @@ static bool fail_request_without_network(void)
             break;
         }
         number = request->number;
-        found = name_of(request->app, app_name);
+        found = name_of(request->app, app_name) &&
+                request_queue_is_owned_by(request, request->app, app_name);
         begin_answer_locked((uint32_t)request->app, false);
         request_queue_drop(&s_queue, slot, false);
     }

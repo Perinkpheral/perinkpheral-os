@@ -38,10 +38,12 @@ const uint8_t *app_code_find(const char *apps_root, const char *app_name, size_t
 
 /* Whether a module of so many bytes would find room, the one the
  * application has now given up for it: in one piece, or after the rest
- * were moved together. */
+ * were moved together. The host loop scans the headers; a refused query
+ * answers false. */
 bool app_code_has_room(const char *app_name, size_t module_bytes);
 
-/* The bytes of the partition no module takes. */
+/* The bytes of the partition no module takes, or 0 when the host loop
+ * cannot take the query. */
 size_t app_code_free_bytes(void);
 
 /* Takes into the partition the modules that lie as files in the

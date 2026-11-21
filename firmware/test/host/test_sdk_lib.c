@@ -249,6 +249,12 @@ static void test_places(void)
     char small[6]; /* two letters of Cyrillic and no half of a third */
     CHECK(app_setting_place("long", small, sizeof small) == 4);
     CHECK_STR(small, "\xD0\x9C\xD0\xBE");
+    CHECK(app_setting("city", small, sizeof small) == 0 && small[0] == '\0');
+    CHECK(app_setting_place("city", small, sizeof small) == 5);
+    CHECK_STR(small, "Saint");
+    char no_letter[2] = { 'x', 'x' };
+    CHECK(app_setting_place("long", no_letter, sizeof no_letter) == 0);
+    CHECK_STR(no_letter, "");
 }
 
 static void test_days(void)

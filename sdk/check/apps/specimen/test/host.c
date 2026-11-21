@@ -15,6 +15,21 @@
 
 #include "../specimen.c"
 #include "standin.h"
+#include "app_alloc.h"
+
+static void test_arena_alignment(void)
+{
+    app_alloc_release(0);
+    int32_t before = app_alloc_left();
+    void *first = app_alloc(1);
+    void *second = app_alloc(9);
+    assert(first != NULL && second != NULL);
+    assert((uintptr_t)first % 8 == 0 && (uintptr_t)second % 8 == 0);
+    assert((uint8_t *)second - (uint8_t *)first == 8);
+    assert(app_alloc_mark() == 24 && app_alloc_left() == before - 24);
+    app_alloc_release(0);
+    assert(app_alloc_left() == before);
+}
 
 static void test_store(void)
 {
@@ -281,6 +296,7 @@ static void test_drawing(void)
 
 int main(void)
 {
+    test_arena_alignment();
     test_store();
     test_session();
     test_time();

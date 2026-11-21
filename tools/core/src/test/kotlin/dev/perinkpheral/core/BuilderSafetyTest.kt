@@ -167,6 +167,7 @@ object BuilderSafetyTest {
                 }
                 for (number in 1..6) File(data, "data$number").writeText("small")
                 realBuilder.build(packageSource, built)
+                check(AppBuilder.packageFiles(built).size == 8)
                 File(data, "data7").writeText("small")
                 refusedPackage("at most 8 files")
                 File(data, "data7").delete()

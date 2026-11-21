@@ -25,9 +25,9 @@ Holds:
   memory. A handler that does not return in 3 seconds is stopped.
 - Its store is its own (`a.<name>`; a name has no dot), its files are its own folder, and
   a file's name cannot leave it. It cannot reach another application's secrets.
-- It has no sockets. A request goes through Perinkpheral OS, to a host its manifest names, and a
-  redirect outside that list is refused. Polls use their manifest URLs;
-  code requests use `hosts`. Cross-host redirects drop application headers. `user@host`, a port and the case of letters do not get
+- It has no sockets. Polls start at their manifest URLs; requests made with `http_send`
+  and their redirects are confined to `hosts`. Polls follow redirects even to other hosts;
+  application headers are dropped on a redirect to another host. `user@host`, a port and the case of letters do not get
   round the comparison.
 - It cannot move the server the user gave it: `kv_set` on a `url` or `link` setting is refused. Queued destinations are
   authorized again before sending; headers use the same current settings view.
@@ -66,7 +66,9 @@ A guest on the Wi-Fi, a compromised thing in the house, a page in the user's bro
 Holds:
 - What cannot be taken back is asked about on the device's own screen: a firmware update,
   a factory reset, a change of the Wi-Fi network, installing an application with system
-  access.
+  access. In development builds, injected button events can answer main-firmware
+  questions remotely; this boundary requires a release build. Recovery always requires
+  physical OK and has no development input route.
 - A page of another site cannot use the user's browser against the device, for reading or
   for changing: `Origin` and `Host` are checked, which covers a name rebound to the
   device's address too.
@@ -90,12 +92,14 @@ Does not hold:
 - **The page is plain `http`.** A token typed into it crosses the network in the clear.
 - In a build with the development tools (`APP_DEV_CONSOLE`, on by default): `/api/dev/flash`
   refuses direct updates (recovery requires physical OK), `/api/dev/kv` writes any key of any
-  application, `/api/dev/screen` gives the screen. Such a build is for a bench; releases omit it.
+  application, `/api/dev/screen` gives the screen, and `/api/dev/button` can answer
+  main-firmware confirmation questions. Such a build is for a bench; releases omit it.
 
 ### Somebody near the device with a radio, not on the network
 
-- While the device has no network, and after two minutes of failing to join one, it puts
-  up an **open** access point. Whoever is in range is then "somebody on the same network",
+- With no saved network and Wi-Fi enabled, or after two minutes of failing to join a
+  saved network, it puts up an **open** access point. Deliberately disabled Wi-Fi starts
+  no access point. Whoever is in range is then "somebody on the same network",
   with everything above. Jamming the home Wi-Fi for two minutes is enough to bring it up.
   From there, as from any network, what cannot be undone - another network, a firmware,
   a reset - is asked about on the screen; the rest is not.

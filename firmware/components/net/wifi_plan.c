@@ -51,6 +51,7 @@ static wifi_plan_actions_t on_disconnected(wifi_plan_t *plan, int64_t now_ms)
         /* It worked a moment ago: try again at once. */
         begin_trying(plan, now_ms);
         actions.connect = true;
+        actions.rescue_in_ms = RESCUE_AFTER_MS;
         return actions;
     }
     plan->failed_attempts++;
@@ -81,6 +82,7 @@ wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, i
     case WIFI_EVENT_STARTED:
         begin_trying(plan, now_ms);
         actions.connect = true;
+        actions.rescue_in_ms = RESCUE_AFTER_MS;
         break;
     case WIFI_EVENT_CONNECTED:
         actions.stop_access_point = wifi_phase_has_access_point(plan->phase);
@@ -89,6 +91,13 @@ wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, i
         break;
     case WIFI_EVENT_DISCONNECTED:
         actions = on_disconnected(plan, now_ms);
+        break;
+    case WIFI_EVENT_RESCUE_DUE:
+        if (plan->phase == WIFI_PHASE_CONNECTING &&
+            now_ms - plan->trying_since_ms >= RESCUE_AFTER_MS) {
+            plan->phase = WIFI_PHASE_RESCUE;
+            actions.start_access_point = true;
+        }
         break;
     case WIFI_EVENT_RETRY_DUE:
         /* A pause that ran out after the network came back means nothing. */

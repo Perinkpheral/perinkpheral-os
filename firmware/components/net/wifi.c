@@ -6,6 +6,7 @@
 #include "board.h"
 #include "wifi.h"
 #include "wifi_credentials.h"
+#include "wifi_events.h"
 
 #include <string.h>
 #include <stdatomic.h>
@@ -16,7 +17,6 @@
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -32,7 +32,6 @@ static const char *TAG = "wifi";
 #define PASSWORD_MAX            64
 #define ACCESS_POINT_CHANNEL    1
 #define ACCESS_POINT_CLIENTS    4
-#define EVENT_QUEUE_LENGTH      8
 #define TASK_STACK_BYTES        STACK_WIFI_PLAN
 #define SCAN_WAIT_MS            8000
 #define SCAN_CHANNEL_MS         120
@@ -46,7 +45,8 @@ static struct {
     void (*on_change)(void);
 
     wifi_plan_t        plan; /* the Wi-Fi task's alone */
-    QueueHandle_t      events;
+    TaskHandle_t       task;
+    atomic_uint        pending_events;
     bool               access_point_up;
     bool               radio_off; /* the Wi-Fi task's alone */
     bool               is_starting_again; /* the Wi-Fi task's alone: wanted on, would not start */
@@ -70,28 +70,17 @@ static struct {
     bool              was_reached;
 } s_wifi;
 
-/* Asked of the Wi-Fi task through its queue, beside the plan's events. */
-#define RADIO_OFF_ASKED ((wifi_plan_event_t)100)
-#define RADIO_ON_ASKED  ((wifi_plan_event_t)101)
-
 static int64_t now_ms(void)
 {
     return esp_timer_get_time() / US_PER_MS;
 }
 
-/* From an event handler or a timer: hands the event to the Wi-Fi task. */
-static bool post(wifi_plan_event_t event)
+/* State stays pending while a scan holds the driver lock. */
+static void post(wifi_plan_event_t event)
 {
-    if (xQueueSend(s_wifi.events, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "event %d dropped: the queue is full", (int)event);
-        return false;
-    }
-    return true;
+    wifi_events_post(&s_wifi.pending_events, event);
+    xTaskNotifyGive(s_wifi.task);
 }
-
-/* A retry that could not be told is not lost: it is asked again a moment
- * later, or the plan of connecting would wait for nothing. */
-#define RETRY_TOLD_AGAIN_MS 200
 
 /* A radio that would not start - out of memory, say - is tried again this
  * long after, while it is wanted. */
@@ -197,11 +186,15 @@ static void on_scan_done(void *arg, esp_event_base_t base, int32_t id, void *dat
 
 void wifi_retry_is_due(void)
 {
-    if (s_wifi.events == NULL) {
-        return; /* Wi-Fi is off */
+    if (s_wifi.task != NULL) {
+        post(WIFI_EVENT_RETRY_DUE);
     }
-    if (!post(WIFI_EVENT_RETRY_DUE)) {
-        deadlines_set_in(DEADLINE_WIFI_RETRY, 0, 0, RETRY_TOLD_AGAIN_MS);
+}
+
+void wifi_rescue_is_due(void)
+{
+    if (s_wifi.task != NULL) {
+        post(WIFI_EVENT_RESCUE_DUE);
     }
 }
 
@@ -290,6 +283,9 @@ static void carry_out(const wifi_plan_actions_t *actions)
     if (actions->connect) {
         connect();
     }
+    if (actions->rescue_in_ms > 0) {
+        deadlines_set_in(DEADLINE_WIFI_RESCUE, 0, 0, actions->rescue_in_ms);
+    }
     if (actions->retry_in_ms > 0) {
         deadlines_set_in(DEADLINE_WIFI_RETRY, 0, 0, actions->retry_in_ms);
     }
@@ -353,6 +349,7 @@ static void handle_event(wifi_plan_event_t event)
             atomic_store(&s_wifi.radio_stopped, true);
             s_wifi.connecting = false;
             deadlines_cancel(DEADLINE_WIFI_RETRY, 0, 0);
+            deadlines_cancel(DEADLINE_WIFI_RESCUE, 0, 0);
             esp_wifi_stop();
         }
         publish_phase(false);
@@ -375,6 +372,9 @@ static void handle_event(wifi_plan_event_t event)
     if (event == WIFI_EVENT_CONNECTED || event == WIFI_EVENT_DISCONNECTED) {
         s_wifi.connecting = false;
     }
+    if (event == WIFI_EVENT_CONNECTED) {
+        deadlines_cancel(DEADLINE_WIFI_RESCUE, 0, 0);
+    }
     bool failed = event == WIFI_EVENT_DISCONNECTED;
     wifi_plan_actions_t actions = wifi_plan_step(&s_wifi.plan, event, now_ms());
     carry_out(&actions);
@@ -387,9 +387,11 @@ static void wifi_task(void *arg)
     for (;;) {
         /* The first event is the radio saying it has started. */
         wifi_plan_event_t event;
-        xQueueReceive(s_wifi.events, &event, portMAX_DELAY);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         xSemaphoreTake(s_wifi.driver_lock, portMAX_DELAY);
-        handle_event(event);
+        while (wifi_events_take(&s_wifi.pending_events, &event)) {
+            handle_event(event);
+        }
         xSemaphoreGive(s_wifi.driver_lock);
     }
 }
@@ -432,15 +434,14 @@ void wifi_start(const wifi_config_in_t *config)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     if (!wifi_phase_has_radio(s_wifi.plan.phase)) {
-        /* No queue and no driver lock: what is asked of the radio from
+        /* No task and no driver lock: what is asked of the radio from
          * here on finds neither and does nothing. */
         ESP_LOGI(TAG, "Wi-Fi is off");
         return;
     }
     s_wifi.driver_lock = xSemaphoreCreateMutex();
     s_wifi.scan_events = xEventGroupCreate();
-    s_wifi.events = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(wifi_plan_event_t));
-    configASSERT(s_wifi.events != NULL && s_wifi.driver_lock != NULL &&
+    configASSERT(s_wifi.driver_lock != NULL &&
                  s_wifi.scan_events != NULL);
 
     advertise_portal(esp_netif_create_default_wifi_ap());
@@ -471,7 +472,7 @@ void wifi_start(const wifi_config_in_t *config)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     /* The task first, so that it is there to take the start event. */
-    BaseType_t ok = xTaskCreate(wifi_task, "wifi", TASK_STACK_BYTES, NULL, PRIORITY_SERVER, NULL);
+    BaseType_t ok = xTaskCreate(wifi_task, "wifi", TASK_STACK_BYTES, NULL, PRIORITY_SERVER, &s_wifi.task);
     configASSERT(ok == pdPASS);
     ESP_ERROR_CHECK(esp_wifi_start());
 }
@@ -504,7 +505,7 @@ bool wifi_signal(int *rssi)
 
 void wifi_set_radio(bool on)
 {
-    if (s_wifi.events != NULL) {
+    if (s_wifi.task != NULL) {
         post(on ? RADIO_ON_ASKED : RADIO_OFF_ASKED);
     }
 }

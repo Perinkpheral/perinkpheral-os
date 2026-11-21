@@ -86,6 +86,7 @@ async function loadSettings() {
   if (![...idle.options].some(option => Number(option.value) === settings.menu_idle_min))
     idle.append(make("option", { value: settings.menu_idle_min, textContent: t("{0} min", settings.menu_idle_min) }));
   idle.value = settings.menu_idle_min;
+  byId("password").value = "";
   byId("ssid").value = settings.wifi_ssid;
   showWifiNetworks([], settings.wifi_ssid);
   byId("hostname").value = settings.hostname ? settings.hostname + ".local" : "";
@@ -127,6 +128,7 @@ saveSettings("general", () => ({ device_name: byId("device_name").value,
                                  power_saving: Number(byId("power_saving").value) }));
 /* The time pane is saved whole: the zone, the time server, whether the network's time is taken,
  * and - when it is not - the date and time typed, which the device takes only then. */
+let clockEdited = false;
 const isNetworkTime = () => byId("time_auto").getAttribute("aria-pressed") === "true";
 byId("time-zone").addEventListener("submit", async event => {
   event.preventDefault();
@@ -134,9 +136,10 @@ byId("time-zone").addEventListener("submit", async event => {
   const isSaved = await busy(event.submitter, async () => {
     await ask("/api/settings", post({ ...chosenZone(), ntp_server: byId("ntp_server").value,
                                       time_auto: isNetworkTime() }));
-    if (!isNetworkTime() && !isNaN(moment)) await ask("/api/clock", post({ unix: Math.round(moment / 1000) }));
+    if (!isNetworkTime() && clockEdited && !isNaN(moment)) await ask("/api/clock", post({ unix: Math.round(moment / 1000) }));
   });
   if (isSaved) {
+    clockEdited = false;
     await loadSettings();
     loadStatus();
   }
@@ -221,8 +224,12 @@ function drawClock() {
 
 byId("time_auto").addEventListener("click", () => {
   byId("time_auto").setAttribute("aria-pressed", String(!isNetworkTime()));
+  byId("clock-value").value = localNow();
+  clockEdited = !isNetworkTime();
   drawClock();
 });
+
+byId("clock-value").addEventListener("input", () => { clockEdited = true; });
 
 /* ---- the network: where the device is, and another to join ---- */
 

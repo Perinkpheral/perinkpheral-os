@@ -13,7 +13,7 @@ void request_queue_init(request_queue_t *queue)
     queue->last_served = REQUEST_QUEUE_NO_APP;
 }
 
-request_queue_result_t request_queue_add(request_queue_t *queue, int app, int number, int method,
+request_queue_result_t request_queue_add(request_queue_t *queue, int app, const char *app_name, int number, int method,
                                          const char *url, const app_header_t *headers,
                                          int header_count, const uint8_t *body, int body_length,
                                          int64_t now_ms)
@@ -39,6 +39,7 @@ request_queue_result_t request_queue_add(request_queue_t *queue, int app, int nu
         return REQUEST_QUEUE_NO_MEMORY;
     }
     request->app = app;
+    strcpy(request->app_name, app_name);
     request->number = number;
     request->order = queue->next_order++;
     request->queued_ms = now_ms;
@@ -58,6 +59,11 @@ request_queue_result_t request_queue_add(request_queue_t *queue, int app, int nu
     queue->slots[free_slot] = request;
     queue->bytes += bytes;
     return REQUEST_QUEUE_ADDED;
+}
+
+bool request_queue_is_owned_by(const queued_request_t *request, int app, const char *app_name)
+{
+    return request->app == app && strcmp(request->app_name, app_name) == 0;
 }
 
 int request_queue_next(const request_queue_t *queue)

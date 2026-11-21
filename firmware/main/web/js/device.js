@@ -119,11 +119,12 @@ function drawStatus() {
 /* ---- the screen and the buttons: the development tools, when the firmware has them ---- */
 
 const LONG_PRESS_MS = 600, SCREEN_EVERY_MS = 1000;
-let frame = null, screenTimer = 0;
+let frame = null, screenTimer = 0, screenRead = 0;
 
 /* The screen, while its section is in sight, a frame a second: a firmware with the development
  * tools only, as its status says. */
 async function lookAtScreen() {
+  const read = ++screenRead;
   clearTimeout(screenTimer);
   if (!status.dev_tools || currentSection() !== "control" || document.hidden) return;
   try {
@@ -131,14 +132,16 @@ async function lookAtScreen() {
     if (answer.ok) {
       const number = answer.headers.get("X-Frame");
       if (number !== frame) {
-        frame = number;
+        const image = await answer.blob();
+        if (read !== screenRead) return;
         const old = byId("screen-image").src;
-        byId("screen-image").src = URL.createObjectURL(await answer.blob());
+        byId("screen-image").src = URL.createObjectURL(image);
+        frame = number;
         if (old) URL.revokeObjectURL(old);
       }
     }
   } catch (error) { /* the device is away for a moment: looked at again */ }
-  screenTimer = setTimeout(lookAtScreen, SCREEN_EVERY_MS);
+  if (read === screenRead) screenTimer = setTimeout(lookAtScreen, SCREEN_EVERY_MS);
 }
 
 async function press(key, isLong) {

@@ -18,7 +18,7 @@ extern "C" {
  * Pure, host-tested. */
 
 /* As many as can be set at once: see main/deadline_budget.c. */
-#define DEADLINES_MAX 232
+#define DEADLINES_MAX 233
 #define DEADLINE_NONE INT64_MAX
 
 /* Deadline identity: kind, owner within the kind (application id; 0 for

@@ -199,6 +199,10 @@ object PreinstalledTest {
             limits.spareBytes, limits.writerMax, limits.fileNameMax)
         refused("the image needs 37 blocks of the file system's 28") { build(listOf("writer", "app1", "app2"), smallFiles) }
         check(build(listOf("app1", "app2"), smallFiles).size == 2)
+        // Aggregate capacity is checked even when one writer exceeds its installer quota.
+        repository.add("large-writer", writesFiles = true, data = mapOf("data" to ByteArray(40 * 1024)))
+        check(build(listOf("large-writer")).size == 1)
+        refused("the image needs") { build(listOf("large-writer"), smallFiles) }
     }
 
     private fun checkoutAtTheCommit() {

@@ -1152,6 +1152,10 @@ const char *app_manifest_result_text(app_manifest_result_t result)
 int app_manifest_setting_default(const char *json, const char *key, char *value, size_t value_size)
 {
     json_t *root = json_parse(json);
+    if (!json_is_object(root)) {
+        json_free(root);
+        return -3;
+    }
     int     length = -1;
     const json_t *setting;
     json_for_each(setting, json_get(root, "settings"))
@@ -1198,6 +1202,10 @@ int app_manifest_setting_default(const char *json, const char *key, char *value,
 int app_manifest_setting_type(const char *json, const char *key)
 {
     json_t *root = json_parse(json);
+    if (!json_is_object(root)) {
+        json_free(root);
+        return -2;
+    }
     int    found = -1;
     const json_t *setting;
     json_for_each(setting, json_get(root, "settings"))
@@ -1216,6 +1224,10 @@ int app_manifest_setting_type(const char *json, const char *key)
 int app_manifest_secret_keys(const char *json, char keys[][APP_SETTING_KEY_MAX + 1], int capacity)
 {
     json_t *root = json_parse(json);
+    if (!json_is_object(root)) {
+        json_free(root);
+        return -1;
+    }
     int    count = 0;
     const json_t *setting;
     json_for_each(setting, json_get(root, "settings"))
@@ -1226,4 +1238,15 @@ int app_manifest_secret_keys(const char *json, char keys[][APP_SETTING_KEY_MAX +
     }
     json_free(root);
     return count;
+}
+
+bool app_manifest_id_conflicts(const app_manifest_t *apps, int count,
+                               const char *name, uint32_t id)
+{
+    for (int i = 0; i < count; i++) {
+        if (apps[i].id == id && strcmp(apps[i].name, name) != 0) {
+            return true;
+        }
+    }
+    return false;
 }

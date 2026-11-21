@@ -98,9 +98,10 @@ observer tests, plus catalog publishing against local Git repositories. They use
 temporary files and simulated endpoints, not a device or live GitHub writes.
 
 Applications against the contract, on this computer: `tools/perinkpheral app-check <folder>`
-runs the capability checks (sessions, store, timers, network, drawing) on every application of
-the folder and each application's own tests (`<application>/test/*.c`), compiled with the
-sanitizers against the stand-in host of `sdk/check`. It needs a C compiler and wasi-sdk.
+builds every application of the folder, then runs the capability checks (sessions, store,
+timers, network, drawing) and each application's own tests (`<application>/test/*.c`) on
+non-system applications, compiled with the sanitizers against the stand-in host of `sdk/check`. Applications with `"system": true` skip
+both capability checks and their own tests. It needs a C compiler and wasi-sdk.
 `--only <capability>` and `--app <name>` narrow it. The checks know no application: what one
 needs to be checked - a time, a store, answers to its requests - is its `test/check.json`.
 A call added to the contract is given its stand-in in `sdk/check/standin.c`, or an
@@ -197,7 +198,9 @@ Firmware without the cable, once the device is on a network:
 `curl -X POST http://<address>/api/ota/recovery`, wait for recovery, then
 `curl --data-binary @firmware/build/perinkpheral.bin http://<address>/api/ota`, and OK on the device's own screen within a
 minute (unanswered, the upload is refused). The device restarts into the new image and
-keeps it only if it comes back reachable; `GET /api/status` says
+keeps it once its web server is up and it is connected, or, with no saved network and Wi-Fi
+enabled, its setup AP is up with 20 seconds of uptime. With deliberately disabled Wi-Fi, the web server and 20 seconds suffice without
+network reachability; the next update requires recovery, entered with BACK at reset; `GET /api/status` says
 whether it is still on probation. The address is on the second page of About.
 For manual recovery without a planned upload, use **Device > Enter recovery** on
 the page or `POST /api/ota/recovery?manual=true`. This skips preparation. BACK,

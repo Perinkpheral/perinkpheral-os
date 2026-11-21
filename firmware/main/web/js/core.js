@@ -205,16 +205,24 @@ const CONFIRM_ON_DEVICE = "Confirm on the device.";
 
 /* A question before something that cannot be taken back. */
 /* `notes`, when given, stand under the question as they were written: what a release brings. */
+let confirmationQueue = Promise.resolve();
+
 function confirmed(text, action, notes) {
-  show("confirm-text", text);
-  show("confirm-yes", action);
-  show("confirm-notes", notes || "");
-  byId("confirm-notes").hidden = !notes;
-  const dialog = byId("confirm-dialog");
-  dialog.returnValue = "no";
-  dialog.showModal();
-  return new Promise(resolve => dialog.addEventListener(
-    "close", () => resolve(dialog.returnValue === "yes"), { once: true }));
+  /* Each answer belongs to the question that was visible when the dialog closed. */
+  const answer = confirmationQueue.then(() => {
+    show("confirm-text", text);
+    show("confirm-yes", action);
+    show("confirm-notes", notes || "");
+    byId("confirm-notes").hidden = !notes;
+    const dialog = byId("confirm-dialog");
+    dialog.returnValue = "no";
+    return new Promise(resolve => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "yes"), { once: true });
+      dialog.showModal();
+    });
+  });
+  confirmationQueue = answer.catch(() => {});
+  return answer;
 }
 
 /* After a restart the device is gone for a moment; then the page reads everything anew. A device

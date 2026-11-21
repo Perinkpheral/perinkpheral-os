@@ -22,7 +22,7 @@ static void fresh(void)
 
 static bool add(int app, int number, int64_t now_ms)
 {
-    return request_queue_add(&queue, app, number, HOST_HTTP_GET, "https://example.org/x", NULL, 0,
+    return request_queue_add(&queue, app, "owner", number, HOST_HTTP_GET, "https://example.org/x", NULL, 0,
                              NULL, 0, now_ms) == REQUEST_QUEUE_ADDED;
 }
 
@@ -72,7 +72,7 @@ static void test_limits(void)
     int added = 0;
     for (int app = 1; app <= REQUEST_QUEUE_APPS; app++) {
         for (int i = 0; i < HOST_HTTP_PENDING_MAX; i++) {
-            added += request_queue_add(&queue, app, i, HOST_HTTP_POST, "https://e.org", NULL, 0, body,
+            added += request_queue_add(&queue, app, "owner", i, HOST_HTTP_POST, "https://e.org", NULL, 0, body,
                                        (int)sizeof body, 0) == REQUEST_QUEUE_ADDED;
         }
     }
@@ -87,11 +87,14 @@ static void test_what_it_carries(void)
     fresh();
     app_header_t headers[2] = { { "Accept", "application/json" }, { "X-Token", "abc" } };
     static const uint8_t BODY[] = { 'h', 'i', 0, '!' };
-    CHECK(request_queue_add(&queue, A, 7, HOST_HTTP_POST, "https://example.org/api", headers, 2, BODY,
+    CHECK(request_queue_add(&queue, A, "owner", 7, HOST_HTTP_POST, "https://example.org/api", headers, 2, BODY,
                             (int)sizeof BODY, 5) == REQUEST_QUEUE_ADDED);
     const queued_request_t *request = request_queue_at(&queue, request_queue_next(&queue));
     CHECK(request->app == A && request->number == 7 && request->method == HOST_HTTP_POST &&
           request->queued_ms == 5 && request->header_count == 2 && request->body_length == 4);
+    CHECK(request_queue_is_owned_by(request, A, "owner"));
+    CHECK(!request_queue_is_owned_by(request, A, "collision"));
+    CHECK(!request_queue_is_owned_by(request, B, "owner"));
     const char *at = request_queue_url(request);
     CHECK(strcmp(at, "https://example.org/api") == 0);
     at = request_queue_after(at);

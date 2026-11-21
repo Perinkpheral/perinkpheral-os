@@ -392,7 +392,11 @@ static void test_health(void)
     CHECK(ota_health(&off) == OTA_HEALTH_WAIT);
     off.uptime_s = OTA_HEALTH_SETUP_SETTLE_S;
     CHECK(ota_health(&off) == OTA_HEALTH_CONFIRM);
+    off.web_server_up = false;
+    CHECK(ota_health(&off) == OTA_HEALTH_WAIT);
     off.uptime_s = OTA_HEALTH_DEADLINE_S;
+    CHECK(ota_health(&off) == OTA_HEALTH_ROLL_BACK);
+    off.web_server_up = true;
     CHECK(ota_health(&off) == OTA_HEALTH_CONFIRM);
 }
 

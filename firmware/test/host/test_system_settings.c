@@ -108,6 +108,12 @@ static void test_sections(void)
         CHECK(HERE.page == PAGE_APPEARANCE);
     }
     CHECK(row_count(PAGE_GENERAL) == 3);
+    CHECK(row_count(PAGE_ROOT) == 7);
+    char label[TEXT_MAX + 1], value[TEXT_MAX + 1];
+    describe_row(PAGE_ROOT, 2, label, value);
+    CHECK_STR(label, "Appearance");
+    describe_row(PAGE_ROOT, 3, label, value);
+    CHECK_STR(label, "Display");
     CHECK(row_count(PAGE_DISPLAY) == 4);
     for (int32_t row = 0; row < row_count(PAGE_DISPLAY); row++) {
         activate(PAGE_DISPLAY, row);

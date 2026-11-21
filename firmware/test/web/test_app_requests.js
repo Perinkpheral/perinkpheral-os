@@ -75,6 +75,7 @@ async function testVersionOrdering() {
     ["0.1.3", "0.1.2", false], ["0.1.3", "0.1.3", false], ["0.1.3", "0.1.4", true],
     ["0.1.9", "0.1.10", true], ["0.1.10", "0.1.9", false],
     ["0.2.0", "0.1.999", false], ["0.999.999", "1.0.0", true],
+    ["2.0.0", "1.9.9", false], ["1.9.9", "2.0.0", true],
     ["999.999.999", "0.0.0", false], ["0.0.0", "0.0.1", true],
     // No new ordering is imposed on labels outside the existing stable-version contract.
     ["0.1.3-beta", "0.1.3", true], ["0.1.3", "0.1.3-beta", true],
@@ -120,7 +121,7 @@ async function testCachedCatalogOffers() {
   };
   const context = vm.createContext({
     installed: [{ name: "air", title: "Air quality", version: "0.1.3", settings: [] }],
-    offered: [], removed: [], settings: {}, pageLanguage: "en", catalogsRead: true,
+    offered: [], removed: [], settings: {}, pageLanguage: "en", catalogsRead: true, stateOf: () => "ready",
     CATALOG_INSTALLED_MAX: 24, GEAR: [], INFO: [], byId, make,
     isIcon: () => false, picture: () => ({}), iconButton: () => ({}),
     compatibilityProblem: () => "", offerSays: (offer, field) => offer.app[field] || "",
@@ -261,6 +262,7 @@ async function testAuthors() {
     TextEncoder, MANIFEST_AUTHOR_MAX: 63, CATALOG_INSTALLED_MAX: 24,
     sources: ["official", "personal"], offered: [], installed: [], removed: [], pageLanguage: "en",
     loadSources: async () => {}, loadGlyphs() {}, drawTiles() {}, loadState: {}, catalogsRead: false, loadRemoved() {},
+    cancelQueuedInstalls() {}, stateOf: () => "ready",
     askForApp: async url => catalogs[Number(url.split("=")[1])],
     t: (text, value) => text.replace("{0}", value),
     toast: text => messages.push(text),
@@ -290,12 +292,14 @@ async function testAuthors() {
   assert(rendered.some(node => node.tag === "small" && node.textContent === "Иван" && node.translate === false));
   catalogs[1].apps[0].author = "PERINKPHERAL";
   await context.loadCatalogs();
-  assert.equal(context.offered.length, 1);
+  assert.equal(context.offered.length, 1, "a failed source retains only earlier sources");
   assert.equal(context.offered[0].app.name, "official");
+  assert.equal(context.catalogsRead, true, "an invalid later source leaves earlier offers usable");
   assert.deepEqual(messages, ["Source unavailable: personal"]);
   delete catalogs[1].apps[0].author;
   await context.loadCatalogs();
   assert.equal(context.offered.length, 2); // Old catalogs remain installable.
+  assert.equal(context.catalogsRead, true);
 }
 
 (async () => {
@@ -355,6 +359,11 @@ async function testAuthors() {
   result = await run([interrupted]);
   assert.equal(result.requests.length, 4);
   assert.equal(result.messages.at(-1).text, "ISS: Download failed.");
+  assert.deepEqual(result.delays, [2000, 4000, 8000]);
+  result = await run([interrupted], "update-all");
+  assert.equal(result.requests.length, 8);
+  assert.equal(result.messages.at(-1).text, "Clock: Download failed.");
+  assert.deepEqual(result.delays, [2000, 4000, 8000, 2000, 4000, 8000]);
   result = await run([memory], "update-all");
   assert.equal(result.requests.length, 8);
   assert(result.requests.slice(0, 4).every(request => request.url.endsWith("app=iss")));
@@ -362,6 +371,8 @@ async function testAuthors() {
   await require("./test_app_install_queue.js")();
   await require("./test_app_settings_dialog.js")();
   await require("./test_settings_languages.js")();
+  await require("./test_settings_drafts.js")();
+  await require("./test_control_screen.js")();
   await require("./test_load_states.js")();
   console.log("App requests: retry, exhaustion, update all and refusal checks passed.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

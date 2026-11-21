@@ -19,3 +19,9 @@ interpreter's `calloc`, `free` and `realloc` are those of `m3_area.c`,
 which uses a preallocated application arena. Unloading the application resets
 the arena. Perinkpheral OS storage and network services have separate allocations;
 this isolation applies to interpreter memory. The lines are marked `perinkpheral`.
+
+`m3_budget_compile.c` compiles the unchanged upstream compiler with a dispatch
+macro that forces a deadline check after `memory.fill`, `memory.copy` and `memory.init`. Bulk
+operations can otherwise run without a call or backward branch for an entire
+handler. Ordinary calls and loop turns sample the clock once per 1024 yields;
+host calls also force a check, and overdue returns are rejected. Firmware, host tests and the simulator use this wrapper.

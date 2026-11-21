@@ -41,6 +41,7 @@
 #include "wifi.h"
 #include "wm.h"
 #include "back_switch.h"
+#include "question_press.h"
 #include "words.h"
 #include "units.h"
 
@@ -124,67 +125,13 @@ static void before_switch(void *context)
     host_end_background_answer();
 }
 
-/* The scene whose picture the panel shows: what a person pressing a
- * button is looking at. Not the scene that has the screen while its first
- * frame is still being put on the panel. */
-static const scene_t *volatile s_scene_on_panel;
+static question_press_t s_question_press;
 
 const scene_t *host_scene_on_panel(void)
 {
-    return s_scene_on_panel;
+    return s_question_press.shown_scene;
 }
-#define BUTTON_OK_INDEX   1
 #define BUTTON_BACK_INDEX 3
-
-/* The buttons that went down while a scene that asks once was on the
- * panel: only their presses are that scene's to take. */
-static uint8_t s_went_down_on_question;
-/* What each of them went down on: the scene and its question. */
-static struct {
-    const scene_t *scene;
-    uint32_t       question;
-} s_went_down_for[4];
-/* When the scene on the panel got there: the end of the refresh that put
- * its first picture on it. A press made before this was made for another
- * picture, though it is taken off the queue only now. */
-static int64_t s_scene_shown_at_ms;
-/* The question of an application's picture on the panel (scene_t.question); 0 for none. */
-static uint32_t s_question_on_panel;
-
-/* Whether the press is one the scene on the screen may have: every press,
- * unless one press there does what cannot be taken back - then only a
- * press that began with the question in front of whoever made it. The
- * panel takes seconds to show a question, and a press made for the
- * picture before it must not answer it. */
-static bool is_press_for(const scene_t *scene, uint8_t index, event_press_t press, int64_t at_ms)
-{
-    /* A question an application asks: OK alone is held to it, the rest is the application's. */
-    bool is_held = scene->asks_once || (scene->question != 0 && index == BUTTON_OK_INDEX);
-    if (!is_held) {
-        s_went_down_on_question = 0;
-        return true;
-    }
-    uint8_t button = (uint8_t)(1u << index);
-    if (press == EVENT_PRESS_DOWN) {
-        if (s_scene_on_panel == scene && s_question_on_panel == scene->question &&
-            at_ms >= s_scene_shown_at_ms) {
-            s_went_down_on_question |= button;
-            s_went_down_for[index].scene = scene;
-            s_went_down_for[index].question = scene->question;
-        } else {
-            s_went_down_on_question &= (uint8_t)~button;
-        }
-        return false; /* a question has no use for the way down itself */
-    }
-    /* Down on this very question: another one opened while the button was held is not answered. */
-    bool began_here = (s_went_down_on_question & button) != 0 && s_went_down_for[index].scene == scene &&
-                      s_went_down_for[index].question == scene->question;
-    if (press == EVENT_PRESS_SHORT || press == EVENT_PRESS_LONG) {
-        s_went_down_on_question &= (uint8_t)~button;
-    }
-    return began_here;
-}
-
 
 /* The buttons in the order they sit on the device. */
 static const scene_button_t BUTTON_ROLE[] = {
@@ -243,7 +190,8 @@ static void on_button(wm_t *wm, uint8_t index, event_press_t press, int64_t at_m
     }
     /* The long press on BACK is the user's own way out of anything. */
     bool is_home_press = index == BUTTON_BACK_INDEX && press == EVENT_PRESS_LONG;
-    if (!is_home_press && !is_press_for(wm->current, index, press, at_ms)) {
+    if (!is_home_press && !question_press_accepts(&s_question_press, wm->current, BUTTON_ROLE[index],
+                                                 SCENE_PRESS_OF[press], at_ms)) {
         return;
     }
     host_notices_note_going_home(is_home_press);
@@ -314,11 +262,7 @@ static uint32_t show_pending_frame(wm_t *wm, gfx_t *screen)
     case DISPLAY_UNCHANGED:
         break;
     }
-    if (s_scene_on_panel != wm->current || s_question_on_panel != wm->current->question) {
-        s_scene_shown_at_ms = esp_timer_get_time() / US_PER_MS;
-    }
-    s_scene_on_panel = wm->current;
-    s_question_on_panel = wm->current->question;
+    question_press_shown(&s_question_press, wm->current, esp_timer_get_time() / US_PER_MS);
     wm_shown(wm);
     return NOTHING_TO_SHOW;
 }
@@ -532,6 +476,9 @@ static void answer_deadlines(void)
             if (power_look()) {
                 poller_reschedule(); /* the polls are another distance apart */
             }
+            break;
+        case DEADLINE_WIFI_RESCUE:
+            wifi_rescue_is_due();
             break;
         case DEADLINE_WIFI_RETRY:
             wifi_retry_is_due();

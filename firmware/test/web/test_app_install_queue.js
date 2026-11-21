@@ -124,6 +124,24 @@ async function testQueue() {
   test.requests[0].reply(); await permitted;
 
   test = harness();
+  test.offers[0].app.trusts = ["Example authority"];
+  const approved = test.start(0);
+  await flush();
+  assert.equal(JSON.parse(test.requests[0].options.body).approved_authorities, 1);
+  test.requests[0].reply(); assert.equal(await approved, true);
+
+  test = harness();
+  test.offers[0].app.trusts = ["Example authority"];
+  test.refusePermission();
+  assert.equal(await test.start(0), false);
+  assert.equal(test.requests.length, 0, "refused authority consent sends no install");
+
+  test = harness();
+  const noAuthorities = test.start(0);
+  assert.equal(JSON.parse(test.requests[0].options.body).approved_authorities, 0);
+  test.requests[0].reply(); await noAuthorities;
+
+  test = harness();
   const inFlight = test.start(0), abandoned = test.start(1);
   const leaving = { preventDefault() { this.prevented = true; } };
   test.events.beforeunload(leaving);
@@ -183,7 +201,110 @@ async function testQueue() {
   const idleSave = test.saveSources(); await flush();
   assert(!test.messages.some(message => message.text === "Waiting for app installation."), "idle saves do not claim to wait");
   test.requests[0].reply(); await idleSave;
+  await testCatalogPrecedence();
+  await testConfirmationQueue();
   console.log("App install queue: sequential individual/bulk, dedupe, errors, permission cancellation and BFCache passed.");
+}
+
+async function testCatalogPrecedence() {
+  for (const previouslyRead of [false, true]) {
+    for (const failedSource of [0, 1]) {
+      const test = harness(), reads = [];
+      const requestApp = test.context.askForApp;
+      const active = previouslyRead ? test.start(0) : null;
+      const queued = previouslyRead ? test.start(1) : null;
+      Object.assign(test.context, {
+        catalogsRead: previouslyRead, TextEncoder, MANIFEST_AUTHOR_MAX: 63,
+        sources: ["https://official.test", "https://added.test", "https://last.test"],
+        loadSources: async () => {}, loadRemoved() {},
+        askForApp: async url => {
+          const source = Number(url.split("=")[1]);
+          reads.push(source);
+          if (source === failedSource) throw new Error("Failed to fetch");
+          return { apps: test.offers.map(offer => ({ ...offer.app, version: "9.0.0" })) };
+        },
+      });
+      vm.runInContext(apps.slice(apps.indexOf("function catalogAuthorIsAllowed("), apps.indexOf("let offeredSources")) +
+        apps.slice(apps.indexOf("/* One reading at a time"), apps.indexOf("/* ---- sources ---- */")), test.context);
+      const previous = test.context.offered;
+      await test.context.loadCatalogs();
+      assert.deepEqual(reads, Array.from({ length: failedSource + 1 }, (_, index) => index));
+      assert.notStrictEqual(test.context.offered, previous, "a partial read publishes only sources with established precedence");
+      assert.equal(test.context.offered.length, failedSource === 0 ? 0 : 3);
+      assert(test.context.offered.every(offer => offer.source < failedSource));
+      assert.equal(test.context.catalogsRead, true);
+      assert.equal(await test.start(2), false, "old individual offers cannot install");
+      if (queued) assert.equal(await queued, false, "failure cancels queued installs");
+      const batch = test.all();
+      if (active) { test.requests[0].reply(); await active; }
+      await batch;
+      assert.equal(test.requests.length, previouslyRead ? 1 : 0, "Update all cannot use an incomplete catalog");
+      assert(test.messages.some(message => message.text.includes("Source unavailable")));
+      if (failedSource > 0) {
+        test.context.askForApp = requestApp;
+        const install = test.context.install(test.button("safe"), test.context.offered[0]);
+        await flush();
+        assert.equal(test.requests.length, previouslyRead ? 2 : 1);
+        test.requests.at(-1).reply();
+        assert.equal(await install, true, "earlier sources remain installable after a later failure");
+        test.context.updates = () => test.context.offered.slice(1);
+        const updates = test.all();
+        await flush();
+        test.requests.at(-1).reply(); await flush();
+        test.requests.at(-1).reply(); await updates;
+      }
+      test.context.askForApp = async url => ({ apps: Number(url.split("=")[1]) === 0 ?
+        [{ ...test.offers[0].app, version: "2.0.0" }] : [{ ...test.offers[0].app, version: "9.0.0" }] });
+      await test.context.loadCatalogs();
+      assert.equal(test.context.catalogsRead, true);
+      assert.equal(test.context.offered[0].source, 0);
+      assert.equal(test.context.offered[0].app.version, "2.0.0", "successful refresh restores first-source precedence");
+      assert.equal(test.context.isCurrentOffer(test.offers[0]), false, "old click handlers remain invalid");
+    }
+  }
+}
+
+async function testConfirmationQueue() {
+  const test = harness();
+  const dialog = test.button("confirm-dialog"), listeners = [];
+  dialog.addEventListener = (event, callback, options) => {
+    assert.equal(event, "close"); assert.equal(options.once, true); listeners.push(callback);
+  };
+  dialog.showModal = () => { assert(!dialog.open); dialog.open = true; };
+  const close = value => {
+    dialog.returnValue = value; dialog.open = false;
+    for (const callback of listeners.splice(0)) callback();
+  };
+  vm.runInContext(core.slice(core.indexOf("let confirmationQueue"), core.indexOf("/* After a restart")), test.context);
+  test.offers[1].app.trusts = ["Private CA"];
+  const downloading = test.start(0), waiting = test.start(1);
+  let removed = false;
+  const removal = test.context.confirmed("Remove C?", "Remove").then(accepted => { removed = accepted; });
+  await flush();
+  assert.equal(test.button("confirm-text").textContent, "Remove C?");
+  test.requests[0].reply(); await downloading; await flush();
+  assert.equal(test.button("confirm-text").textContent, "Remove C?", "the install must not overwrite removal");
+  assert.equal(listeners.length, 1);
+  close("no"); await removal; await flush();
+  assert.equal(removed, false);
+  assert.match(test.button("confirm-text").textContent, /trusts its own certificate authority/);
+  assert.equal(test.button("confirm-yes").textContent, "Install");
+  assert.equal(dialog.returnValue, "no", "each question starts cancelled");
+  close("yes"); await flush();
+  assert.equal(removed, false, "accepting the authority warning cannot also remove C");
+  assert.equal(test.requests.length, 2);
+  test.requests[1].reply(); await waiting;
+
+  const accepted = test.context.confirmed("First?", "Remove", "First notes");
+  const cancelled = test.context.confirmed("Second?", "Reset");
+  await flush();
+  assert.equal(test.button("confirm-notes").textContent, "First notes");
+  assert.equal(test.button("confirm-notes").hidden, false);
+  close("yes"); assert.equal(await accepted, true); await flush();
+  assert.equal(test.button("confirm-text").textContent, "Second?");
+  assert.equal(test.button("confirm-notes").hidden, true);
+  close("no"); assert.equal(await cancelled, false);
+  assert.equal(listeners.length, 0);
 }
 module.exports = testQueue;
 if (require.main === module) testQueue().catch(error => { console.error(error); process.exitCode = 1; });

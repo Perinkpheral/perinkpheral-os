@@ -47,7 +47,7 @@ refresh timing, sleep, the battery or firmware/recovery updates. The device's
 enforced as a combined arena; the module's 64 KB linear-memory limit still applies.
 Use the build's memory report and a real device to check interpreter headroom.
 
-Build: `make` for this computer (a C compiler, nothing else). `make platforms`
+Build: `make` for this computer (a C compiler and Java 21 or later for import generation). `make platforms`
 builds what the CLion plugin carries: `build/macos` (arm64 and x86_64, on macOS),
 `build/linux-x86_64` and `build/linux-aarch64` (static, musl, cross-built with
 [zig](https://ziglang.org)). Windows is not supported yet.

@@ -254,7 +254,7 @@
   <tr><td>Fallback</td><td class="n">ASCII transliteration</td><td>"Moskva", "Strasse", "Athina"; otherwise <code>?</code></td></tr>
   <tr><td>Text per drawing call</td><td class="n">127 bytes</td><td>Longer text is cut between characters</td></tr>
   <tr><td>Font sizes</td><td class="n">6</td><td>Capital height 8 to 80 px. Two typefaces, selected by the user</td></tr>
-  <tr><td>Languages</td><td class="n">27</td><td>English built in; other languages as tables loaded by Perinkpheral OS (section 12)</td></tr>
+  <tr><td>Recognized translation codes</td><td class="n">27</td><td>The device currently selects English or Russian. English is built in; Russian uses a table loaded by Perinkpheral OS (section 12)</td></tr>
 </table>
 
 <h1 id="model">3. Execution model</h1>
@@ -274,15 +274,15 @@
 <h2 id="model-rules">Handler guarantees</h2>
 <ul>
   <li>Handlers are run one at a time, each to completion. Locking is unnecessary.</li>
-  <li>A handler is limited to 3 seconds. A handler that exceeds the limit, or traps (for example, on an invalid pointer), is stopped. The application is then terminated and an error screen is shown. Perinkpheral OS is unaffected.</li>
+  <li>A handler is limited to 3 seconds. A handler that exceeds the limit, or traps (for example, on an invalid pointer), is stopped. The application is then terminated. A foreground failure shows an error screen; a background failure unloads the instance and restores the foreground. Perinkpheral OS is unaffected.</li>
   <li>Handlers return <code>void</code>. A redraw, the screen or an exit is obtained with a request. Requests are applied after the handler returns.</li>
   <li><code>app_on_load()</code> is called before any other handler of an instance.</li>
-  <li>Button events are delivered in order; 16 can wait, and one more is lost. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.</li>
+  <li>Button events are delivered in order. There are 16 event slots, four reserved for releases; new non-release events are refused once 12 events are queued. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.</li>
   <li>Background delivery of a response can be interrupted. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Only <code>app_on_terminate()</code> is called. The poll is repeated after one minute, or after its interval when that is shorter.</li>
 </ul>
 
 <h2 id="model-state">State</h2>
-<p>Global variables are kept until the application is unloaded. It is unloaded when it leaves the screen and after a background delivery ends. A streamed response keeps the same instance between chunks; it also handles intervening events for that application.</p>
+<p>Global variables are kept until the application is unloaded. It is unloaded when it leaves the screen and after a background delivery ends. A streamed response keeps the same instance between chunks; it also handles intervening events for that application. Saving settings during a background poll invalidates that poll, drops its remaining pieces and delivers settings to a fresh instance. This exception does not apply to explicit HTTP requests.</p>
 <p>State is loaded in <code>app_on_load()</code> and saved in <code>app_on_terminate()</code>, the last call of every instance that was not stopped for a fault. A value that must survive a power loss is saved immediately after it changes.</p>
 <p>Use session memory for temporary UI state: the current page, selected row, unfinished edit or a packed game board. Up to 1024 bytes (<code>HOST_SESSION_MAX</code>) survive unloads while the application remains in the navigation stack; Perinkpheral OS allocates them on demand, and <code>session_set()</code> returns <code>HOST_ERR_NO_SPACE</code>, keeping the previous value, if it cannot. Firmware before 0.1.61 keeps 128 bytes: an application that keeps more sets <code>"firmware": "0.1.61"</code> in its manifest. It is saved in <code>app_on_blur()</code> and read in <code>app_on_focus()</code>, with <code>app_session_save()</code> and <code>app_session_load()</code>. It is cleared when the application leaves the stack, when it is opened again from the menu, and by a restart. An instance loaded for a background call can read it and cannot change it.</p>
 <p>Use <code>time_now()</code> for timestamps that must span restarts. Store <code>time_boot_id()</code> beside an uptime value to detect an earlier boot and discard that value. The boot id is a random nonzero 32-bit value; equality does not guarantee that no restart occurred.</p>
@@ -411,7 +411,7 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   strings/           optional: en.json, ru.json ...; one file per language    (section 12)
   pictures/          optional: PNG, PBM, or text rows of '#' and '.'          (section 6)
   files/             optional: data files, read with file_read()</pre>
-<p>The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. Check the package file count and final manifest size separately: the build does not enforce them. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one string table per language.</p>
+<p>The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. It also enforces the eight-file package limit, including generated tables and translated manifests, and the 8192-byte limit for each packaged manifest. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one string table per language.</p>
 
 <p>A catalog package contains at most eight files: app.wasm, manifest.json and at most six other files. Generated string tables and manifest translations count towards this limit.</p>
 <h2 id="package-manifest">Manifest</h2>
@@ -444,7 +444,7 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   <tr><td class="c">title</td><td>1 - 23 characters</td><td>Display name in the menu and on the web page. Translatable</td></tr>
   <tr><td class="c">author</td><td>1 - 63 UTF-8 bytes</td><td>Author shown in the catalog. Required for publishing. Perinkpheral is reserved for the official catalog</td></tr>
   <tr><td class="c">description</td><td>1 - 95 characters, optional</td><td>What the application does, in a line: shown in the catalog and on the web page. Translatable</td></tr>
-  <tr><td class="c">version</td><td>up to 15 bytes</td><td>Set by the developer. A different version in a catalog is offered as an update</td></tr>
+  <tr><td class="c">version</td><td>up to 15 bytes</td><td>Set by the developer. A higher stable version in a catalog is offered as an update; if either label is not stable, a different label is offered. Stable means X.Y.Z, each part 0 to 999 without leading zeroes</td></tr>
   <tr><td class="c">abi</td><td><code>3</code></td><td>Frozen Perinkpheral OS contract generation. Only the explicit supported set is accepted; ABI 2 gives "Update the app."</td></tr>
   <tr><td class="c">firmware</td><td><code>"0.1.30"</code></td><td>The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports/exports and an explicit manifest minimum. New flags or manifest behaviour need an explicit minimum. Older firmware refuses installation and startup with "Update the firmware."</td></tr>
   <tr><td class="c">fullscreen</td><td>true / false (default)</td><td>false: Perinkpheral OS header on top, surface 400 x 260. true: surface 400 x 300</td></tr>
@@ -720,11 +720,11 @@ gfx_draw_picture(x, y, PICTURE_DROP, 2);    /* 22 px: cell size 2 */</pre>
 <h2 id="buttons-back">BACK</h2>
 <table>
   <tr><th style="width:36%">Application</th><th>Short press of BACK</th></tr>
-  <tr><td>Without <code>app_on_back()</code></td><td>Closes the application (one step down the stack)</td></tr>
+  <tr><td>Without <code>app_on_back()</code></td><td>Closes the application (one step down, or the menu after sibling switching)</td></tr>
   <tr><td>With <code>app_on_back()</code></td><td>Delivered to <code>app_on_back()</code>. Typical handling: go one page back; on the first page call <code>screen_leave()</code></td></tr>
 </table>
 <p>A short press of BACK goes to <code>app_on_back()</code>, or closes the application if it has no such export. A long press of BACK opens Perinkpheral OS's menu. <code>app_on_button()</code> receives the other events, except that question mode consumes OK KEYDOWN. Later OK events are delivered only if the press began after the question reached the panel.</p>
-<p><code>screen_leave()</code> removes the application from the top of the stack. The user returns to the previous screen. This also applies to an application that took the screen with <code>screen_request()</code>.</p>
+<p><code>screen_leave()</code> removes the application from the top of the stack. Normally the user returns to the previous screen, including after <code>screen_request()</code>. After BACK+UP/DOWN sibling switching, leaving any application in that row clears the entire stack and its sessions and returns to the menu.</p>
 
 <h2 id="buttons-kit">Lists, pickers, dates</h2>
 <pre>#include "app_ui.h"
@@ -1134,7 +1134,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <li>Trust model: HTTPS to a source that the user selected, plus the sandbox. Packages are unsigned.</li>
   <li>The official catalog is the <code>perinkpheral-apps</code> repository, with eighteen applications. It is the first source on every device. The user can add up to three HTTPS sources on the device's web page.</li>
   <li>The web page shows a summary of each installed application, taken from its manifest: the servers it connects to, the polling interval, what it stores, and whether it starts with the device.</li>
-  <li>Increase <code>version</code> with every change. The page offers Update when a catalog version differs from the installed version. Catalog includes installed applications, marked Installed or Update. Update all appears in Installed apps when at least two compatible updates are available; Refresh fetches the catalogs again.</li>
+  <li>Increase <code>version</code> with every change. The page offers Update for a higher stable catalog version (X.Y.Z, each part 0 to 999 without leading zeroes). If either version is another label, it offers Update when the labels differ. Installed 2.0.0 does not offer catalog 1.9.9. Catalog includes installed applications, marked Installed or Update. Update all appears in Installed apps when at least two compatible updates are available; Refresh fetches the catalogs again.</li>
 </ul>
 
 <h1 class="part" id="part-3">Part III. Reference</h1>
@@ -1267,7 +1267,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <h2 id="ref-navigation">Navigation and session</h2>
 <table>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>
-  <tr><td class="c">void screen_leave(void)</td><td>Closes the application: one step down the stack. Valid in button, back and timer handlers</td></tr>
+  <tr><td class="c">void screen_leave(void)</td><td>Closes the application: one step down, or clears the stack and returns to the menu after BACK+UP/DOWN sibling switching. Valid in button, back and timer handlers</td></tr>
   <tr><td class="c">void screen_request(void)</td><td>Requests the screen from a background handler; decided after delivery ends. Refused within 30 s of a press, over a question waiting for its answer, or within 30 s of the last grant. A refusal is discarded, with no retry</td></tr>
   <tr><td class="c">int32_t session_set(data, length)</td><td>Keeps up to <code>HOST_SESSION_MAX</code> (1024) bytes while the application is in the stack. Length 0 clears. <code>HOST_ERR_ARGUMENT</code> from an instance loaded off the screen; <code>HOST_ERR_NO_SPACE</code> if allocation fails, the previous value retained</td></tr>
   <tr><td class="c">int32_t session_get(buffer, capacity)</td><td>Copies what is kept. Returns its length; 0 for none; <code>HOST_ERR_NO_SPACE</code> when the buffer is smaller</td></tr>
@@ -1405,7 +1405,7 @@ int32_t app_setting_seconds(const char *key, int32_t otherwise);
 /* a place's name, before its comma */
 int32_t app_setting_place(const char *key, char *name, int32_t size);
 </pre>
-<p>The text is always null-terminated. A value that does not fit is not cut: the result is empty and the length 0.</p>
+<p>The text is always null-terminated. For <code>app_setting()</code> and <code>app_setting_item()</code>, a value that does not fit gives empty text and length 0. <code>app_setting_place()</code> instead truncates the name to fit, between UTF-8 characters, and returns the copied byte length.</p>
 <h2 id="lib-days">app_days.h: date conversion</h2>
 <pre>#include "app_days.h"                                        /* dates as days since 1970-01-01 */
 int32_t app_days_from_date(int32_t year, int32_t month, int32_t day);

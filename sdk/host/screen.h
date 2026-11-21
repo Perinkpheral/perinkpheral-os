@@ -128,7 +128,8 @@ HOST_IMPORT(header_set_status, int32_t header_set_status(int32_t side, int32_t i
  *     store; save navigation and unfinished edits to the session in
  *     app_on_blur(), and restore them in app_on_focus().
  *   - screen_leave() goes one step down the stack: to the entry the
- *     application was opened over, or to the menu.
+ *     application was opened over, or to the menu. After BACK+UP/DOWN sibling
+ *     switching, leaving a sibling clears the stack and its sessions and opens the menu.
  *   - An application that took the screen with screen_request() is placed
  *     over the current screen and returns the user to it on exit. */
 
@@ -142,7 +143,8 @@ HOST_IMPORT(header_set_status, int32_t header_set_status(int32_t side, int32_t i
  * These focus rules are included in the ABI 3 firmware floor. */
 HOST_IMPORT(screen_request, void screen_request(void));
 
-/* Closes the application: one step down the stack. Takes effect when
+/* Closes the application: one step down, or clears the stack and opens the
+ * menu after BACK+UP/DOWN sibling switching. Takes effect when
  * app_on_button(), app_on_back() or app_on_timer() returns; ignored in
  * other handlers. A long press of BACK closes any application without
  * calling it. */

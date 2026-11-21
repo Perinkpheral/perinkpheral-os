@@ -31,6 +31,7 @@ typedef enum {
     WIFI_EVENT_STARTED,
     WIFI_EVENT_CONNECTED,    /* associated and has an address */
     WIFI_EVENT_DISCONNECTED, /* lost the network, or an attempt failed */
+    WIFI_EVENT_RESCUE_DUE,   /* no usable address before the rescue deadline */
     WIFI_EVENT_RETRY_DUE,    /* the pause asked for in the last answer is over */
 } wifi_plan_event_t;
 
@@ -38,6 +39,7 @@ typedef struct {
     bool     start_access_point;
     bool     stop_access_point;
     bool     connect;       /* start an attempt now */
+    uint32_t rescue_in_ms;  /* independent of disconnects and retry backoff */
     uint32_t retry_in_ms;   /* then say WIFI_EVENT_RETRY_DUE after this long; 0: no */
 } wifi_plan_actions_t;
 

@@ -121,6 +121,26 @@ static int checked_rename(const char *from, const char *to)
 #undef readdir
 #undef rename
 
+static bool refuse_query, erase_before_query, in_query;
+static int room_queries;
+
+bool events_call(events_call_fn run, void *argument)
+{
+    room_queries++;
+    if (refuse_query) {
+        return false;
+    }
+    if (erase_before_query) {
+        app_code_erase_all();
+        erase_before_query = false;
+    }
+    CHECK(!in_query);
+    in_query = true;
+    run(argument);
+    in_query = false;
+    return true;
+}
+
 static void seed_code(int sector)
 {
     memset(flash, 0xff, sizeof flash);
@@ -154,6 +174,18 @@ int main(void)
     snprintf(incoming, sizeof incoming, "%s/clock/manifest.json.new", root);
     snprintf(mark, sizeof mark, "%s/clock/.commit", root);
     size_t size;
+    seed_code(0);
+    CHECK(!app_code_has_room("other", 3 * SECTOR_BYTES));
+    CHECK(app_code_has_room("clock", 3 * SECTOR_BYTES));
+    CHECK(app_code_free_bytes() == 3 * SECTOR_BYTES);
+    CHECK(room_queries == 3);
+    refuse_query = true;
+    CHECK(!app_code_has_room("clock", 1));
+    CHECK(app_code_free_bytes() == 0);
+    refuse_query = false;
+    erase_before_query = true;
+    CHECK(app_code_has_room("other", 3 * SECTOR_BYTES));
+    CHECK(app_code_free_bytes() == sizeof flash);
     seed_code(0);
     app_code_adopt("/nonexistent/perinkpheral-apps");
     CHECK(erases == 0 && app_code_find(root, "clock", &size) != NULL);

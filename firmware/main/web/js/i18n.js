@@ -56,6 +56,7 @@ const RUSSIAN = {
   "Latest": "Последняя", "{0} - up to date": "{0} - актуальна", "Default": "По умолчанию",
   "Install": "Установить", "Update": "Обновить", "Update all": "Обновить все", "Installed": "Установлено", "Remove": "Удалить", "Set up": "Настроить",
   "Info": "Сведения", "Loading": "Загрузка", "Loading...": "Загрузка...",
+  "Unavailable": "Недоступно",
   "Could not load.": "Не удалось загрузить.",
   "Update needs firmware {0}": "Для обновления нужна прошивка {0}",
   "Remove {0}? Settings are kept.": "Удалить {0}? Настройки сохранятся.",

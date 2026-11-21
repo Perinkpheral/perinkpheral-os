@@ -4,11 +4,11 @@
 # from here.
 set(wasm3_dir "wasm3")
 set(wasm3_sources
-    "m3_bind.c" "m3_code.c" "m3_compile.c" "m3_core.c" "m3_env.c" "m3_exec.c"
+    "m3_bind.c" "m3_code.c" "m3_core.c" "m3_env.c" "m3_exec.c"
     "m3_function.c" "m3_info.c" "m3_module.c" "m3_parse.c" "m3_validate.c")
 list(TRANSFORM wasm3_sources PREPEND "${wasm3_dir}/")
 
-idf_component_register(SRCS ${wasm3_sources} "m3_area.c"
+idf_component_register(SRCS ${wasm3_sources} "m3_budget_compile.c" "m3_area.c"
                        INCLUDE_DIRS "${wasm3_dir}" "."
                        PRIV_REQUIRES heap)
 

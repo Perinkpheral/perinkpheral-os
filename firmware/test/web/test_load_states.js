@@ -112,8 +112,8 @@ async function testCatalog() {
 
   answer = null;
   await context.loadCatalogs();
-  assert.equal(rows().length, 1, "a reading that failed leaves what was read");
-  assert.equal(buttons()[0].disabled, false);
+  assert.equal(rows().length, 0, "a failure of the first source leaves no safe offers");
+  assert.deepEqual(said(view).slice(0, 1), ["failed"]);
 
   /* The browser keeps what was read, without the lists of files, and nothing else. */
   const written = JSON.parse(kept.get("perinkpheral-catalog"));
@@ -164,7 +164,7 @@ async function testCatalog() {
   context.askForApp = async () => { throw new Error("Failed to fetch"); };
   await context.loadCatalogs();
   assert.equal(context.offered.length, 0, "total failure after saving sources leaves no old offers");
-  assert.equal(context.catalogsRead, false);
+  assert.equal(context.catalogsRead, true);
   assert.deepEqual(said(view), ["failed"]);
 
   context.askForApp = async () => ({ apps: [{ name: "another", version: "1", files: [] }] });
@@ -173,7 +173,7 @@ async function testCatalog() {
   context.askForApp = async () => { throw new Error("Failed to fetch"); };
   await context.loadCatalogs();
   assert.equal(context.offered.length, 0, "a changed list returned by the device also invalidates offers");
-  assert.equal(context.catalogsRead, false);
+  assert.equal(context.catalogsRead, true);
 
   /* What is not this page's writing is not shown. */
   for (const text of ["", "{", "[]", '{"sources":[1],"offers":[]}', '{"sources":[],"offers":[{"source":0}]}',

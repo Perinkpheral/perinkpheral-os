@@ -4,6 +4,27 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## next
+
+- Failed firmware rejection restarts into recovery after bounded metadata-write retries.
+- Wi-Fi reconnects after scans despite repeated radio requests from button presses.
+- The rescue access point opens after two minutes without an address, including DHCP failures.
+- Memory pressure interrupts web downloads without reusing their active sessions.
+- OK confirmation survives background delivery and unrelated button presses.
+- Releasing BACK after a switching chord no longer reaches the destination application.
+- Application time limits cover bulk memory work and late returns without slowing ordinary loops.
+- Applications with colliding package IDs are refused; queued requests retain their original owner.
+- Removing an application during installation no longer races code-storage admission.
+- Failed settings saves keep credentials safe when changing an application's server.
+- Oversized and unreadable app settings remain protected while other applications stay accessible.
+- Reloading Wi-Fi settings clears a password drafted for another network.
+- Disabling network time saves the freshly displayed time; later saves preserve the clock.
+- Installation refuses certificate authorities that were not approved for the downloaded package.
+- Overlapping Control reads cannot replace a newer frame with an older one.
+- Catalog failures preserve source priority while earlier sources remain installable and updatable.
+- Browser confirmations wait their turn so one answer cannot approve two actions.
+- App settings stay disabled through saving and reloading to prevent duplicate saves and lost edits.
+
 ## 0.1.79
 
 - A daily refresh that fails is tried again a minute later, so a screen nothing redraws does not

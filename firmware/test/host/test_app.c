@@ -85,11 +85,12 @@ static int32_t fake_time_zone_offset_at(int64_t unix_time)
 #define FAKE_UPTIME_MS 1234
 static bool    clock_runs;
 static int64_t clock_ms;
+static int64_t clock_step_ms = 1;
 
 static int64_t fake_uptime_ms(void)
 {
     if (clock_runs) {
-        clock_ms++;
+        clock_ms += clock_step_ms;
     }
     return clock_ms;
 }
@@ -960,6 +961,120 @@ static void test_host_calls_count_against_the_budget(void)
     app_unload(app);
 }
 
+/* Handwritten Wasm keeps the compiler from replacing or combining bulk operations. */
+static void wasm_uint(uint8_t *bytes, size_t *size, uint32_t value)
+{
+    do {
+        uint8_t byte = value & 0x7f;
+        value >>= 7;
+        bytes[(*size)++] = byte | (value != 0 ? 0x80 : 0);
+    } while (value != 0);
+}
+
+static void test_bulk_memory_budget(void)
+{
+    static const uint8_t prefix[] = {
+        0, 0x61, 0x73, 0x6d, 1, 0, 0, 0,
+        1, 5, 1, 0x60, 1, 0x7f, 0,
+        3, 2, 1, 0,
+        5, 4, 1, 1, 1, 1,
+        7, 17, 1, 13, 'a','p','p','_','o','n','_','b','u','t','t','o','n', 0, 0
+    };
+    static const uint8_t fill[] = { 0x41, 0, 0x41, 0, 0x41, 0x80, 0x80, 4, 0xfc, 11, 0 };
+    static const uint8_t copy[] = { 0x41, 0, 0x41, 0, 0x41, 0x80, 0x80, 4, 0xfc, 10, 0, 0 };
+    enum { BULK_FILL, BULK_COPY, BULK_LOOP, SHORT_LOOP, BULK_INIT, SAMPLED_LOOP, BUDGET_CASE_COUNT };
+    for (int kind = BULK_FILL; kind < BUDGET_CASE_COUNT; kind++) {
+        uint8_t body[2048], wasm[4096];
+        size_t body_size = 0, wasm_size = sizeof prefix;
+        bool ordinary_loop = kind == SHORT_LOOP || kind == SAMPLED_LOOP;
+        body[body_size++] = ordinary_loop ? 1 : 0;
+        if (ordinary_loop) {
+            /* 8192 turns reach the sampled clock; ten turns must not read it. */
+            const uint8_t loop_start[] = { 1, 0x7f, 0x41,
+                kind == SHORT_LOOP ? 0x80 : 0x8a, kind == SHORT_LOOP ? 0xc0 : 0x80, 0,
+                0x21, 1, 3, 0x40 };
+            memcpy(body + body_size, loop_start, sizeof loop_start);
+            body_size += sizeof loop_start;
+        }
+        if (kind == BULK_LOOP) {
+            body[body_size++] = 3;
+            body[body_size++] = 0x40;
+        }
+        static const uint8_t init[] = { 0x41, 0, 0x41, 0, 0x41, 1, 0xfc, 8, 0, 0 };
+        for (int i = 0; !ordinary_loop && i < 100; i++) {
+            const uint8_t *operation = kind == BULK_COPY ? copy : kind == BULK_INIT ? init : fill;
+            size_t length = kind == BULK_COPY ? sizeof copy : kind == BULK_INIT ? sizeof init : sizeof fill;
+            memcpy(body + body_size, operation, length);
+            body_size += length;
+        }
+        if (kind == BULK_LOOP) {
+            body[body_size++] = 0x0c;
+            body[body_size++] = 0;
+            body[body_size++] = 0x0b;
+        }
+        if (ordinary_loop) {
+            static const uint8_t loop_end[] = { 0x20, 1, 0x41, 1, 0x6b, 0x22, 1, 0x0d, 0, 0x0b };
+            memcpy(body + body_size, loop_end, sizeof loop_end);
+            body_size += sizeof loop_end;
+        }
+        /* Reaching this trap means work escaped interruption. */
+        if (kind != SAMPLED_LOOP) body[body_size++] = 0;
+        body[body_size++] = 0x0b;
+        memcpy(wasm, prefix, sizeof prefix);
+        if (kind == BULK_INIT) {
+            static const uint8_t data_count[] = { 12, 1, 1 };
+            memcpy(wasm + wasm_size, data_count, sizeof data_count);
+            wasm_size += sizeof data_count;
+        }
+        wasm[wasm_size++] = 10;
+        size_t encoded_body_size = body_size < 128 ? 1 : 2;
+        wasm_uint(wasm, &wasm_size, (uint32_t)(1 + encoded_body_size + body_size));
+        wasm[wasm_size++] = 1;
+        wasm_uint(wasm, &wasm_size, (uint32_t)body_size);
+        memcpy(wasm + wasm_size, body, body_size);
+        wasm_size += body_size;
+        if (kind == BULK_INIT) {
+            static const uint8_t data[] = { 11, 4, 1, 1, 1, 0x7f };
+            memcpy(wasm + wasm_size, data, sizeof data);
+            wasm_size += sizeof data;
+        }
+        app_t *app = NULL;
+        clock_runs = false;
+        clock_ms = 0;
+        CHECK(app_load("bulk", HOST_API_VERSION, wasm, wasm_size, 0, &SERVICES, &app) == APP_OK);
+        CHECK(!app_has_stopped(app));
+        clock_step_ms = 1000;
+        clock_runs = true;
+        app_button(app, 1, BTN_PRESSED);
+        clock_runs = false;
+        clock_step_ms = 1;
+        if (kind == SAMPLED_LOOP) {
+            CHECK(!app_has_stopped(app));
+            CHECK(clock_ms == 2000); /* Only the handler's entry and return read the clock. */
+        } else {
+            CHECK(app_has_stopped(app));
+            CHECK_STR(app_stop_reason(app), "it ran too long");
+        }
+        app_unload(app);
+    }
+
+    /* A return after the deadline must stop even without an interpreter yield. */
+    uint8_t returning[sizeof prefix + 6];
+    memcpy(returning, prefix, sizeof prefix);
+    static const uint8_t empty_code[] = { 10, 4, 1, 2, 0, 0x0b };
+    memcpy(returning + sizeof prefix, empty_code, sizeof empty_code);
+    app_t *app = NULL;
+    CHECK(app_load("return", HOST_API_VERSION, returning, sizeof returning, 0, &SERVICES, &app) == APP_OK);
+    clock_step_ms = 4000;
+    clock_runs = true;
+    app_button(app, 1, BTN_PRESSED);
+    clock_runs = false;
+    clock_step_ms = 1;
+    CHECK(app_has_stopped(app));
+    CHECK_STR(app_stop_reason(app), "it ran too long");
+    app_unload(app);
+}
+
 int main(void)
 {
     test_screen_inversion();
@@ -971,5 +1086,6 @@ int main(void)
     test_probe_contract();
     test_frozen_hello_state();
     test_host_calls_count_against_the_budget();
+    test_bulk_memory_budget();
     REPORT();
 }

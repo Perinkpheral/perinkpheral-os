@@ -15,13 +15,15 @@ back_switch_t back_switch_press(back_switch_state_t *state, scene_button_t butto
             return BACK_SWITCH_PASS;
         }
         if (press == SCENE_PRESS_UP) {
+            bool was_chorded = state->chorded;
             bool was_long = state->long_is_due && !state->chorded;
             /* A short hold's SHORT comes after its release and is the chord's last event; a
              * long hold's LONG came already, and nothing of the chord follows. */
             state->chorded = state->chorded && !state->long_is_due;
             state->back_is_held = false;
             state->long_is_due = false;
-            return was_long ? BACK_SWITCH_LONG_BACK : BACK_SWITCH_PASS;
+            return was_chorded ? BACK_SWITCH_SWALLOW
+                   : was_long ? BACK_SWITCH_LONG_BACK : BACK_SWITCH_PASS;
         }
         /* The long BACK waits for the release: acted on while the button is held, it took the
          * menu's way before a second finger reached UP or DOWN. A long press with no button

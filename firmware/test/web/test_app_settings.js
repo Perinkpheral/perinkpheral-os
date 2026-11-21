@@ -64,4 +64,10 @@ assert.equal(field("label").value, "Office");
 /* A setting named as an object's own property is still a setting. */
 const odd = { settings: [{ key: "constructor", type: "text", default: "Set" }], values: {} };
 assert.equal(context.settingField(odd, odd.settings[0])[1].value, "Set");
+app.settings.find(setting => setting.key === "label").unavailable = true;
+const unavailable = field("label");
+assert.equal(unavailable.disabled, true);
+assert.equal(unavailable.placeholder, "Unavailable");
+assert.equal(unavailable.dataset.key, undefined, "an unavailable field cannot be submitted or filled by a companion");
+assert.equal(unavailable.value, "", "an unavailable field does not display a fabricated default");
 console.log("app settings: ok");

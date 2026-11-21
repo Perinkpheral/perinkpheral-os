@@ -12,6 +12,8 @@ typedef struct {
     uint32_t installed_id;
     const char *version;
     app_install_confirm_fn confirm_system;
+    /* Manual consent must cover every authority in the hashed package. */
+    int approved_authorities;
     bool *retryable;
 } app_install_options_t;
 

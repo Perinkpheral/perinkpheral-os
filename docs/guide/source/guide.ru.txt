@@ -577,8 +577,8 @@ Capital height 8 to 80 px. Two typefaces, selected by the user
 Languages
 Языки
 
-English built in; other languages as tables loaded by Perinkpheral OS (section 12)
-Английский встроен; остальные языки - таблицы, загружаемые Perinkpheral OS (раздел 12)
+The device currently selects English or Russian. English is built in; Russian uses a table loaded by Perinkpheral OS (section 12)
+На устройстве сейчас можно выбрать английский или русский. Английский встроен; русский использует таблицу, загружаемую Perinkpheral OS (раздел 12)
 
 3. Execution model
 3. Модель исполнения
@@ -658,8 +658,8 @@ Handler guarantees
 Handlers are run one at a time, each to completion. Locking is unnecessary.
 Обработчики выполняются по одному, каждый до завершения. Блокировки не нужны.
 
-A handler is limited to 3 seconds. A handler that exceeds the limit, or traps (for example, on an invalid pointer), is stopped. The application is then terminated and an error screen is shown. Perinkpheral OS is unaffected.
-Обработчик ограничен 3 секундами. Обработчик, превысивший лимит или вызвавший ловушку (например, на неверном указателе), останавливается. Приложение завершается, показывается экран ошибки. Perinkpheral OS продолжает работу.
+A handler is limited to 3 seconds. A handler that exceeds the limit, or traps (for example, on an invalid pointer), is stopped. The application is then terminated. A foreground failure shows an error screen; a background failure unloads the instance and restores the foreground. Perinkpheral OS is unaffected.
+Обработчик ограничен 3 секундами. Обработчик, превысивший лимит или вызвавший ловушку (например, на неверном указателе), останавливается. Приложение завершается. Ошибка на переднем плане показывает экран ошибки; при фоновой ошибке экземпляр выгружается и восстанавливается передний план. Perinkpheral OS продолжает работу.
 
 Handlers return <code>void</code>. A redraw, the screen or an exit is obtained with a request. Requests are applied after the handler returns.
 Обработчики возвращают <code>void</code>. Перерисовка, экран или выход получаются запросом. Запросы применяются после возврата из обработчика.
@@ -667,8 +667,8 @@ Handlers return <code>void</code>. A redraw, the screen or an exit is obtained w
 <code>app_on_load()</code> is called before any other handler of an instance.
 <code>app_on_load()</code> вызывается раньше любого другого обработчика экземпляра.
 
-Button events are delivered in order; 16 can wait, and one more is lost. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.
-События кнопок доставляются по порядку; ждать могут 16, следующее теряется. Ожидающие таймеры с одним номером объединяются. Фрагменты одного ответа доставляются по порядку; между двумя из них может прийти изменение настроек или будильник.
+Button events are delivered in order. There are 16 event slots, four reserved for releases; new non-release events are refused once 12 events are queued. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.
+События кнопок доставляются по порядку. В очереди 16 мест, четыре зарезервированы для отпусканий; новые события других типов отклоняются, когда в очереди уже 12 событий. Ожидающие таймеры с одним номером объединяются. Фрагменты одного ответа доставляются по порядку; между двумя из них может прийти изменение настроек или будильник.
 
 Background delivery of a response can be interrupted. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Only <code>app_on_terminate()</code> is called. The poll is repeated after one minute, or after its interval when that is shorter.
 Фоновая доставка ответа может прерваться. Нажатие кнопки, смена экрана, перечитывание списка приложений или доставка другому приложению могут выгрузить экземпляр и отбросить оставшиеся части. Вызывается только <code>app_on_terminate()</code>. Опрос повторяется через минуту или через свой интервал, если он короче.
@@ -676,8 +676,8 @@ Background delivery of a response can be interrupted. A button press, screen swi
 State
 Состояние
 
-Global variables are kept until the application is unloaded. It is unloaded when it leaves the screen and after a background delivery ends. A streamed response keeps the same instance between chunks; it also handles intervening events for that application.
-Глобальные переменные сохраняются до выгрузки приложения. Оно выгружается при уходе с экрана и по завершении фоновой доставки. При потоковом ответе один экземпляр остаётся загруженным между частями; он также обрабатывает промежуточные события этого приложения.
+Global variables are kept until the application is unloaded. It is unloaded when it leaves the screen and after a background delivery ends. A streamed response keeps the same instance between chunks; it also handles intervening events for that application. Saving settings during a background poll invalidates that poll, drops its remaining pieces and delivers settings to a fresh instance. This exception does not apply to explicit HTTP requests.
+Глобальные переменные сохраняются до выгрузки приложения. Оно выгружается при уходе с экрана и по завершении фоновой доставки. При потоковом ответе один экземпляр остаётся загруженным между частями; он также обрабатывает промежуточные события этого приложения. Сохранение настроек во время фонового опроса отменяет этот опрос, отбрасывает оставшиеся части и передаёт настройки новому экземпляру. Это исключение не относится к явным HTTP-запросам.
 
 State is loaded in <code>app_on_load()</code> and saved in <code>app_on_terminate()</code>, the last call of every instance that was not stopped for a fault. A value that must survive a power loss is saved immediately after it changes.
 Состояние загружается в <code>app_on_load()</code> и сохраняется в <code>app_on_terminate()</code> - последнем вызове каждого экземпляра, не остановленного из-за сбоя. Значение, которое должно пережить отключение питания, сохраняется сразу после изменения.
@@ -898,8 +898,8 @@ optional: PNG, PBM, or text rows of '#' and '.'
 optional: data files, read with file_read()
 необязательно: файлы данных, читаются через file_read()
 
-The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. Check the package file count and final manifest size separately: the build does not enforce them. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one string table per language.
-Сборка создаёт пакет из этой папки. Компилирует исходники с библиотекой SDK, создаёт <code>strings.h</code> из <code>strings/</code> и <code>pictures.h</code> из <code>pictures/</code>, проверяет лимиты модуля и файлов данных. Число файлов пакета и итоговый размер манифеста проверяйте отдельно: сборка их не ограничивает. В пакете - <code>app.wasm</code>, <code>manifest.json</code>, файлы данных и таблица строк на каждый язык.
+The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. It also enforces the eight-file package limit, including generated tables and translated manifests, and the 8192-byte limit for each packaged manifest. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one string table per language.
+Сборка создаёт пакет из этой папки. Компилирует исходники с библиотекой SDK, создаёт <code>strings.h</code> из <code>strings/</code> и <code>pictures.h</code> из <code>pictures/</code>, проверяет лимиты модуля и файлов данных. Она также ограничивает пакет восемью файлами, включая созданные таблицы и переводы манифеста, и каждый упакованный манифест - 8192 байтами. В пакете - <code>app.wasm</code>, <code>manifest.json</code>, файлы данных и таблица строк на каждый язык.
 
 A catalog package contains at most eight files: app.wasm, manifest.json and at most six other files. Generated string tables and manifest translations count towards this limit.
 Пакет каталога содержит не более восьми файлов: app.wasm, manifest.json и до шести остальных. Сгенерированные таблицы строк и переводы манифеста входят в этот лимит.
@@ -946,8 +946,8 @@ version
 up to 15 bytes
 до 15 байт
 
-Set by the developer. A different version in a catalog is offered as an update
-Задаётся разработчиком. Другая версия в каталоге предлагается как обновление
+Set by the developer. A higher stable version in a catalog is offered as an update; if either label is not stable, a different label is offered. Stable means X.Y.Z, each part 0 to 999 without leading zeroes
+Задаётся разработчиком. Более высокая стабильная версия в каталоге предлагается как обновление; если хотя бы одна метка нестабильная, предлагается отличающаяся метка. Стабильная версия имеет вид X.Y.Z, каждая часть от 0 до 999 без ведущих нулей
 
 abi
 =
@@ -1996,8 +1996,8 @@ Short press of BACK
 Without <code>app_on_back()</code>
 Без <code>app_on_back()</code>
 
-Closes the application (one step down the stack)
-Закрывает приложение (один шаг вниз по стеку)
+Closes the application (one step down, or the menu after sibling switching)
+Закрывает приложение (один шаг вниз или меню после переключения между соседними приложениями)
 
 With <code>app_on_back()</code>
 С <code>app_on_back()</code>
@@ -2008,8 +2008,8 @@ Delivered to <code>app_on_back()</code>. Typical handling: go one page back; on 
 A short press of BACK goes to <code>app_on_back()</code>, or closes the application if it has no such export. A long press of BACK opens Perinkpheral OS's menu. <code>app_on_button()</code> receives the other events, except that question mode consumes OK KEYDOWN. Later OK events are delivered only if the press began after the question reached the panel.
 Короткое нажатие BACK передаётся в <code>app_on_back()</code> или закрывает приложение без этого экспорта. Долгое нажатие BACK открывает меню Perinkpheral OS. Остальные события получает <code>app_on_button()</code>, но в режиме вопроса Perinkpheral OS поглощает OK KEYDOWN. Последующие события OK передаются лишь при нажатии, начавшемся после появления вопроса на панели.
 
-<code>screen_leave()</code> removes the application from the top of the stack. The user returns to the previous screen. This also applies to an application that took the screen with <code>screen_request()</code>.
-<code>screen_leave()</code> снимает приложение с вершины стека. Пользователь возвращается на предыдущий экран. Это относится и к приложению, занявшему экран через <code>screen_request()</code>.
+<code>screen_leave()</code> removes the application from the top of the stack. Normally the user returns to the previous screen, including after <code>screen_request()</code>. After BACK+UP/DOWN sibling switching, leaving any application in that row clears the entire stack and its sessions and returns to the menu.
+<code>screen_leave()</code> снимает приложение с вершины стека. Обычно пользователь возвращается на предыдущий экран, в том числе после <code>screen_request()</code>. После переключения между соседними приложениями через BACK+UP/DOWN выход из любого приложения этого ряда очищает весь стек и его сессии и возвращает в меню.
 
 Lists, pickers, dates
 Списки, выбор значения, даты
@@ -3010,8 +3010,8 @@ The official catalog is the <code>perinkpheral-apps</code> repository, with eigh
 The web page shows a summary of each installed application, taken from its manifest: the servers it connects to, the polling interval, what it stores, and whether it starts with the device.
 Веб-страница показывает сводку по каждому установленному приложению, взятую из манифеста: серверы, к которым оно подключается, интервал опроса, что оно хранит и запускается ли вместе с устройством.
 
-Increase <code>version</code> with every change. The page offers Update when a catalog version differs from the installed version. Catalog includes installed applications, marked Installed or Update. Update all appears in Installed apps when at least two compatible updates are available; Refresh fetches the catalogs again.
-Повышайте <code>version</code> при каждом изменении. Страница предлагает Update, если версия в каталоге отличается от установленной. Catalog включает установленные приложения с отметкой Installed или Update. Update all появляется в Installed apps при наличии хотя бы двух совместимых обновлений; Refresh загружает каталоги заново.
+Increase <code>version</code> with every change. The page offers Update for a higher stable catalog version (X.Y.Z, each part 0 to 999 without leading zeroes). If either version is another label, it offers Update when the labels differ. Installed 2.0.0 does not offer catalog 1.9.9. Catalog includes installed applications, marked Installed or Update. Update all appears in Installed apps when at least two compatible updates are available; Refresh fetches the catalogs again.
+Повышайте <code>version</code> при каждом изменении. Страница предлагает Update для более высокой стабильной версии в каталоге (X.Y.Z, каждая часть от 0 до 999 без ведущих нулей). Если хотя бы одна версия имеет другую метку, Update предлагается при различии меток. Для установленной 2.0.0 версия каталога 1.9.9 не предлагается. Catalog включает установленные приложения с отметкой Installed или Update. Update all появляется в Installed apps при наличии хотя бы двух совместимых обновлений; Refresh загружает каталоги заново.
 
 Part III. Reference
 Часть III. Справочник
@@ -3535,8 +3535,8 @@ Navigation and session
 void screen_leave(void)
 =
 
-Closes the application: one step down the stack. Valid in button, back and timer handlers
-Закрывает приложение: один шаг вниз по стеку. Допустим в обработчиках кнопок, BACK и таймера
+Closes the application: one step down, or clears the stack and returns to the menu after BACK+UP/DOWN sibling switching. Valid in button, back and timer handlers
+Закрывает приложение: один шаг вниз или очистка стека и возврат в меню после переключения между соседними приложениями через BACK+UP/DOWN. Допустим в обработчиках кнопок, BACK и таймера
 
 void screen_request(void)
 =
@@ -3880,8 +3880,8 @@ toggle: true, кроме "0"
 a place's name, before its comma
 название места до первой запятой
 
-The text is always null-terminated. A value that does not fit is not cut: the result is empty and the length 0.
-Текст всегда завершается нулём. Значение, которое не помещается, не обрезается: результат пуст, длина 0.
+The text is always null-terminated. For <code>app_setting()</code> and <code>app_setting_item()</code>, a value that does not fit gives empty text and length 0. <code>app_setting_place()</code> instead truncates the name to fit, between UTF-8 characters, and returns the copied byte length.
+Текст всегда завершается нулём. Для <code>app_setting()</code> и <code>app_setting_item()</code> значение, которое не помещается, даёт пустой текст и длину 0. <code>app_setting_place()</code> вместо этого обрезает имя по границе символов UTF-8 и возвращает число скопированных байтов.
 
 app_days.h: date conversion
 app_days.h: преобразование дат
@@ -4401,3 +4401,6 @@ BACK удерживается, UP или DOWN
 
 Handled by Perinkpheral OS: opens the previous or next application in menu order; system pages are skipped. BACK may be held for any time before and between the presses; its release then does nothing. The application switched from stays in the navigation stack and keeps its session; a short press of BACK then opens the menu, not that application. Not in the menu. Not delivered to applications. Firmware 0.1.64; 0.1.63 required the first press within 600 ms
 Обрабатывается Perinkpheral OS: открывает предыдущее или следующее приложение в порядке меню; системные страницы пропускаются. BACK можно удерживать сколько угодно до нажатий и между ними; его отпускание после этого ничего не делает. Приложение, с которого переключились, остаётся в стеке навигации и сохраняет сессию; короткое нажатие BACK после этого открывает меню, а не это приложение. В меню не действует. Приложениям не доставляется. Прошивка 0.1.64; 0.1.63 требовала первое нажатие в пределах 600 ms
+
+Recognized translation codes
+Распознаваемые коды переводов

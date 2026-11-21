@@ -28,7 +28,8 @@
 
 /* Short press of BACK.
  * Without this export, a short press of BACK closes the application and
- * returns the user to the previous screen.
+ * returns the user to the previous screen, or clears the stack and opens the
+ * menu after BACK+UP/DOWN sibling switching.
  * With this export, the press is delivered here. Typical handling: go one
  * page back; on the first page call screen_leave().
  * BTN_BACK_PRESSED is never delivered to app_on_button(). BTN_BACK_KEYDOWN

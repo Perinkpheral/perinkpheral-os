@@ -438,6 +438,10 @@ static void commit_install(void *argument)
         job->problem = "Not enough storage.";
         return;
     }
+    if (!launcher_incoming_id_is_unique(job->name, job->incoming_manifest)) {
+        job->problem = "Invalid manifest.";
+        return;
+    }
     job->committed = app_store_commit_all(STORAGE_APPS_ROOT, job->name);
     /* Installation callbacks may remove the application: the files no
      * longer have an open download, and the writer lock still excludes uploads. */
@@ -483,6 +487,23 @@ static const char *install_package(install_job_t *job, const json_t *files)
     if (job->incoming_manifest == NULL || app_manifest_parse(job->incoming_manifest, &incoming) != APP_MANIFEST_OK ||
         (job->options->version != NULL && strcmp(job->options->version, incoming.version) != 0)) {
         return "Invalid manifest.";
+    }
+    if (job->options->installed_id == 0) {
+        char certificates[MANIFEST_CERTIFICATES_MAX][MANIFEST_FILE_NAME_MAX + 1];
+        int count = app_manifest_certificates(job->incoming_manifest, certificates, MANIFEST_CERTIFICATES_MAX);
+        /* Approval belongs to this hashed package, including every root the manifest names. */
+        if (count < 0 || count != job->options->approved_authorities) {
+            return "Not confirmed.";
+        }
+        for (int index = 0; index < count; index++) {
+            bool supplied = false;
+            json_for_each(entry, files) {
+                supplied = supplied || strcmp(json_get(entry, "name")->text, certificates[index]) == 0;
+            }
+            if (!supplied) {
+                return "Invalid manifest.";
+            }
+        }
     }
     if (writes_files && (files_after + manifest_bytes > HOST_FILES_WRITER_MAX ||
                         !files_room_holds(job->name, true, files_after, 0))) {

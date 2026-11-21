@@ -31,7 +31,8 @@ extern "C" {
  *   POST /api/apps/install?source=<n>&app=<name>   {"files": [...]} as the index
  *                                   lists them: downloaded, checked against their
  *                                   sizes and SHA-256, the manifest read, and put
- *                                   in place by the host loop
+ *                                   in place by the host loop. approved_authorities
+ *                                   counts the package authorities the user approved.
  */
 extern const web_route_t WEB_APPS_ROUTES[];
 extern const size_t      WEB_APPS_ROUTE_COUNT;

@@ -58,6 +58,9 @@ bool wifi_signal(int *rssi);
 /* DEADLINE_WIFI_RETRY has come: time to try the network again. */
 void wifi_retry_is_due(void);
 
+/* DEADLINE_WIFI_RESCUE has come without a usable address. */
+void wifi_rescue_is_due(void);
+
 /* Turns the radio off to save power, or on again to join the stored
  * network. Off is not taken while the device has no network or its setup
  * access point is up: then it has to be found. From any task. */

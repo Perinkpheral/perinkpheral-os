@@ -240,6 +240,7 @@ class Layers(firmwareFolder: File) {
             "components/epd/refresh_policy.c", "components/epd/frame_box.c",
             "components/deadlines/deadline_table.c", "components/input/btn_core.c",
             "components/net/wifi_plan.c", "components/net/wifi_credentials.c", "components/net/wifi_networks.c",
+            "components/net/include/wifi_events.h",
             "components/net/ota_stream.c", "components/net/ota_health.c", "components/net/captive_portal.c",
             "components/qr/wifi_qr.c",
             "components/appsys/answer_headers.c", "components/appsys/app.c", "components/appsys/app_api_data.c", "components/appsys/app_api_draw.c",
@@ -248,7 +249,7 @@ class Layers(firmwareFolder: File) {
             "components/appstore/app_manifest.c", "components/appstore/app_store.c", "components/appstore/app_room.c",
             "components/appstore/catalog.c", "components/appstore/catalog_stream.c", "components/appstore/app_update_schedule.c", "components/appstore/json_tree.c", "components/appstore/poll_schedule.c", "components/appstore/poll_round.c",
             "components/appstore/request_queue.c", "components/appstore/text_template.c", "components/appstore/app_update_policy.c",
-            "main/screens.c", "main/header.c", "main/menu_order.c", "main/log_ring.c", "main/web_settings_json.c",
+            "main/screens.c", "main/header.c", "main/menu_order.c", "main/log_ring.c", "main/web_settings_json.c", "main/question_press.c", "main/web_app_settings.c",
             "main/scene_menu.c", "main/scene_splash.c", "main/scene_confirm.c", "main/scene_working.c",
             "main/scene_storage.c", "main/scene_notify.c",
         )
@@ -267,7 +268,7 @@ class Layers(firmwareFolder: File) {
 
         /** The services: the data, with no idea that a screen exists. */
         private val SERVICES = listOf("status", "sysinfo", "power", "poller", "poller_net", "storage", "glyphs", "app_code",
-            "app_kv", "memory", "settings", "timers", "events", "app_install", "app_update")
+            "app_kv", "memory", "settings", "timers", "events", "app_install", "app_update", "web_connections")
         private val SCREEN_HEADERS = setOf("gfx.h", "gfx_icons.h", "kit.h", "list.h", "notice.h", "wm.h", "scene.h",
             "scenes.h", "screens.h", "header.h")
 
@@ -277,7 +278,8 @@ class Layers(firmwareFolder: File) {
             "host_deliver", "app_kv_set", "host_redraw", "glyphs_install", "glyphs_remove",
             "app_store_commit_all", "app_store_commit_file", "settings_change", "settings_set",
             "settings_save_last_app", "settings_save_menu_order", "launcher_scene", "host_open_from_menu", "host_open_installed_app")
-        private val OTHER_TASKS = listOf("main/web_server.c", "main/web_apps.c", "main/devtools.c", "main/app_install.c")
+        private val OTHER_TASKS = listOf("main/web_server.c", "main/web_apps.c", "main/devtools.c", "main/app_install.c",
+            "main/web_connections.c")
     }
 }
 

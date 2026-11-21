@@ -430,7 +430,7 @@ static void test_system_languages(void)
         appconf_restore_language(&config);
         CHECK(memcmp(&before, &config, sizeof config) == 0);
     }
-    const char *unsupported[] = { "uk", "de", "el", "xx" };
+    const char *unsupported[] = { "uk", "de", "el", "fr", "es", "ja", "xx" };
     for (size_t i = 0; i < sizeof unsupported / sizeof unsupported[0]; i++) {
         strcpy(config.language, unsupported[i]);
         CHECK(!appconf_validate(&config, why, sizeof why));

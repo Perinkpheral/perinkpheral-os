@@ -13,8 +13,8 @@ static char test_root[sizeof "/tmp/perink-install-XXXXXX"];
 static app_manifest_t present;
 static bool has_present, mutex_taken, marker, fail_commit, is_host;
 static bool change_id, change_source, turn_off, mismatch;
-static bool last_retryable;
-static int network_error, downloads, opens, commits, radio_holds;
+static bool last_retryable, id_conflict;
+static int network_error, downloads, opens, commits, radio_holds, approved_authorities;
 static appconf_t config;
 static char source_text[CATALOG_SOURCES_TEXT_MAX];
 static char sequence[64];
@@ -43,6 +43,10 @@ const esp_app_desc_t *esp_app_get_description(void) { static const esp_app_desc_
 bool events_call(events_call_fn run, void *argument) { CHECK(!is_host); is_host = true; run(argument); is_host = false; return true; }
 int launcher_read_installed(app_manifest_t *copy, int capacity) { (void)capacity; if (has_present) copy[0] = present; return has_present ? 1 : 0; }
 const app_manifest_t *launcher_find(const char *name) { CHECK(is_host); return has_present && strcmp(name, "test") == 0 ? &present : NULL; }
+bool launcher_incoming_id_is_unique(const char *name, const char *manifest) {
+    CHECK(is_host); CHECK(strcmp(name, "test") == 0); CHECK(manifest != NULL);
+    return !id_conflict;
+}
 void settings_load_sources(char *text, size_t capacity) { snprintf(text, capacity, "%s", source_text); }
 void settings_read(appconf_t *copy) { *copy = config; }
 bool app_code_has_room(const char *name, size_t size) { (void)name; (void)size; return true; }
@@ -140,10 +144,11 @@ static const char NEW[] = "{\"name\":\"test\",\"title\":\"Test\",\"version\":\"1
 static void reset(const char *previous) {
     char template[] = "/tmp/perink-install-XXXXXX"; char *made = mkdtemp(template); CHECK(made != NULL); strcpy(test_root, made);
     char directory[APP_STORE_PATH_MAX]; snprintf(directory, sizeof directory, "%s/test", test_root); CHECK(mkdir(directory, 0700) == 0);
+    id_conflict = false;
     has_present = previous != NULL; marker = fail_commit = change_id = change_source = turn_off = mismatch = false;
     downloads = opens = commits = radio_holds = network_error = 0; sequence[0] = '\0';
     config.app_auto_update = 1; strcpy(source_text, CATALOG_OFFICIAL_SOURCE);
-    new_manifest = NEW; new_certificate = NULL;
+    new_manifest = NEW; new_certificate = NULL; approved_authorities = 0;
     if (previous != NULL) { CHECK(app_manifest_parse(previous, &present) == APP_MANIFEST_OK); present.id = 1; put_file("manifest.json", previous); put_file("app.wasm", module); }
 }
 static void cleanup(void) {
@@ -153,11 +158,13 @@ static void cleanup(void) {
     CHECK(!mutex_taken && !app_install_app_is_busy("test") && radio_holds == 0);
 }
 static const char *run(bool automatic) {
-    json_t *files = files_for(); app_install_options_t options = { .installed_id = automatic ? 1 : 0, .version = "1.1.0", .retryable = &last_retryable };
+    json_t *files = files_for(); app_install_options_t options = { .installed_id = automatic ? 1 : 0, .version = "1.1.0", .retryable = &last_retryable, .approved_authorities = approved_authorities };
     const char *result = app_install_run(CATALOG_OFFICIAL_SOURCE, 0, "test", files, &options); json_free(files); return result;
 }
 int main(void) {
     app_install_start();
+    reset(NULL); id_conflict = true; CHECK_STR(run(false), "Invalid manifest."); CHECK(commits == 0 && opens == 0 && !last_retryable); cleanup();
+    reset(OLD); id_conflict = true; CHECK_STR(run(true), "Invalid manifest."); CHECK(commits == 0 && opens == 0); cleanup();
     reset(NULL); CHECK(run(false) == NULL); CHECK_STR(sequence, "CRO"); CHECK(opens == 1); cleanup();
     reset(OLD); CHECK(run(false) == NULL); CHECK_STR(sequence, "CR"); CHECK(opens == 0); cleanup();
     reset(OLD); CHECK(run(true) == NULL); CHECK_STR(sequence, "CR"); CHECK(opens == 0); cleanup();
@@ -174,6 +181,22 @@ int main(void) {
     put_file("root.pem", "old authority"); new_certificate = "new authority";
     new_manifest = "{\"name\":\"test\",\"title\":\"Test\",\"version\":\"1.1.0\",\"abi\":3,\"certificates\":[\"root.pem\"]}";
     CHECK_STR(run(true), "Update requires manual installation."); CHECK(commits == 0); new_certificate = "old authority"; CHECK(run(true) == NULL); CHECK(opens == 0); cleanup();
+    /* A hidden authority in a correctly hashed manifest cannot bypass page consent. */
+    reset(NULL);
+    new_certificate = "authority bytes";
+    new_manifest = "{\"name\":\"test\",\"title\":\"Test\",\"version\":\"1.1.0\",\"abi\":3,\"certificates\":[\"root.pem\"]}";
+    CHECK_STR(run(false), "Not confirmed."); CHECK(commits == 0 && !last_retryable);
+    approved_authorities = 2;
+    CHECK_STR(run(false), "Not confirmed."); CHECK(commits == 0);
+    approved_authorities = 1;
+    CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
+    reset(OLD);
+    new_certificate = "authority bytes";
+    new_manifest = "{\"name\":\"test\",\"title\":\"Test\",\"version\":\"1.1.0\",\"abi\":3,\"certificates\":[\"missing.pem\"]}";
+    approved_authorities = 1;
+    CHECK_STR(run(false), "Invalid manifest."); CHECK(commits == 0); cleanup();
+    reset(NULL); approved_authorities = 1;
+    CHECK_STR(run(false), "Not confirmed."); CHECK(commits == 0); cleanup();
     /* A name twice in an entry is refused before anything is downloaded. */
     reset(NULL); data_name = "manifest.json"; new_certificate = NEW;
     CHECK_STR(run(false), "Invalid catalog entry."); CHECK(downloads == 0 && commits == 0); data_name = "root.pem"; cleanup();

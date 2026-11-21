@@ -1098,7 +1098,7 @@ int32_t poll_set_interval(int32_t poll, int32_t seconds)
 /* What request_queue.c counts of a request: its record as the device's 32-bit build lays it out,
  * the address and every header's name and value with their terminators, the body. The queue
  * takes 16 KB of them; here only the application's own are in it. */
-#define REQUEST_RECORD_BYTES 40
+#define REQUEST_RECORD_BYTES 56
 #define REQUEST_QUEUE_BYTES  (16 * 1024)
 
 static int32_t request_bytes(const char *url, const char *headers, int32_t headers_length, int32_t body_length)

@@ -24,9 +24,6 @@
  * after this long is stuck. */
 #define HANDLER_BUDGET_MS 3000
 
-/* The clock is looked at once in this many yields of the interpreter,
- * which yields on every call and every turn of a loop; and after every
- * call of the contract (call_host below), which may take milliseconds. */
 #define YIELDS_PER_CLOCK_CHECK 1024
 
 static const char STOPPED_TOO_LONG[] = "it ran too long";
@@ -51,35 +48,46 @@ _Static_assert(EXPORT_COUNT == 17, "every export of host_api.h is called by the 
 static struct {
     const app_services_t *services;
     int64_t               deadline_ms;
-    uint32_t              yields;
+    unsigned              yields;
 } s_running;
 
-/* The interpreter's hook: called on every call and every turn of a loop
- * of the application; a result that is not m3Err_none traps it. */
-M3Result m3_Yield(void)
+/* Bulk memory work and host calls force a clock read; ordinary interpreter
+ * yields sample it to keep short loops cheap. */
+M3Result m3_YieldMemory(void)
 {
-    if (s_running.services == NULL || ++s_running.yields % YIELDS_PER_CLOCK_CHECK != 0) {
+    if (s_running.services == NULL) {
         return m3Err_none;
     }
     return s_running.services->uptime_ms() > s_running.deadline_ms ? STOPPED_TOO_LONG
                                                                    : m3Err_none;
 }
 
+M3Result m3_Yield(void)
+{
+    if (++s_running.yields % YIELDS_PER_CLOCK_CHECK != 0) {
+        return m3Err_none;
+    }
+    return m3_YieldMemory();
+}
+
 static void start_budget(const app_services_t *services)
 {
     s_running.services = services;
-    s_running.deadline_ms = services->uptime_ms() + HANDLER_BUDGET_MS;
     s_running.yields = 0;
+    s_running.deadline_ms = services->uptime_ms() + HANDLER_BUDGET_MS;
 }
 
 /* A handler this long is felt: the device does nothing else meanwhile. */
 #define HANDLER_SLOW_MS 400
 
-static int64_t stop_budget(void)
+static int64_t stop_budget(M3Result *result)
 {
     int64_t took_ms = s_running.services != NULL
                           ? s_running.services->uptime_ms() - (s_running.deadline_ms - HANDLER_BUDGET_MS)
                           : 0;
+    if (*result == m3Err_none && took_ms > HANDLER_BUDGET_MS) {
+        *result = STOPPED_TOO_LONG;
+    }
     s_running.services = NULL;
     return took_ms;
 }
@@ -329,14 +337,16 @@ static void note_duration(app_t *app, const char *handler, int64_t took_ms)
 
 /* Calls the export `name` - app_on_draw - if the application has it; the
  * log names it without its "app_": on_draw. */
-#define CALL_HANDLER(app, name, ...)                                                   \
-    do {                                                                               \
-        IM3Function handler_ = HANDLER(app, name);                                     \
-        if ((app)->stop_reason == NULL && handler_ != NULL) {                          \
-            start_budget((app)->services);                                             \
-            note_result((app), m3_CallV(handler_, ##__VA_ARGS__));                     \
-            note_duration((app), &#name[sizeof "app_" - 1], stop_budget());            \
-        }                                                                              \
+#define CALL_HANDLER(app, name, ...)                                                      \
+    do {                                                                                  \
+        IM3Function handler_ = HANDLER(app, name);                                        \
+        if ((app)->stop_reason == NULL && handler_ != NULL) {                             \
+            start_budget((app)->services);                                                \
+            M3Result result_ = m3_CallV(handler_, ##__VA_ARGS__);                         \
+            int64_t took_ms_ = stop_budget(&result_);                                     \
+            note_result((app), result_);                                                  \
+            note_duration((app), &#name[sizeof "app_" - 1], took_ms_);                    \
+        }                                                                                 \
     } while (0)
 
 /* Builds the runtime and loads the module into it; the application is
@@ -376,7 +386,7 @@ static void find_data_buffer(app_t *app)
     /* It is the application's code like any handler: on the same budget. */
     start_budget(app->services);
     M3Result result = m3_CallV(data_buffer);
-    stop_budget();
+    stop_budget(&result);
     if (result != m3Err_none) {
         note_result(app, result);
         return;
@@ -432,7 +442,7 @@ static void load_strings(app_t *app)
     }
     start_budget(app->services);
     M3Result result = m3_CallV(strings_buffer);
-    stop_budget();
+    stop_budget(&result);
     if (result != m3Err_none) {
         note_result(app, result);
         return;

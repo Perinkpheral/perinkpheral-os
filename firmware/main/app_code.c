@@ -13,6 +13,7 @@
 
 #include "esp_log.h"
 #include "esp_partition.h"
+#include "events.h"
 
 #include "app_manifest.h"
 #include "app_room.h"
@@ -184,13 +185,8 @@ const uint8_t *app_code_find(const char *apps_root, const char *app_name, size_t
     return (const uint8_t *)header + sizeof(slot_header_t);
 }
 
-bool app_code_has_room(const char *app_name, size_t module_bytes)
+static int free_sectors_for(const char *app_name)
 {
-    if (s_partition == NULL) {
-        return true; /* it will run from its file */
-    }
-    /* Asked from another task than the one that writes: the partition is
-     * walked here, and nothing of the host loop's is touched. */
     int free_sectors = s_sectors;
     for (int sector = 0; sector < s_sectors;) {
         int sectors = piece_at(sector);
@@ -198,12 +194,33 @@ bool app_code_has_room(const char *app_name, size_t module_bytes)
             sector++;
             continue;
         }
-        if (strcmp(header_at(sector)->name, app_name) != 0) {
+        if (app_name == NULL || strcmp(header_at(sector)->name, app_name) != 0) {
             free_sectors -= sectors;
         }
         sector += sectors;
     }
-    return sectors_for(module_bytes) <= free_sectors;
+    return free_sectors;
+}
+
+typedef struct {
+    const char *app_name;
+    int         free_sectors;
+} room_query_t;
+
+static void read_room(void *argument)
+{
+    room_query_t *query = argument;
+    query->free_sectors = free_sectors_for(query->app_name);
+}
+
+bool app_code_has_room(const char *app_name, size_t module_bytes)
+{
+    if (s_partition == NULL) {
+        return true;
+    }
+    /* Header validation and use must not straddle an erase in the host loop. */
+    room_query_t query = { .app_name = app_name };
+    return events_call(read_room, &query) && sectors_for(module_bytes) <= query.free_sectors;
 }
 
 size_t app_code_free_bytes(void)
@@ -211,18 +228,8 @@ size_t app_code_free_bytes(void)
     if (s_partition == NULL) {
         return 0;
     }
-    /* Walked here, as for the room: asked from another task. */
-    int free_sectors = s_sectors;
-    for (int sector = 0; sector < s_sectors;) {
-        int sectors = piece_at(sector);
-        if (sectors == 0) {
-            sector++;
-            continue;
-        }
-        free_sectors -= sectors;
-        sector += sectors;
-    }
-    return (size_t)free_sectors * SECTOR_BYTES;
+    room_query_t query = { 0 };
+    return events_call(read_room, &query) ? (size_t)query.free_sectors * SECTOR_BYTES : 0;
 }
 
 /* A piece goes, all its sectors erased: what lay in its body must not be

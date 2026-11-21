@@ -5,6 +5,7 @@
 #include "words.h"
 #include "priorities.h"
 #include "web_server.h"
+#include "web_connections.h"
 #include "crash_note.h"
 #include "captive_portal.h"
 
@@ -337,18 +338,9 @@ static httpd_handle_t s_server;
 
 /* The heap is critically short: whoever is talking to the page is cut
  * off, and what their requests held comes back. */
-#define CONNECTIONS_MAX 8
-
 static void close_connections(void)
 {
-    int    sockets[CONNECTIONS_MAX];
-    size_t count = CONNECTIONS_MAX;
-    if (s_server == NULL || httpd_get_client_list(s_server, &count, sockets) != ESP_OK) {
-        return;
-    }
-    for (size_t i = 0; i < count; i++) {
-        httpd_sess_trigger_close(s_server, sockets[i]);
-    }
+    web_connections_shed(s_server);
 }
 
 bool web_server_has_memory(httpd_req_t *request, memory_need_t need)
@@ -372,16 +364,9 @@ static atomic_bool s_is_waiting; /* one such request at a time */
 static void answer_waiting(void *argument)
 {
     waiting_t *waiting = argument;
-    httpd_handle_t server = waiting->request->handle;
-    int            socket = httpd_req_to_sockfd(waiting->request);
     esp_err_t      result = waiting->handler(waiting->request);
-    httpd_req_async_handler_complete(waiting->request);
-    /* A failed handler's connection is closed, as the server's own task
-     * closes it: an answer cut short - a catalog whose source stopped - is
-     * known to the page only by that. */
-    if (result != ESP_OK) {
-        httpd_sess_trigger_close(server, socket);
-    }
+    /* A catalog cut short is known to the page only by a closed connection. */
+    web_connections_complete(waiting->request, result);
     free(waiting);
     atomic_store(&s_is_waiting, false);
     vTaskDelete(NULL);

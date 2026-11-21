@@ -127,6 +127,18 @@ static void unload(app_scene_t *self)
     release_module(self);
 }
 
+/* A request's question: another number each time it asks one, 0 when the request asks none. */
+static void take_question(app_scene_t *self, int flags)
+{
+    static uint32_t questions;
+    if ((flags & HOST_REDRAW_QUESTION) == 0) {
+        self->scene.question = 0;
+    } else {
+        questions = questions == UINT32_MAX ? 1 : questions + 1;
+        self->scene.question = questions;
+    }
+}
+
 static void app_scene_enter(scene_t *scene)
 {
     app_scene_t *self = (app_scene_t *)scene;
@@ -135,6 +147,14 @@ static void app_scene_enter(scene_t *scene)
     if (load(self) && !was_loaded) {
         app_attach_session(self->app, &self->session, true);
         app_focus(self->app);
+        /* Restoring a session keeps its question. Consume this redraw before a button can
+         * ask a different question, even when the restored frame has not been drawn yet. */
+        if (app_take_redraw_request(self->app)) {
+            int flags = app_take_redraw_flags(self->app);
+            if (scene->question == 0 || (flags & HOST_REDRAW_QUESTION) == 0) {
+                take_question(self, flags);
+            }
+        }
     }
     take_header(self);
 }
@@ -168,18 +188,6 @@ static void app_scene_leave(scene_t *scene)
 static bool is_running(const app_scene_t *self)
 {
     return self->app != NULL && !app_has_stopped(self->app);
-}
-
-/* A request's question: another number each time it asks one, 0 when the request asks none. */
-static void take_question(app_scene_t *self, int flags)
-{
-    static uint32_t questions;
-    if ((flags & HOST_REDRAW_QUESTION) == 0) {
-        self->scene.question = 0;
-    } else {
-        questions = questions == UINT32_MAX ? 1 : questions + 1;
-        self->scene.question = questions;
-    }
 }
 
 /* What the application asked for while its handler ran. */

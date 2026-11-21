@@ -75,12 +75,12 @@ const char *ota_enter_recovery(bool update)
 
 static bool s_network_stored;
 
-#define CONFIRM_ATTEMPTS_MAX 3
+#define PROBATION_ATTEMPTS_MAX 3
 
 static void probation_task(void *arg)
 {
     (void)arg;
-    int failed_confirmations = 0;
+    int failed_attempts = 0;
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(HEALTH_CHECK_PERIOD_MS));
         wifi_status_t wifi;
@@ -98,33 +98,27 @@ static void probation_task(void *arg)
         if (verdict == OTA_HEALTH_WAIT) {
             continue;
         }
+        esp_err_t err;
         if (verdict == OTA_HEALTH_ROLL_BACK) {
             ESP_LOGE(TAG, "not reachable after %" PRIu32 " s on the new image: rolling back",
                      input.uptime_s);
-            esp_ota_mark_app_invalid_rollback_and_reboot();
-            /* Only reached when there is nothing to roll back to. */
-            ESP_LOGE(TAG, "recovery unavailable; image remains unconfirmed");
-            continue;
-        }
-        esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
-        /* By its number: a release build has no names for errors, and would
-         * say "UNKNOWN ERROR" of ESP_OK. */
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "image confirmed after %" PRIu32 " s", input.uptime_s);
+            err = esp_ota_mark_app_invalid_rollback_and_reboot();
+            ESP_LOGE(TAG, "image not rejected: error 0x%x", (unsigned)err);
         } else {
-            ESP_LOGE(TAG, "image not confirmed after %" PRIu32 " s: error 0x%x", input.uptime_s,
-                     (unsigned)err);
+            err = esp_ota_mark_app_valid_cancel_rollback();
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "image confirmed after %" PRIu32 " s", input.uptime_s);
+                s_on_probation = false;
+                vTaskDelete(NULL);
+            } else {
+                ESP_LOGE(TAG, "image not confirmed after %" PRIu32 " s: error 0x%x", input.uptime_s,
+                         (unsigned)err);
+            }
         }
-        if (err == ESP_OK) {
-            s_on_probation = false;
-            vTaskDelete(NULL);
-        }
-        /* The journal is erased before its new record is written: a write that failed can leave
-         * no record to confirm, and probation would last for ever with every update refused.
-         * Recovery is what the bootloader starts with no record; select it if it can still be
-         * said, and restart into it. */
-        if (++failed_confirmations >= CONFIRM_ATTEMPTS_MAX) {
-            ESP_LOGE(TAG, "the image cannot be confirmed: restarting into recovery");
+        /* A failed journal write can leave no active record to confirm or reject.
+         * With no record the bootloader starts recovery; try selecting it and restart. */
+        if (++failed_attempts >= PROBATION_ATTEMPTS_MAX) {
+            ESP_LOGE(TAG, "probation cannot finish: restarting into recovery");
             const esp_partition_t *factory = esp_partition_find_first(
                 ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
             if (factory != NULL) {

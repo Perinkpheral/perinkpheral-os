@@ -80,6 +80,10 @@ const app_manifest_t *launcher_installed(int *count);
 const app_manifest_t *launcher_find(const char *app_name);
 const app_manifest_t *launcher_find_id(uint32_t app_id);
 
+/* The staged package must not share another installed application's id.
+ * Only in the host loop, before committing its files. */
+bool launcher_incoming_id_is_unique(const char *app_name, const char *manifest);
+
 /* The scene of an installed application; NULL when there is none by that
  * name. */
 scene_t *launcher_app_scene(const char *app_name);

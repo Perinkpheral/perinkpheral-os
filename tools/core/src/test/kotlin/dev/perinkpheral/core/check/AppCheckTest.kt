@@ -271,6 +271,14 @@ object AppCheckTest {
 
         val scratch = Files.createTempDirectory("perinkpheral-app-check-test").toFile()
         try {
+            val system = File(scratch, "system/specimen")
+            specimen.copyRecursively(system)
+            val manifest = File(system, "manifest.json")
+            manifest.writeText(manifest.readText().replace("\"fullscreen\": false", "\"fullscreen\": false, \"system\": true"))
+            File(system, "test/must-not-compile.c").writeText("#error system own tests must be skipped\n")
+            val skipped = checker.run(system.parentFile)
+            check(skipped.lines.single().state == AppCheck.State.NOT_APPLICABLE)
+            check(skipped.lines.single().what == "all" && skipped.failed.isEmpty())
             fun copied(number: Int, broken: Break): File {
                 val copy = File(scratch, "$number/specimen")
                 specimen.copyRecursively(copy)

@@ -36,6 +36,8 @@ _Static_assert(LAUNCHER_INSTALLED_MAX == LAUNCHER_ENTRIES_MAX - BUILT_IN_PAGES,
 static app_manifest_t s_installed[INSTALLED_APPS_MAX];
 static scene_t       *s_app_scenes[INSTALLED_APPS_MAX];
 static int            s_installed_count;
+static uint32_t       s_conflicting_ids[INSTALLED_APPS_MAX];
+static int            s_conflicting_count;
 static volatile uint32_t s_installed_version; /* odd while the list is being read anew */
 
 static menu_entry_t s_entries[LAUNCHER_ENTRIES_MAX];
@@ -97,8 +99,12 @@ static scene_t *system_app_scene(app_manifest_t *manifest, const char *manifest_
 
 #define SHA256_BYTES 32
 
-static uint32_t id_of(const char *app_name, const uint8_t *code, size_t code_size)
+static uint32_t id_of(const char *app_name, const uint8_t *code, size_t code_size,
+                      const char *manifest, const char *suffix)
 {
+    if (manifest == NULL) {
+        return 0;
+    }
     mbedtls_sha256_context hash;
     uint8_t                digest[SHA256_BYTES];
     mbedtls_sha256_init(&hash);
@@ -108,22 +114,23 @@ static uint32_t id_of(const char *app_name, const uint8_t *code, size_t code_siz
     } else {
         /* It has no slot: the module is a file. */
         char path[APP_STORE_PATH_MAX];
-        snprintf(path, sizeof path, "%s/%s/" APP_FILE_MODULE, STORAGE_APPS_ROOT, app_name);
+        snprintf(path, sizeof path, "%s/%s/" APP_FILE_MODULE "%s", STORAGE_APPS_ROOT, app_name, suffix);
         FILE *module = fopen(path, "rb");
-        static uint8_t chunk[HASH_CHUNK_BYTES]; /* only the host loop lists applications */
+        static uint8_t chunk[HASH_CHUNK_BYTES]; /* only the host loop hashes packages */
         size_t count;
         while (module != NULL && (count = fread(chunk, 1, sizeof chunk, module)) > 0) {
             mbedtls_sha256_update(&hash, chunk, count);
         }
+        bool is_read = module != NULL && !ferror(module);
         if (module != NULL) {
-            fclose(module);
+            is_read = fclose(module) == 0 && is_read;
+        }
+        if (!is_read) {
+            mbedtls_sha256_free(&hash);
+            return 0;
         }
     }
-    char *manifest = app_store_read_manifest(STORAGE_APPS_ROOT, app_name);
-    if (manifest != NULL) {
-        mbedtls_sha256_update(&hash, (const uint8_t *)manifest, strlen(manifest));
-        free(manifest);
-    }
+    mbedtls_sha256_update(&hash, (const uint8_t *)manifest, strlen(manifest));
     mbedtls_sha256_finish(&hash, digest);
     mbedtls_sha256_free(&hash);
     /* The first four bytes, the sign bit off: an id is a positive number
@@ -180,13 +187,51 @@ static void read_installed(void)
          * file into memory, as all of them used to be. */
         size_t         size = 0;
         const uint8_t *code = app_code_find(STORAGE_APPS_ROOT, s_installed[i].name, &size);
-        s_installed[i].id = id_of(s_installed[i].name, code, size);
-        s_app_scenes[i] = code != NULL
-                              ? app_scene_create_in_place(&s_installed[i], code, size,
-                                                          app_host_services())
-                              : app_scene_create(&s_installed[i], STORAGE_APPS_ROOT,
-                                                 app_host_services());
+        char *manifest = app_store_read_manifest(STORAGE_APPS_ROOT, s_installed[i].name);
+        s_installed[i].id = id_of(s_installed[i].name, code, size, manifest, "");
+        free(manifest);
     }
+    bool conflicts[INSTALLED_APPS_MAX] = { false };
+    s_conflicting_count = 0;
+    for (int i = 0; i < s_installed_count; i++) {
+        conflicts[i] = app_manifest_id_conflicts(s_installed, s_installed_count,
+                                                s_installed[i].name, s_installed[i].id);
+        if (conflicts[i]) {
+            s_conflicting_ids[s_conflicting_count++] = s_installed[i].id;
+        }
+    }
+    int accepted = 0;
+    for (int i = 0; i < s_installed_count; i++) {
+        if (conflicts[i] || s_installed[i].id == 0) {
+            ESP_LOGE(TAG, "%s: invalid or duplicate application id", s_installed[i].name);
+            continue;
+        }
+        s_installed[accepted] = s_installed[i];
+        size_t size = 0;
+        const uint8_t *code = app_code_find(STORAGE_APPS_ROOT, s_installed[accepted].name, &size);
+        s_app_scenes[accepted] = code != NULL
+                              ? app_scene_create_in_place(&s_installed[accepted], code, size,
+                                                          app_host_services())
+                              : app_scene_create(&s_installed[accepted], STORAGE_APPS_ROOT,
+                                                 app_host_services());
+        accepted++;
+    }
+    s_installed_count = accepted;
+}
+
+/* Called in the host loop before committing the staged package. */
+bool launcher_incoming_id_is_unique(const char *app_name, const char *manifest)
+{
+    uint32_t id = id_of(app_name, NULL, 0, manifest, ".new");
+    if (id == 0 || app_manifest_id_conflicts(s_installed, s_installed_count, app_name, id)) {
+        return false;
+    }
+    for (int i = 0; i < s_conflicting_count; i++) {
+        if (s_conflicting_ids[i] == id) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Only the host loop lists applications and keeps their order. */

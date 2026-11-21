@@ -311,6 +311,7 @@ static void test_suspend_and_resume(void)
     /* it comes back as from a fresh start, and is drawn again */
     wm_resume(&wm);
     CHECK(app.entered == 2 && app.left == 1);
+    CHECK(app.discarded == 0 && wm_has(&wm, &app.scene));
     CHECK(wm_pending_change(&wm) == WM_CHANGED_BY_DATA);
     wm_resume(&wm);
     CHECK(app.entered == 2);
@@ -766,7 +767,7 @@ static void test_back_switch(void)
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_DOWN, true) == BACK_SWITCH_NEXT);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT, true) == BACK_SWITCH_SWALLOW);
-    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
+    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     /* UP and DOWN alone are the scene's. */
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_DOWN, true) == BACK_SWITCH_PASS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
@@ -778,14 +779,14 @@ static void test_back_switch(void)
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_DOWN, true) == BACK_SWITCH_PREVIOUS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_LONG, true) == BACK_SWITCH_SWALLOW);
-    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
+    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     /* UP let go after BACK: still the chord's. */
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_LONG, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     /* A quick chord: the short BACK that ends it is void; the next BACK is whole again. */
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_DOWN, true) == BACK_SWITCH_PASS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_DOWN, true) == BACK_SWITCH_NEXT);
-    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
+    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_SHORT, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_DOWN, true) == BACK_SWITCH_PASS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
@@ -813,7 +814,7 @@ static void test_back_switch_after_a_chord(void)
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_DOWN, true) == BACK_SWITCH_NEXT);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT, true) == BACK_SWITCH_SWALLOW);
-    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
+    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_SHORT, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_LONG, true) == BACK_SWITCH_PASS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_SHORT, true) == BACK_SWITCH_PASS);
@@ -823,7 +824,7 @@ static void test_back_switch_after_a_chord(void)
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_DOWN, true) == BACK_SWITCH_PREVIOUS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_LONG, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_LONG, true) == BACK_SWITCH_SWALLOW);
-    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_PASS);
+    CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_UP, true) == BACK_SWITCH_SWALLOW);
     CHECK(back_switch_press(&state, SCENE_BUTTON_BACK, SCENE_PRESS_LONG, true) == BACK_SWITCH_PASS);
     CHECK(back_switch_press(&state, SCENE_BUTTON_UP, SCENE_PRESS_SHORT, true) == BACK_SWITCH_PASS);
@@ -880,6 +881,20 @@ static void test_beside(void)
     app.next_reaction.kind = SCENE_BACK;
     press(SCENE_BUTTON_BACK, SCENE_PRESS_SHORT);
     CHECK(wm.current == &menu.scene);
+
+    /* A timer's screen_leave has the same sibling-row exit as BACK. */
+    start(&page.scene);
+    wm_open(&wm, &app.scene);
+    wm_open_beside(&wm, &other.scene);
+    other.next_reaction.kind = SCENE_BACK;
+    wm_timer(&wm, 1);
+    CHECK(wm.current == &menu.scene && wm.depth == 0);
+    CHECK(page.discarded == 1 && app.discarded == 1);
+
+    start(&page.scene);
+    wm_open(&wm, &app.scene);
+    wm_open(&wm, &menu.scene);
+    CHECK(wm.depth == 0 && page.discarded == 1 && app.discarded == 1);
 }
 
 int main(void)

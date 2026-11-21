@@ -31,6 +31,7 @@ extern "C" {
 
 typedef struct {
     int      app;    /* the application's id */
+    char     app_name[APP_NAME_MAX + 1];
     int      number; /* what the answer is delivered under: the application's tag */
     uint32_t order;  /* the oldest goes first */
     int64_t  queued_ms;
@@ -57,10 +58,13 @@ typedef enum {
     REQUEST_QUEUE_NO_MEMORY,
 } request_queue_result_t;
 
-request_queue_result_t request_queue_add(request_queue_t *queue, int app, int number, int method,
+request_queue_result_t request_queue_add(request_queue_t *queue, int app, const char *app_name, int number, int method,
                                          const char *url, const app_header_t *headers,
                                          int header_count, const uint8_t *body, int body_length,
                                          int64_t now_ms);
+
+/* An id reused by another package name never inherits queued credentials. */
+bool request_queue_is_owned_by(const queued_request_t *request, int app, const char *app_name);
 
 /* The slot of the request to make next; -1 when none waits. */
 int request_queue_next(const request_queue_t *queue);

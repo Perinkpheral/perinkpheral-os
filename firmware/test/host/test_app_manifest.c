@@ -317,9 +317,15 @@ static void test_a_server_of_the_users_own(void)
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:8123/api", setting_value, NULL));
     CHECK(app_manifest_setting_type(manifest, "server") == APP_SETTING_URL);
     CHECK(app_manifest_setting_type(manifest, "nothing") == -1);
+    CHECK(app_manifest_setting_type("{", "server") == -2);
     char secrets[APP_SETTINGS_MAX][APP_SETTING_KEY_MAX + 1];
     CHECK(app_manifest_secret_keys(manifest, secrets, APP_SETTINGS_MAX) == 1);
     CHECK_STR(secrets[0], "token");
+    CHECK(app_manifest_secret_keys("{}", secrets, APP_SETTINGS_MAX) == 0);
+    CHECK(app_manifest_secret_keys("{", secrets, APP_SETTINGS_MAX) == -1);
+    char preset[APP_SETTING_VALUE_MAX + 1];
+    CHECK(app_manifest_setting_default("{}", "server", preset, sizeof preset) == -1);
+    CHECK(app_manifest_setting_default("{", "server", preset, sizeof preset) == -3);
 
     /* a link is a whole address the user was given, and the whole of a poll's */
     static const char CALENDAR[] =
@@ -517,8 +523,24 @@ static void test_four_default_links(void)
                 "\"type\":\"link\",\"title\":\"Page\",\"default\":\"https://user:pass@example.com/a\"}]}") == APP_MANIFEST_BAD_SETTING);
 }
 
+static void test_id_collisions(void)
+{
+    static app_manifest_t apps[3];
+    strcpy(apps[0].name, "review-a");
+    strcpy(apps[1].name, "review-b");
+    strcpy(apps[2].name, "clock");
+    apps[0].id = apps[1].id = 690456773;
+    apps[2].id = 42;
+    CHECK(app_manifest_id_conflicts(apps, 3, "review-a", apps[0].id));
+    CHECK(app_manifest_id_conflicts(apps, 3, "review-b", apps[1].id));
+    CHECK(!app_manifest_id_conflicts(apps, 3, "clock", apps[2].id));
+    CHECK(!app_manifest_id_conflicts(apps, 1, "review-a", apps[0].id));
+    CHECK(app_manifest_id_conflicts(apps, 1, "review-b", apps[0].id));
+}
+
 int main(void)
 {
+    test_id_collisions();
     test_four_default_links();
     test_list_setting();
     test_complete();

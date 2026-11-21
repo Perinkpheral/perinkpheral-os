@@ -35,7 +35,10 @@ QR      := $(COMP)/qr
 QR_SRCS := $(QR)/qrcodegen/qrcodegen.c $(QR)/wifi_qr.c
 QR_INCS := -I$(QR)/include -I$(QR)/qrcodegen
 TESTS   := test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
-TESTS   += test_answer_headers test_web_settings_json
+TESTS   += test_answer_headers test_web_settings_json test_web_app_settings
+
+test_web_app_settings: test_web_app_settings.c tinytest.h $(MAIN)/web_app_settings.c $(MAIN)/web_app_settings.h $(APPSTORE)/json_tree.c
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -I$(MAIN) -o $@ test_web_app_settings.c $(MAIN)/web_app_settings.c $(APPSTORE)/json_tree.c
 
 test_web_settings_json: test_web_settings_json.c tinytest.h $(MAIN)/web_settings_json.c $(MAIN)/web_settings_json.h $(APPCONF)/appconf.c $(APPSTORE)/json_tree.c
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(APPCONF)/include -o $@ test_web_settings_json.c $(APPCONF)/appconf.c
@@ -44,6 +47,7 @@ test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c
 	$(CC) $(CFLAGS) -I$(APPSYS)/include -I$(SDK) -o $@ test_answer_headers.c $(APPSYS)/answer_headers.c
 
 TESTS   += test_recovery_screen
+TESTS   += test_ota_probation
 TESTS   += test_poll_round test_wifi_credentials test_memory
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks
@@ -51,6 +55,19 @@ TESTS   += test_catalog_stream
 TESTS   += test_app_update_policy
 TESTS   += test_app_update_schedule
 TESTS   += test_app_install test_system_settings
+TESTS   += test_wifi_events test_web_connections test_question_press test_launcher
+
+test_question_press: test_question_press.c tinytest.h $(MAIN)/question_press.c $(MAIN)/question_press.h $(UI)/include/scene.h
+	$(CC) $(CFLAGS) -I$(MAIN) -I$(UI)/include -I$(GFX)/include -o $@ test_question_press.c $(MAIN)/question_press.c
+
+test_launcher: test_launcher.c tinytest.h $(MAIN)/launcher.c $(MAIN)/launcher.h $(APPSTORE)/app_store.c $(MANIFEST_SRCS) $(MAIN)/menu_order.c $(wildcard install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h)
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -D_DARWIN_C_SOURCE -Iinstall_stubs -Ipersistence_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_launcher.c $(APPSTORE)/app_store.c $(MANIFEST_SRCS) $(MAIN)/menu_order.c -lm
+
+test_wifi_events: test_wifi_events.c tinytest.h $(NET)/include/wifi_events.h $(NET)/include/wifi_plan.h $(NET)/wifi_plan.c
+	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_events.c $(NET)/wifi_plan.c
+
+test_web_connections: test_web_connections.c tinytest.h $(MAIN)/web_connections.c $(MAIN)/web_connections.h $(wildcard web_stubs/*.h web_stubs/lwip/*.h)
+	$(CC) $(CFLAGS) -Iweb_stubs -I$(MAIN) -o $@ test_web_connections.c $(MAIN)/web_connections.c
 
 SETTINGS_APP := ../../system/settings
 SETTINGS_HEADERS := build/settings-headers
@@ -69,7 +86,7 @@ test_app_update_schedule: test_app_update_schedule.c tinytest.h $(APPSTORE)/app_
 .DEFAULT_GOAL := test
 PERSISTENCE_STUBS := $(wildcard persistence_stubs/*.h)
 
-test_app_storage: test_app_storage.c tinytest.h $(PERSISTENCE_STUBS) $(MAIN)/app_code.c $(MAIN)/app_code.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(APPSTORE)/app_room.c $(APPSTORE)/app_manifest.c $(APPSTORE)/json_tree.c
+test_app_storage: test_app_storage.c tinytest.h $(PERSISTENCE_STUBS) $(MAIN)/app_code.c $(MAIN)/app_code.h $(MAIN)/events.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(APPSTORE)/app_room.c $(APPSTORE)/app_manifest.c $(APPSTORE)/json_tree.c
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -D_DARWIN_C_SOURCE -Ipersistence_stubs -o $@ test_app_storage.c $(APPSTORE)/app_room.c $(MANIFEST_SRCS) -lm
 
 test_app_kv: test_app_kv.c tinytest.h $(PERSISTENCE_STUBS) $(MAIN)/app_kv.c $(MAIN)/app_kv.h $(MAIN)/settings.h $(MAIN)/storage.h $(APPSTORE)/app_manifest.c $(APPSTORE)/json_tree.c
@@ -156,11 +173,18 @@ build/wasm3/%.o: $(WASM3)/%.c
 	@mkdir -p build/wasm3
 	$(CC) $(WASM3_FLAGS) -c -o $@ $<
 
+build/wasm3/m3_compile.o: $(COMP)/wasm3/m3_budget_compile.c $(wildcard $(WASM3)/*.h) $(WASM3)/m3_compile.c
+	@mkdir -p build/wasm3
+	$(CC) $(WASM3_FLAGS) -I$(WASM3) -c -o $@ $<
+
 # A file as the bytes of a C array, by POSIX od: xxd is not everywhere.
 c_bytes = od -An -v -tx1 $(1) | sed -e 's/\([0-9a-f][0-9a-f]\)/0x\1,/g'
 
 build/probe/app.wasm: apps/probe/probe.c apps/probe/manifest.json $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(wildcard $(SDK)/lib/*) $(TOOLS)
 	$(MKAPP) apps/probe --out build/probe
+
+build/settings/app.wasm: $(SETTINGS_APP)/settings.c $(SETTINGS_APP)/manifest.json $(SETTINGS_APP)/cities.h $(wildcard $(SETTINGS_APP)/strings/*.json $(SDK)/host/*.h $(SDK_LIB)/*) $(SDK)/host_api.h $(TOOLS)
+	$(MKAPP) $(SETTINGS_APP) --out build/settings
 
 build/probe_wasm.h: build/probe/app.wasm
 	(echo "static const unsigned char probe_wasm[] = {"; $(call c_bytes,$<); \
@@ -225,6 +249,9 @@ test_catalog: test_catalog.c tinytest.h $(APPSTORE)/catalog.c $(APPSTORE)/includ
 test_ota: test_ota.c tinytest.h ../../../recovery/main/control.h $(NET)/ota_stream.c $(NET)/ota_health.c $(wildcard $(NET)/include/ota_*.h)
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_ota.c $(NET)/ota_stream.c $(NET)/ota_health.c
 
+test_ota_probation: test_ota_probation.c tinytest.h $(MAIN)/ota.c $(MAIN)/ota.h $(NET)/ota_health.c $(wildcard $(NET)/include/ota_*.h ota_stubs/*.h ota_stubs/freertos/*.h recovery_stubs/*.h memory_stubs/*.h install_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) -Iota_stubs -Irecovery_stubs -Imemory_stubs -I$(MAIN) -I$(NET)/include -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(SDK_LIB) -o $@ test_ota_probation.c $(MAIN)/ota.c $(NET)/ota_health.c
+
 test_recovery_ota: test_recovery_ota.c tinytest.h ../../../recovery/main/ota.c ../../../recovery/main/ota.h ../../../recovery/main/control.h $(wildcard recovery_stubs/*.h) $(NET)/ota_stream.c $(NET)/include/ota_stream.h $(NET)/include/ota_handoff.h
 	$(CC) $(CFLAGS) -DRECOVERY_LAYOUT=0x1234abcd -Irecovery_stubs -I$(NET)/include -o $@ test_recovery_ota.c ../../../recovery/main/ota.c $(NET)/ota_stream.c
 
@@ -254,10 +281,10 @@ test_polls: test_polls.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c
 		$(APPSTORE)/poll_schedule.c -lm
 
 # mkdtemp and friends are POSIX, not C11.
-test_delivery: test_delivery.c tinytest.h build/host_imports.inc build/probe/app.wasm $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
-	$(CC) $(CFLAGS) -Ibuild -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(WASM3) \
+test_delivery: test_delivery.c tinytest.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
+	$(CC) $(CFLAGS) -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(WASM3) \
 		-Dd_m3MaxLinearMemoryPages=1 $(QR_INCS) -o $@ test_delivery.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
-		$(APPSTORE)/app_store.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
+		$(MAIN)/question_press.c $(APPSTORE)/app_store.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
 
 test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store.c \

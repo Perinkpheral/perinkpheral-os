@@ -40,19 +40,23 @@ SOURCES := sim.c \
            $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c \
            $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(COMP)/words/words.c $(GFX)/font_square.c \
            $(FW)/main/screens.c $(COMP)/appconf/appconf.c $(FW)/main/header.c $(FW)/main/scene_menu.c $(COMP)/deadlines/deadline_table.c $(QR)/qrcodegen/qrcodegen.c
-WASM3_SOURCES := $(wildcard $(WASM3)/*.c)
+WASM3_SOURCES := $(filter-out $(WASM3)/m3_compile.c,$(wildcard $(WASM3)/*.c)) $(COMP)/wasm3/m3_budget_compile.c
+
+WASM3_DEPS := $(WASM3_SOURCES) $(WASM3)/m3_compile.c $(wildcard $(WASM3)/*.h)
 
 # The page of the tools, which the simulator serves at its address.
 PAGE := $(ROOT)/tools/cli/src/main/resources/dev/perinkpheral/cli/page.html
 
-$(BUILD)/perinkpheral-sim: $(SOURCES) $(WASM3_SOURCES) $(BUILD)/host_imports.inc $(BUILD)/page.inc
+$(BUILD)/perinkpheral-sim: $(SOURCES) $(WASM3_DEPS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
 	mkdir -p $(BUILD)/wasm3
 	for source in $(WASM3_SOURCES); do \
-		$(CC) $(WASM3_FLAGS) $(ARCH) -c $$source -o $(BUILD)/wasm3/$$(basename $$source .c).o || exit 1; \
+		object=$$(basename $$source .c); \
+		if [ "$$object" = m3_budget_compile ]; then object=m3_compile; fi; \
+		$(CC) $(WASM3_FLAGS) $(ARCH) -I$(WASM3) -c $$source -o $(BUILD)/wasm3/$$object.o || exit 1; \
 	done
 	$(CC) $(CFLAGS) $(ARCH) -o $@ $(SOURCES) $(BUILD)/wasm3/*.o $(LDLIBS) $(LDFLAGS)
 
-$(BUILD)/test-jobs: test_jobs.c $(SOURCES) $(WASM3_SOURCES) $(BUILD)/host_imports.inc $(BUILD)/page.inc
+$(BUILD)/test-jobs: test_jobs.c $(SOURCES) $(WASM3_DEPS) $(BUILD)/host_imports.inc $(BUILD)/page.inc
 	$(MAKE) $(BUILD)/perinkpheral-sim
 	$(CC) $(CFLAGS) -o $@ test_jobs.c $(filter-out sim.c,$(SOURCES)) $(BUILD)/wasm3/*.o $(LDLIBS) $(LDFLAGS)
 

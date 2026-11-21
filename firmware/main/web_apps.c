@@ -3,6 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  */
 #include "web_apps.h"
+#include "web_app_settings.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -216,27 +217,6 @@ static bool add_trusts(json_t *app, const char *app_name, const json_t *manifest
     return true;
 }
 
-static bool add_setting_value(json_t *values, const json_t *setting, const char *app_name,
-                              const char *key, const char *type)
-{
-    char value[APP_SETTING_VALUE_MAX + 1];
-    int32_t length = app_kv_get(app_name, key, value, sizeof value - 1);
-    value[length > 0 ? length : 0] = '\0';
-    bool is_link = strcmp(type, "link") == 0;
-    if (!is_link && strcmp(type, "secret") != 0) {
-        /* Nothing stored is left out, for the default to show; an empty value is the user's. */
-        return length == HOST_ERR_NOT_FOUND || json_add_string(values, key, value) != NULL;
-    }
-
-    /* Only a manifest default is public. Custom links, like secrets, are
-     * represented by whether they have been set. */
-    const json_t *preset = json_get(setting, "default");
-    if (is_link && length == HOST_ERR_NOT_FOUND && json_is_string(preset)) {
-        return json_add_string(values, key, preset->text) != NULL;
-    }
-    return json_add_bool(values, key, value[0] != '\0') != NULL;
-}
-
 static bool add_settings(json_t *app, json_t *manifest, const json_t *translation, const char *app_name)
 {
     static const char *const FACTS[] = { "hosts", "polls", "intents", "system", "writes_files",
@@ -268,7 +248,7 @@ static bool add_settings(json_t *app, json_t *manifest, const json_t *translatio
         const json_t *type = json_get(setting, "type");
         if (json_is_string(key) && json_is_string(type) &&
             (!translate_setting(setting, json_get(json_get(translation, "settings"), key->text)) ||
-             !add_setting_value(values, setting, app_name, key->text, type->text))) {
+             !web_app_settings_value(values, setting, app_name, key->text, type->text))) {
             return false;
         }
     }
@@ -369,43 +349,6 @@ typedef struct {
     char         message[WEB_MESSAGE_MAX];
 } app_settings_command_t;
 
-/* Whether the request puts another server where one was set. */
-static bool references_other_server(const char *manifest, const char *app_name, const json_t *wanted)
-{
-    const json_t *value;
-    json_for_each(value, wanted)
-    {
-        int type = app_manifest_setting_type(manifest, value->name);
-        if (type != APP_SETTING_URL && type != APP_SETTING_LINK) {
-            continue;
-        }
-        char stored[APP_SETTING_VALUE_MAX + 1];
-        int32_t length = app_kv_get_or_default(app_name, value->name, stored, sizeof stored - 1);
-        stored[length > 0 ? length : 0] = '\0';
-        /* Nothing stored is the manifest's default: that is the server the token went to. */
-        if (stored[0] != '\0' && strcmp(stored, value->text) != 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/* The token was given for the server that was there. Whoever points the
- * application at another one - anybody on the network can - does not get
- * the token sent to it: what is not given anew goes. */
-static void clear_stale_secrets(const char *manifest, const char *app_name,
-                                     const json_t *wanted)
-{
-    char keys[APP_SETTINGS_MAX][APP_SETTING_KEY_MAX + 1];
-    int  count = app_manifest_secret_keys(manifest, keys, APP_SETTINGS_MAX);
-    for (int i = 0; i < count; i++) {
-        const json_t *given = json_get(wanted, keys[i]);
-        if (!json_is_string(given) || given->text[0] == '\0') {
-            app_kv_set(app_name, keys[i], "", 0);
-        }
-    }
-}
-
 static void change_app_settings(void *argument)
 {
     app_settings_command_t *command = argument;
@@ -418,32 +361,18 @@ static void change_app_settings(void *argument)
         command->status = "400 Bad Request";
         snprintf(command->message, sizeof command->message, "Invalid value: %s.", problem);
     } else {
-        const json_t *value;
-        bool         stored = true;
-        if (references_other_server(manifest, command->app_name, command->wanted)) {
-            clear_stale_secrets(manifest, command->app_name, command->wanted);
-        }
-        bool    is_full = false;
-        int32_t written = 0;
-        json_for_each(value, command->wanted)
-        {
-            int32_t result = app_kv_set_setting(command->app_name, value->name, value->text);
-            is_full = is_full || result == HOST_ERR_NO_SPACE;
-            stored = result == HOST_OK && stored;
-            written += result == HOST_OK;
-        }
-        /* What was written is the application's to know of, all of it or
-         * not: the store keeps what fitted, and the user is told the rest. */
-        if (written > 0) {
+        bool changed;
+        int32_t result = web_app_settings_save(manifest, command->app_name, command->wanted, &changed);
+        if (changed) {
             ESP_LOGI(TAG, "settings of \"%s\" changed", command->app_name);
             app_delivery_t changed = { .kind = APP_DELIVERY_SETTINGS };
             poller_hurry(command->app_name);
             host_deliver(command->app_name, &changed);
         }
-        if (stored) {
+        if (result == HOST_OK) {
             command->status = "200 OK";
             snprintf(command->message, sizeof command->message, "Saved.");
-        } else if (is_full) {
+        } else if (result == HOST_ERR_NO_SPACE) {
             command->status = "507 Insufficient Storage";
             snprintf(command->message, sizeof command->message, "Not enough storage.");
         } else {
@@ -723,13 +652,17 @@ static esp_err_t handle_install(httpd_req_t *request)
     json_t *json = body != NULL ? json_parse(body) : NULL;
     free(body);
     const json_t *files = json_get(json, "files"), *version = json_get(json, "version");
-    if (!app_install_files_are_valid(files) || (version != NULL && !json_is_string(version))) {
+    const json_t *authorities = json_get(json, "approved_authorities");
+    if (!app_install_files_are_valid(files) || (version != NULL && !json_is_string(version)) ||
+        (authorities != NULL && (!json_is_number(authorities) || authorities->number < 0 ||
+                                 authorities->number > MANIFEST_CERTIFICATES_MAX))) {
         json_free(json);
         return web_send_message(request, "400 Bad Request", "error", "Invalid request.");
     }
     app_install_options_t options = {
         .version = version != NULL ? version->text : NULL,
         .confirm_system = confirm_system_install,
+        .approved_authorities = authorities != NULL ? (int)authorities->number : 0,
     };
     const char *problem = app_install_run(source, source_index, app_name, files, &options);
     json_free(json);

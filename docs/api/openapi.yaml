@@ -166,7 +166,6 @@ components:
       properties:
         name: { type: string }
         title: { type: string }
-        author: { type: string, description: "Author from the manifest; absent in legacy packages" }
         version: { type: string }
         description: { type: string, description: "Translated description, when provided" }
         icon: { type: array, items: { type: string }, description: 11 rows of 11 characters }
@@ -191,10 +190,13 @@ components:
             string and overrides the default. A secret or custom link is returned only as set (true) or
             not (false). An absent link with a public manifest default returns that
             default as text; a stored empty link returns false and overrides the default.
+            Oversized secrets and links are set (true). Unavailable ordinary values are
+            omitted and their setting declaration has unavailable: true; the page does not save them.
             Hidden is a form rule, not a restriction on API reads or writes.
     AppSetting:
       type: object
       properties:
+        unavailable: { type: boolean, readOnly: true, description: Stored value cannot be read; exclude this field from saving }
         key: { type: string }
         title: { type: string }
         type: { type: string, enum: [text, secret, number, choice, toggle, place, url, link, list] }
@@ -243,11 +245,14 @@ paths:
       summary: The device's web page
       responses:
         "200":
-          description: The page, gzip-compressed HTML, with an ETag that names the firmware image
+          description: >-
+            In application mode, gzip-compressed HTML with an ETag naming the firmware image
+            and Cache-Control no-cache. In recovery, plain HTML with Cache-Control no-store,
+            no ETag and no conditional response.
           content:
             text/html: {}
         "304":
-          description: The browser's copy, named in If-None-Match, is this firmware's page
+          description: Application mode only - the browser's copy, named in If-None-Match, is this firmware's page
 
   /api/status:
     get:
@@ -467,6 +472,12 @@ paths:
               type: object
               properties:
                 version: { type: string, description: Expected catalog version; a changed downloaded version is refused }
+                approved_authorities:
+                  type: integer
+                  minimum: 0
+                  maximum: 2
+                  default: 0
+                  description: Number of package certificate authorities approved by the user; must match the downloaded manifest. Every certificate must be among the hashed files.
                 files:
                   type: array
                   minItems: 2

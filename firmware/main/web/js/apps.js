@@ -102,7 +102,7 @@ function settingFields(app) {
     .flatMap(place => [place.latitude, place.longitude]));
   const hidden = {}, parts = [];
   for (const setting of app.settings) {
-    if (!filled.has(setting.key)) continue;
+    if (!filled.has(setting.key) || setting.unavailable) continue;
     hidden[setting.key] = make("input", { type: "hidden", value: settingValue(app, setting.key) ?? "" });
     hidden[setting.key].dataset.key = setting.key;
     hidden[setting.key].dataset.type = setting.type;
@@ -111,8 +111,10 @@ function settingFields(app) {
   for (const setting of app.settings) {
     /* "hidden": set by something else - an integration, a companion page - and not typed here. */
     if (filled.has(setting.key) || setting.hidden) continue;
-    const field = settingField(app, setting);
-    if (setting.type === "place")
+    const unavailable = setting.unavailable || (setting.type === "place" &&
+      app.settings.some(part => [setting.latitude, setting.longitude].includes(part.key) && part.unavailable));
+    const field = settingField(app, unavailable ? { ...setting, unavailable: true } : setting);
+    if (setting.type === "place" && !unavailable)
       field[1] = placeField(field[1], hidden[setting.latitude], hidden[setting.longitude]);
     parts.push(...field);
   }
@@ -135,6 +137,9 @@ function settingField(app, setting) {
   const id = "setting-" + setting.key;
   const value = settingValue(app, setting.key) ?? "";
   const label = make("label", { htmlFor: id, textContent: setting.title });
+  if (setting.unavailable) {
+    return [label, make("input", { id, disabled: true, placeholder: "Unavailable" })];
+  }
   let input;
   if (setting.type === "list") {
     input = listField(value);
@@ -363,7 +368,8 @@ async function performInstall(button, offer) {
   const work = async () => {
     const dismiss = toast(t(have ? "Updating {0}…" : "Installing {0}…", offerSays(offer, "title")), "busy passive", true);
     try {
-      await askForApp(url, post({ files: offer.app.files, version: offer.app.version }));
+      await askForApp(url, post({ files: offer.app.files, version: offer.app.version,
+                                  approved_authorities: trusts.length }));
       if (!appInstallClosed)
         toast(have ? t("{0} updated to {1}.", offerSays(offer, "title"), offer.app.version) : "Installed.");
     } catch (error) {
@@ -554,7 +560,8 @@ function drawCatalog() {
     });
   const view = byId("catalog-rows");
   /* Until the sources answer the catalog says so, over whatever it has to show meanwhile. */
-  const state = catalogsRead ? (offers.length ? "" : "empty") : stateOf("catalog");
+  const state = stateOf("catalog") === "failed" ? "failed"
+    : catalogsRead ? (offers.length ? "" : "empty") : stateOf("catalog");
   const note = state ? sameNote(view, state) || stateNote(state, loadCatalogs)
     : rows.length ? null : make("p", { className: "note", textContent: "Nothing found." });
   view.replaceChildren(...(note ? [note] : []), ...rows);
@@ -756,20 +763,23 @@ async function readCatalogs(redrawSources = true) {
     } catch (error) {
       if (generation !== catalogGeneration || sourcesSaving) return;
       silent.push({ source: from[source], error });
+      /* A later source may reuse a name owned by the unavailable source. */
+      break;
     }
   }
-  /* No source answered: what was read before stays, and a catalog never read says it failed. */
-  if (found.length || !silent.length) {
-    offered = found;
-    offeredSources = from;
-    catalogsRead = true;
-    loadState.catalog = "ready";
-  } else if (!catalogsRead) {
-    loadState.catalog = "failed";
+  if (silent.length) {
+    catalogGeneration++;
+    cancelQueuedInstalls();
+    found.forEach(offer => { offer.generation = catalogGeneration; });
   }
+  /* Sources before the first failure have established precedence for their names. */
+  offered = found;
+  offeredSources = from;
+  catalogsRead = true;
+  loadState.catalog = silent.length ? "failed" : "ready";
   drawTiles();
   /* Kept only once it was drawn: what cannot be drawn must not come back at the next visit. */
-  if (loadState.catalog === "ready" && offered === found) keepCatalog(pageStore(), from, found);
+  if (!silent.length && loadState.catalog === "ready" && offered === found) keepCatalog(pageStore(), from, found);
   for (const { source, error } of silent)
     toast(error.status === 503 ? error.message : t("Source unavailable: {0}", source), "error");
   loadRemoved();
@@ -830,6 +840,8 @@ byId("refresh-catalogs").addEventListener("click", event => busy(event.target, l
 
 byId("app-settings").addEventListener("submit", async event => {
   event.preventDefault();
+  const save = event.submitter;
+  if (save.disabled) return;
   /* A setting may be named anything a manifest allows, "__proto__" too. */
   const values = Object.create(null);
   for (const input of byId("app-fields").querySelectorAll("[data-type=place]")) {
@@ -853,12 +865,22 @@ byId("app-settings").addEventListener("submit", async event => {
   const generation = appDialogGeneration;
   const name = appInDialog.name;
   const url = "/api/apps/settings?app=" + encodeURIComponent(name);
-  if (await send(event.submitter, url, post(values))) {
-    try {
-      await loadApps();
-    } finally {
-      /* A same-app form reopened during the save still has the old values. */
-      if (generation === appDialogGeneration || appInDialog.name === name) byId("app-dialog").close();
+  const controls = [...byId("app-fields").querySelectorAll("input, select, textarea, button")]
+    .filter(control => !control.disabled);
+  controls.forEach(control => { control.disabled = true; });
+  try {
+    if (await send(save, url, post(values))) {
+      /* send() releases its button before the list reloads; edits would be lost on close. */
+      save.disabled = true;
+      try {
+        await loadApps();
+      } finally {
+        /* A same-app form reopened during the save still has the old values. */
+        if (generation === appDialogGeneration || appInDialog.name === name) byId("app-dialog").close();
+      }
     }
+  } finally {
+    controls.forEach(control => { control.disabled = false; });
+    save.disabled = false;
   }
 });

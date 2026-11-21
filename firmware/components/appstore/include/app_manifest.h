@@ -232,14 +232,15 @@ bool app_manifest_allows_url(const char *json, const char *url,
 /* The "default" of the setting under `key`, as it would be stored - a
  * list's items with a line break between them - terminated in `value`.
  * Returns its length; -1 when the setting has none or the manifest no such
- * setting, -2 when it does not fit. */
+ * setting, -2 when it does not fit, -3 when the manifest cannot be parsed. */
 int app_manifest_setting_default(const char *json, const char *key, char *value, size_t value_size);
 
 /* The type of the setting under `key`, an app_setting_type_t; -1 when the
- * manifest has none. */
+ * manifest has none, -2 when the manifest cannot be parsed. */
 int app_manifest_setting_type(const char *json, const char *key);
 
-/* The keys of the settings of the "secret" type; returns how many. */
+/* The keys of the settings of the "secret" type; returns how many,
+ * or -1 when the manifest cannot be parsed. */
 int app_manifest_secret_keys(const char *json, char keys[][16], int capacity);
 
 /* The files of the certificate authorities the application trusts beside
@@ -259,6 +260,10 @@ bool app_manifest_is_same_host(const char *url, const char *other_url);
 
 /* 1-13 of a-z, 0-9, - and _: what an application may be called. */
 bool app_manifest_is_valid_name(const char *name);
+
+/* Id-based services must never resolve one application's work to another. */
+bool app_manifest_id_conflicts(const app_manifest_t *apps, int count,
+                               const char *name, uint32_t id);
 
 #ifdef __cplusplus
 }

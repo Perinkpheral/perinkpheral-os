@@ -14,6 +14,7 @@
 #include "app_store.h"
 #include "host_api.h"
 #include "wm.h"
+#include "question_press.h"
 
 #include "tinytest.h"
 
@@ -328,6 +329,10 @@ static void test_settings_discard_an_unfinished_poll(void)
     CHECK(state.in_background == NULL && !state.is_mid_answer && !wm.suspended);
     deliver_piece(HOST_DATA_CHUNK_MAX, HOST_DATA_LAST, 2);
     CHECK(wm.current == &menu.scene && app_scene_app(probe) == NULL);
+    CHECK(wm_pending_change(&wm) == WM_CHANGED_BY_DATA);
+    wm_shown(&wm);
+    deliver_piece(HOST_DATA_CHUNK_MAX, 0, 2);
+    CHECK(app_scene_app(probe) == NULL && wm_pending_change(&wm) == WM_CLEAN);
 
     static uint8_t bytes[1] = { 7 };
     app_delivery_t explicit_request = { .kind = APP_DELIVERY_PIECE, .request = HOST_REQUEST_FIRST,
@@ -450,6 +455,12 @@ static void test_notification_consumption(void)
     CHECK(rename(unavailable, module) == 0);
     app_deliver(&state, &wm, probe, &notification, 0);
     CHECK(consumed == 1);
+    /* A background trap must restore the foreground instead of opening an error scene. */
+    notification.kind = APP_DELIVERY_UPDATED;
+    app_deliver(&state, &wm, probe, &notification, 0);
+    CHECK(consumed == 2 && app_scene_app(probe) == NULL);
+    CHECK(wm.current == &menu.scene && !wm.suspended);
+    consumed = 1;
     /* Update's handler traps. The load hook has already consumed it. */
     start_on(probe);
     notification.kind = APP_DELIVERY_UPDATED;
@@ -632,6 +643,79 @@ static void test_scene_inversion_lifetime(void)
     app_scene_destroy(owner);
 }
 
+static int settings_actions;
+static const char *settings_firmware(void) { return "0.1.79"; }
+static int32_t record_settings_action(int action)
+{
+    CHECK(action == SYS_DO_RESTART);
+    settings_actions++;
+    return HOST_OK;
+}
+
+static void test_question_survives_background_delivery(void)
+{
+    start_on(&menu.scene);
+    char *text = app_store_read_manifest("build", "settings");
+    app_manifest_t manifest;
+    CHECK(text != NULL && app_manifest_parse(text, &manifest) == APP_MANIFEST_OK);
+    free(text);
+    app_services_t services = SERVICES;
+    services.firmware_version = settings_firmware;
+    services.system_do = record_settings_action;
+    scene_t *settings = app_scene_create(&manifest, "build", &services);
+    CHECK(settings != NULL);
+    wm_open(&wm, settings);
+    /* Restart is the sixth row of Settings. */
+    for (int row = 0; row < 5; row++) {
+        wm_button(&wm, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT);
+    }
+    wm_button(&wm, SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    static uint8_t bits[400 * 300 / 8];
+    gfx_t surface;
+    gfx_init(&surface, bits, 400, 300);
+    wm_draw(&wm, &surface);
+    CHECK(settings->question != 0);
+    uint32_t restart_question = settings->question;
+    question_press_t presses = {0};
+    question_press_shown(&presses, settings, 100);
+    CHECK(!question_press_accepts(&presses, settings, SCENE_BUTTON_OK, SCENE_PRESS_DOWN, 101));
+
+    deliver_values(102);
+    CHECK(wm.current == settings && !wm.suspended);
+    wm_draw(&wm, &surface);
+    CHECK(settings->question == restart_question);
+    question_press_shown(&presses, settings, 103);
+    /* A second restore is consumed before KEYUP even if no frame was drawn. */
+    deliver_values(104);
+    CHECK(question_press_accepts(&presses, settings, SCENE_BUTTON_OK, SCENE_PRESS_UP, 105));
+    wm_button(&wm, SCENE_BUTTON_OK, SCENE_PRESS_UP);
+    CHECK(settings->question == restart_question);
+    CHECK(question_press_accepts(&presses, settings, SCENE_BUTTON_OK, SCENE_PRESS_SHORT, 105));
+    wm_button(&wm, SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    CHECK(settings_actions == 1 && settings->question == 0);
+
+    wm_close(&wm, settings);
+    wm_open(&wm, settings);
+    for (int row = 0; row < 5; row++) {
+        wm_button(&wm, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT);
+    }
+    wm_button(&wm, SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    CHECK(settings->question != 0 && settings->question != restart_question);
+    uint32_t reopened_question = settings->question;
+    wm_draw(&wm, &surface);
+    question_press_shown(&presses, settings, 106);
+    CHECK(!question_press_accepts(&presses, settings, SCENE_BUTTON_OK, SCENE_PRESS_DOWN, 107));
+    wm_button(&wm, SCENE_BUTTON_BACK, SCENE_PRESS_SHORT);
+    CHECK(settings->question == 0);
+    wm_button(&wm, SCENE_BUTTON_DOWN, SCENE_PRESS_SHORT);
+    wm_button(&wm, SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    CHECK(settings->question != 0 && settings->question != reopened_question);
+    CHECK(!question_press_accepts(&presses, settings, SCENE_BUTTON_OK, SCENE_PRESS_SHORT, 108));
+    CHECK(settings_actions == 1);
+    wm_close(&wm, settings);
+    app_scene_destroy(settings);
+}
+
 int main(void)
 {
     install_probe();
@@ -651,5 +735,6 @@ int main(void)
     test_scene_state_lifetime();
     test_headers_across_background_unloads();
     test_scene_inversion_lifetime();
+    test_question_survives_background_delivery();
     REPORT();
 }

@@ -17,7 +17,9 @@ async function testDialog() {
         addEventListener(event, handler) { this.listeners[event] = handler; },
         replaceChildren(...children) { this.children = children; },
         querySelectorAll(selector) {
-          return selector.includes("place") ? this.children.filter(input => input.dataset.type === "place") : this.children;
+          if (selector.includes("place")) return this.children.filter(input => input.dataset.type === "place");
+          if (selector === "[data-key]") return this.children.filter(input => input.dataset.key);
+          return this.children;
         },
         showModal() { this.open = true; }, close() { this.open = false; },
       });
@@ -36,12 +38,39 @@ async function testDialog() {
   vm.runInContext(apps.slice(apps.indexOf("let appInDialog"), apps.indexOf("/* ---- the companion")), context);
   vm.runInContext(apps.slice(apps.indexOf('byId("app-settings").addEventListener')), context);
   const dialog = context.document.getElementById("app-dialog");
-  const input = value => ({ value, dataset: { key: "text", type: "text" } });
+  const input = value => ({ value, disabled: false, dataset: { key: "text", type: "text" } });
   const first = { name: "first", fields: [input("first edit")] };
   const second = { name: "second", fields: [input("newer edit")] };
+  const save = { textContent: "Save", disabled: false, style: {}, offsetWidth: 80,
+    classList: { add() {}, remove() {} } };
   const submit = () => context.document.getElementById("app-settings").listeners.submit({ preventDefault() {},
-    submitter: { textContent: "Save", style: {}, offsetWidth: 80, classList: { add() {}, remove() {} } },
+    submitter: save,
   });
+
+  const choice = { value: "metric", disabled: false, dataset: { key: "units", type: "choice" } };
+  const addRow = { disabled: false, dataset: {} };
+  const unavailable = { disabled: true, dataset: {} };
+  const locked = { name: "locked", fields: [input("saved edit"), choice, addRow, unavailable] };
+  context.openAppSettings(locked);
+  const pending = submit();
+  const requestCount = requests.length;
+  const assertLocked = async phase => {
+    assert.equal(save.disabled, true, "Save stays disabled during " + phase);
+    assert(locked.fields.every(control => control.disabled), "fields stay disabled during " + phase);
+    await submit();
+    assert.equal(requests.length, requestCount, "a second submit cannot POST during " + phase);
+  };
+  await assertLocked("the request");
+  requests.at(-1).reply(true); await flush();
+  await assertLocked("the success pause");
+  pauses.shift()(); await flush();
+  assert.equal(dialog.open, true, "the form waits for the delayed app list reload");
+  await assertLocked("the app list reload");
+  finishReload(); await pending;
+  assert.equal(dialog.open, false, "the saved form closes after the reload");
+  assert.equal(save.disabled, false, "Save is restored for the next form");
+  assert(locked.fields.slice(0, -1).every(control => !control.disabled));
+  assert.equal(unavailable.disabled, true, "an already disabled control stays disabled");
 
   for (const phase of ["request", "success pause", "reload"]) for (const newer of [second, first]) {
     context.openAppSettings(first);
@@ -70,7 +99,9 @@ async function testDialog() {
   context.openAppSettings(first);
   saved = submit(); requests.at(-1).reply(false); await saved;
   assert.equal(dialog.open, true, "a refused save keeps the form open");
-  assert.equal(reloads, 7);
+  assert.equal(save.disabled, false, "a refused save allows another save");
+  assert.equal(first.fields[0].disabled, false, "a refused save allows correcting the input");
+  assert.equal(reloads, 8);
   context.loadApps = async () => { throw new Error("Device unreachable."); };
   for (const newer of [first, second]) {
     context.openAppSettings(first);
@@ -80,8 +111,10 @@ async function testDialog() {
     pauses.shift()();
     await assert.rejects(saved, /Device unreachable/);
     assert.equal(dialog.open, newer !== first, "a failed reload must not leave the saved app's stale form open");
+    assert.equal(save.disabled, false, "a failed reload restores Save for the next form");
+    assert.equal(first.fields[0].disabled, false, "a failed reload releases the old inputs");
   }
-  console.log("App settings dialog: stale same-app forms close, other edits survive, ordinary saves and refusals passed.");
+  console.log("App settings dialog: save locks through reload, stale forms close, other edits survive, refusals unlock.");
 }
 module.exports = testDialog;
 if (require.main === module) testDialog().catch(error => { console.error(error); process.exitCode = 1; });
