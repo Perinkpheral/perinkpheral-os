@@ -79,3 +79,41 @@ constraint today. Not tried: Tiny5 Bold and Mono, and the physical panel.
 
 The experiment is not in this repository: it was a throwaway substitution behind the Jersey
 selection with scripts outside the Kotlin tools. No production font was changed.
+
+
+## Cyrillic polish, 2026-11-21
+
+Jersey remains the proportional family. Its Cyrillic now covers all 115 pack entries in
+all four faces, including Jersey 20 for the largest SDK size. Only that face's extended
+Latin remains omitted for space. ASCII headers, SDK size identifiers and font selection
+are unchanged.
+
+- Б has a square flag with a terminal; the smallest б has a heavier flag and a clear neck.
+- З has a smaller upper bowl with a flat terminal, distinct from the round-topped digit 3.
+- О has two more columns of counter than the Latin O, separating it from the narrow zero.
+  Ө and Ю share that round construction.
+- Ә has a clearer upper opening. Ұ/ұ have a separate bar below the fork of Ү/ү.
+- Һ has a lower shoulder than һ; it no longer duplicates the lowercase Latin h.
+- Jersey 20 has its own lowercase masters, with four-pixel stems and corrected joins
+  in в, ж, м and У. The other reviewed letters retain their established constructions,
+  including Ч's vertical entry and rounded shoulder, and the tails of Қ and Ң.
+
+Review the generated sheets and real text together:
+
+```sh
+JAVA_TOOL_OPTIONS=-Djava.awt.headless=true tools/perinkpheral glyph-packs --out /tmp/jersey-packs --sheet /tmp/jersey-sheets
+tools/perinkpheral preview /tmp/jersey-preview --font jersey
+WASI_SDK_PATH="$HOME/opt/wasi-sdk" tools/perinkpheral sim <application> --font jersey --language ru --glyphs /tmp/jersey-packs
+```
+
+The generator checks coverage, counters, selected confusable pairs and sector-rounded
+partition use. Latin is 31,964 bytes (8 sectors), Cyrillic 24,676 (7), Greek 1,428 (1):
+58,068 bytes of data occupying 65,536 bytes. There are no unallocated sectors when all
+three packs are installed. The pack format and partition layout are unchanged.
+
+The review included all four face sheets, Russian and Kazakh text, the weather, calendar,
+status and kit applications, firmware previews, and a temporary specimen at all six SDK
+sizes. Local socket restrictions required a scratch simulator harness using its real
+Wasm interpreter, mock delivery, event loop and renderer with file-based controls.
+`check-generated` and the host suite passed. Physical-panel acceptance remains to be
+performed; no device was connected during this pass.

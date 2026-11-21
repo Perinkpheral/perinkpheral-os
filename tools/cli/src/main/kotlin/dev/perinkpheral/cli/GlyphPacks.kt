@@ -17,17 +17,18 @@ import javax.imageio.ImageIO
  */
 object GlyphPacks {
     /** The faces, as gfx_face_t numbers them, and the sizes the firmware's own fonts are made
-     * at. Jersey 20 (face 3) is left out: the firmware uses it for the largest size alone, and
-     * with it the packs do not fit their partition. */
+     * at. Jersey 20 contributes Cyrillic only: adding its Latin extension too would exceed
+     * the partition. All four Jersey faces can therefore read Russian and Kazakh. */
     private val FACES = listOf(
         Triple(0, "DepartureMono-Regular.otf", 11.0),
         Triple(1, "Jersey10-Regular.ttf", 18.6667),
         Triple(2, "Jersey15-Regular.ttf", 27.0),
+        Triple(3, "Jersey20-Regular.ttf", 34.0),
         Triple(4, "Jersey25-Regular.ttf", 41.0),
     )
 
     /** Jersey has no Cyrillic: its letters are made from its Latin ones. */
-    private val MADE = setOf("Jersey10-Regular.ttf", "Jersey15-Regular.ttf", "Jersey25-Regular.ttf")
+    private val MADE = setOf("Jersey10-Regular.ttf", "Jersey15-Regular.ttf", "Jersey20-Regular.ttf", "Jersey25-Regular.ttf")
 
     /** Letters a face has under another code: the Kazakh schwa is the shape of the Latin one,
      * which Departure Mono has drawn. */
@@ -104,11 +105,19 @@ object GlyphPacks {
     fun make(root: File, out: File, sheets: File?): List<String> {
         out.mkdirs()
         val said = ArrayList<String>()
+        val partitionBytes = File(root, "firmware/partitions.csv").readLines()
+            .map { line -> line.split(',').map { it.trim() } }
+            .first { it[0] == "glyphs" }[4].let { Integer.decode(it) }
+        val sectorBytes = Regex("""^#define\s+SECTOR_BYTES\s+(\d+)""", RegexOption.MULTILINE)
+            .find(File(root, "firmware/main/glyphs.c").readText())!!.groupValues[1].toInt()
+        var occupiedBytes = 0
         for ((name, codePoints) in packs(root)) {
             require(name.length <= NAME_MAX) { "$name: a pack's name is $NAME_MAX letters at most" }
             val parts = ArrayList<ByteArray>()
             for ((number, fontFile, px) in FACES) {
+                if (number == 3 && name != "cyrillic") continue
                 val (part, missing, drawn) = facePart(number, File(root, "assets/fonts/$fontFile"), px, codePoints)
+                require(name != "cyrillic" || missing.isEmpty()) { "$fontFile: incomplete Cyrillic pack" }
                 if (drawn.isEmpty()) continue
                 parts += part
                 if (missing.isNotEmpty()) said += "  $fontFile lacks ${missing.size}: " + missing.take(12).joinToString(" ") { "U+%04X".format(it) }
@@ -119,12 +128,15 @@ object GlyphPacks {
             }
             val body = parts.fold(ByteArray(0)) { all, part -> all + part }
             val total = 24 + body.size
+            occupiedBytes += (total + sectorBytes - 1) / sectorBytes * sectorBytes
             val nameBytes = name.toByteArray().copyOf(12)
             val header = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(MAGIC).putShort(VERSION.toShort()).put(parts.size.toByte()).put(0).putInt(total).put(nameBytes).array()
             File(out, "$name.glyphs").writeBytes(header + body)
             said += "${File(out, "$name.glyphs").path}: $total bytes, ${parts.size} faces"
         }
+        require(occupiedBytes <= partitionBytes) { "Glyph packs need $occupiedBytes bytes of $partitionBytes" }
+        said += "Glyph partition: $occupiedBytes / $partitionBytes bytes including sector padding"
         return said
     }
 }
