@@ -218,7 +218,7 @@ text_request_result_t text_template_prepare_request(app_poll_t *poll, const char
     }
     char *body = malloc(APP_POLL_BODY_MAX + 1);
     if (body == NULL) {
-        return TEXT_REQUEST_NOT_READY;
+        return TEXT_REQUEST_NO_MEMORY;
     }
     bool ready = text_template_fill_body(poll->body, value_of, context, body, APP_POLL_BODY_MAX + 1);
     if (ready) {

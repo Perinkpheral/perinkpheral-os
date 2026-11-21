@@ -49,6 +49,7 @@ typedef enum {
     TEXT_REQUEST_READY,
     TEXT_REQUEST_NOT_READY,
     TEXT_REQUEST_NOT_ALLOWED,
+    TEXT_REQUEST_NO_MEMORY, /* no room to expand the body */
 } text_request_result_t;
 
 /* Authorizes a queued expanded destination before expanding headers and body.

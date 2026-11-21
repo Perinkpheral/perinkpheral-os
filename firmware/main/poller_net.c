@@ -359,6 +359,7 @@ static void prepare_in_host_loop(void *argument)
     free(manifest);
     preparation->failure = result == TEXT_REQUEST_READY ? 0
                            : result == TEXT_REQUEST_NOT_ALLOWED ? HOST_FAILED_NOT_ALLOWED
+                           : result == TEXT_REQUEST_NO_MEMORY   ? HOST_FAILED_NO_MEMORY
                                                                 : HOST_FAILED_NOT_READY;
 }
 
