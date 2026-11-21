@@ -46,9 +46,19 @@ function pixels(rows, cell) {
   return svg;
 }
 
+/* Inline SVG origins snap to CSS pixels before the device-pixel grid is applied. */
+function centreIcon(svg) {
+  if (!svg.getClientRects().length) return;
+  const rect = svg.getBoundingClientRect();
+  const left = rect.left + scrollX, top = rect.top + scrollY;
+  svg.setAttribute("viewBox", `${Math.round(left) - left} ${Math.round(top) - top} ${rect.width} ${rect.height}`);
+}
+
 function iconButton(rows, title, onClick) {
   const button = make("button", { className: "icon", title, type: "button" });
-  button.append(pixels(rows, 2));
+  const svg = pixels(rows, 2);
+  button.append(svg);
+  requestAnimationFrame(() => centreIcon(svg));
   button.addEventListener("click", onClick);
   return button;
 }
@@ -322,6 +332,11 @@ for (const tab of byId("tabs").children)
 
 for (const close of document.querySelectorAll("[data-close]"))
   close.addEventListener("click", () => close.closest("dialog").close());
+
+const iconPositions = new ResizeObserver(() => {
+  for (const svg of document.querySelectorAll("button.icon > svg")) centreIcon(svg);
+});
+for (const area of document.querySelectorAll("main, .head, .tiles")) iconPositions.observe(area);
 
 /* A dialog taller than the screen scrolls above its buttons, which stay at its bottom edge
  * (style.css); a line over them says there is more under it. */

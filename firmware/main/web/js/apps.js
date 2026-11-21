@@ -35,6 +35,8 @@ function placeField(input, latitude, longitude) {
   };
   const choose = index => {
     input.value = input.dataset.chosen = found[index].name;
+    input.setSelectionRange(0, 0);
+    input.scrollLeft = 0;
     latitude.value = found[index].latitude;
     longitude.value = found[index].longitude;
     offer([]);
@@ -208,6 +210,11 @@ function openAppSettings(app) {
   byId("app-fields").replaceChildren(...settingFields(app));
   byId("app-companion").hidden = !app.companion;
   byId("app-dialog").showModal();
+  /* Dialog autofocus otherwise scrolls a long place name to its end. */
+  for (const input of byId("app-fields").querySelectorAll(".place input")) {
+    input.setSelectionRange(0, 0);
+    input.scrollLeft = 0;
+  }
 }
 
 /* ---- the companion ----
@@ -501,9 +508,12 @@ function appFacts(app) {
   ];
 }
 
+const appDescription = text => pageLanguage === "ru" && /[А-Яа-яЁё]/.test(text)
+  ? text.replace(/"([^"\n]+)"/g, "«$1»") : text;
+
 function openAppInfo(app) {
   show("info-dialog-title", app.title);
-  show("info-description", app.description || "");
+  show("info-description", appDescription(app.description || ""));
   byId("info-description").hidden = !app.description;
   byId("info-facts").replaceChildren(...appFacts(app).flatMap(([name, value]) =>
     [make("dt", { textContent: name }), make("dd", { textContent: value })]));
@@ -544,7 +554,7 @@ function drawCatalog() {
       /* Already in the page's language, from the index: nothing to put into it. */
       text.append(make("b", { textContent: offerSays(offer, "title"), translate: false }));
       if (offerSays(offer, "description"))
-        text.append(make("span", { className: "about", textContent: offerSays(offer, "description"), translate: false }));
+        text.append(make("span", { className: "about", textContent: appDescription(offerSays(offer, "description")), translate: false }));
       if (offer.app.author)
         text.append(make("small", { textContent: offer.app.author, translate: false }));
       text.append(make("small", { textContent: offer.app.version + (kept(offer) ? " - " + t("settings kept") : "") +
