@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../main/web/js/settings.
 const section = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
 
 async function test() {
-  const elements = new Map(), requests = [];
+  const elements = new Map(), requests = [], intervals = [];
   let now = Date.UTC(2026, 10, 21, 12), clockFails = false;
   class Clock extends Date {
     constructor(...args) { super(...(args.length ? args : [now])); }
@@ -28,6 +28,7 @@ async function test() {
   const response = { wifi_ssid: "Network A", language: "en", time_auto: true };
   const context = vm.createContext({
     settings: {}, Date: Clock, byId, make: (_tag, values) => values,
+    setInterval: (callback, delay) => { assert.equal(delay, 1000); intervals.push(callback); },
     ask: async (url, options) => {
       if (!options) return response;
       requests.push({ url, values: options });
@@ -54,35 +55,69 @@ async function test() {
   assert.equal(byId("wifi-networks").value, "Network A");
   assert.equal(byId("password").value, "", "reloading the SSID clears its draft password");
 
+  const clockRequests = () => requests.filter(request => request.url === "/api/clock");
+  await submit("time-zone");
+  assert.equal(clockRequests().length, 0, "network time saves never set the clock");
+
+  response.time_auto = false;
+  await context.loadSettings();
+  now += 61 * 1000;
+  intervals[0]();
+  assert.equal(byId("clock-value").value, context.localNow(), "an untouched manual field stays current");
+  now += 31 * 1000;
+  await submit("time-zone");
+  assert.equal(clockRequests().length, 1, "opening in manual mode and saving sets the clock without typing");
+  assert.equal(clockRequests()[0].values.unix, Math.round(now / 1000), "Save takes browser time at submit");
+
+  byId("time_auto").listeners.click();
+  await submit("time-zone");
+  assert.equal(clockRequests().length, 1);
   const openingTime = byId("clock-value").value;
   now += 2 * 60 * 60 * 1000;
   byId("time_auto").listeners.click();
   assert.notEqual(byId("clock-value").value, openingTime);
   assert.equal(byId("clock-value").value, context.localNow());
+  now += 40 * 60 * 1000;
+  intervals[0]();
+  assert.equal(byId("clock-value").value, context.localNow());
+  now += 17 * 1000;
   await submit("time-zone");
-  const clockRequests = () => requests.filter(request => request.url === "/api/clock");
-  assert.equal(clockRequests().length, 1, "disabling network time saves the time shown");
-  assert.equal(clockRequests()[0].values.unix, Math.round(new Date(byId("clock-value").value).getTime() / 1000));
+  assert.equal(clockRequests().length, 2, "disabling network time saves even without typing");
+  assert.equal(clockRequests()[1].values.unix, Math.round(now / 1000), "a delayed Save does not use the toggle's time");
 
   byId("clock-value").value = "2026-11-21T15:30";
   byId("clock-value").listeners.input();
+  now += 40 * 60 * 1000;
+  intervals[0]();
+  assert.equal(byId("clock-value").value, "2026-11-21T15:30", "typing stops the live field refresh");
   clockFails = true;
   await submit("time-zone");
   clockFails = false;
   await submit("time-zone");
-  assert.equal(clockRequests().length, 3, "a failed manual save can be retried");
-  assert.equal(clockRequests()[2].values.unix, Math.round(new Date("2026-11-21T15:30").getTime() / 1000));
+  assert.equal(clockRequests().length, 4, "a failed manual save can be retried");
+  assert.equal(clockRequests()[3].values.unix, Math.round(new Date("2026-11-21T15:30").getTime() / 1000));
+  assert.equal(byId("clock-value").value, context.localNow(), "a successful save resumes the live field");
+  now += 60 * 1000;
   await submit("time-zone");
-  assert.equal(clockRequests().length, 3, "saving the zone again does not reset the clock");
+  assert.equal(clockRequests().length, 5, "a later manual zone save sets the clock too");
+  assert.equal(clockRequests()[4].values.unix, Math.round(now / 1000));
 
+  byId("clock-value").value = "2026-11-21T15:30";
   byId("clock-value").listeners.input();
   byId("time_auto").listeners.click();
   await submit("time-zone");
+  assert.equal(clockRequests().length, 5, "network time ignores a discarded manual draft");
   byId("time_auto").listeners.click();
   await submit("time-zone");
-  assert.equal(clockRequests().length, 4, "switching back to manual saves the newly shown time");
-  assert.equal(clockRequests()[3].values.unix, Math.round(new Date(context.localNow()).getTime() / 1000));
-  console.log("Settings drafts: Wi-Fi passwords and explicit manual clock edits passed.");
+  assert.equal(clockRequests().length, 6, "switching back to manual saves the current browser time");
+  assert.equal(clockRequests()[5].values.unix, Math.round(now / 1000));
+
+  byId("clock-value").value = "";
+  byId("clock-value").listeners.input();
+  const beforeInvalid = requests.length;
+  await submit("time-zone");
+  assert.equal(requests.length, beforeInvalid, "an invalid typed time cannot report a successful save");
+  console.log("Settings drafts: Wi-Fi passwords, live browser time and manual clock saves passed.");
 }
 module.exports = test;
 if (require.main === module) test().catch(error => { console.error(error); process.exitCode = 1; });

@@ -112,8 +112,10 @@ async function testCatalog() {
 
   answer = null;
   await context.loadCatalogs();
-  assert.equal(rows().length, 0, "a failure of the first source leaves no safe offers");
+  assert.equal(rows().length, 1, "a failure of the first source keeps previous offers visible");
+  assert.equal(buttons()[0].disabled, true, "previous offers are not installable");
   assert.deepEqual(said(view).slice(0, 1), ["failed"]);
+  assert.equal(view.children[0].textContent, "Source unavailable: https://example.test/catalog");
 
   /* The browser keeps what was read, without the lists of files, and nothing else. */
   const written = JSON.parse(kept.get("perinkpheral-catalog"));
@@ -129,6 +131,9 @@ async function testCatalog() {
   assert.deepEqual(said(view).slice(0, 1), ["loading"]);
   assert.equal(rows().length, 1);
   assert.equal(buttons()[0].disabled, true, "nothing is installed from what was not read now");
+  await context.loadCatalogs();
+  assert.equal(rows().length, 1, "first-source failure also keeps browser-cached offers visible");
+  assert.equal(buttons()[0].disabled, true);
   answer = { apps: [{ name: "iss", title: "ISS", version: "1.1.0", files: [] }] };
   await context.loadCatalogs();
   assert.equal(view.children.length, 1, "replaced by what the sources say now");
@@ -164,7 +169,7 @@ async function testCatalog() {
   context.askForApp = async () => { throw new Error("Failed to fetch"); };
   await context.loadCatalogs();
   assert.equal(context.offered.length, 0, "total failure after saving sources leaves no old offers");
-  assert.equal(context.catalogsRead, true);
+  assert.equal(context.catalogsRead, false);
   assert.deepEqual(said(view), ["failed"]);
 
   context.askForApp = async () => ({ apps: [{ name: "another", version: "1", files: [] }] });
@@ -173,6 +178,37 @@ async function testCatalog() {
   context.askForApp = async () => { throw new Error("Failed to fetch"); };
   await context.loadCatalogs();
   assert.equal(context.offered.length, 0, "a changed list returned by the device also invalidates offers");
+  assert.equal(context.catalogsRead, false);
+
+  const i18n = read("i18n.js");
+  for (const language of ["en", "ru"]) {
+    const translation = vm.createContext({ localStorage: { getItem: () => language } });
+    vm.runInContext(i18n.slice(0, i18n.indexOf("/* A whole text as the page shows it")), translation);
+    context.t = translation.t;
+    context.sources = ["https://example.test/official", "https://example.test/friend"];
+    context.askForApp = async url => {
+      if (url.endsWith("=1")) throw new Error("Failed to fetch");
+      return { apps: [{ name: "iss", title: "ISS", version: "1.0.0", files: [] }] };
+    };
+    await context.loadCatalogs();
+    assert.equal(rows().length, 1, "a later-source failure keeps the earlier source's rows");
+    assert.equal(buttons()[0].disabled, false);
+    assert.equal(view.children[0].textContent, language === "ru"
+      ? "Источник недоступен: https://example.test/friend" : "Source unavailable: https://example.test/friend");
+    assert.equal(view.children[0].children[0].textContent, "Refresh");
+    const note = view.children[0];
+    context.drawCatalog();
+    assert.strictEqual(view.children[0], note, "redrawing preserves the source failure's Refresh button");
+    context.askForApp = async () => ({ apps: [] });
+    await context.loadCatalogs();
+  }
+  context.offered = [{ source: 0, app: { name: "old", title: "Old", version: "1" } }];
+  context.askForApp = async url => {
+    if (url.endsWith("=1")) throw new Error("Failed to fetch");
+    return { apps: [] };
+  };
+  await context.loadCatalogs();
+  assert.equal(rows().length, 0, "an earlier source that loaded empty replaces old offers on a later failure");
   assert.equal(context.catalogsRead, true);
 
   /* What is not this page's writing is not shown. */

@@ -127,19 +127,21 @@ saveSettings("general", () => ({ device_name: byId("device_name").value,
                                  menu_idle_min: Number(byId("menu_idle_min").value),
                                  power_saving: Number(byId("power_saving").value) }));
 /* The time pane is saved whole: the zone, the time server, whether the network's time is taken,
- * and - when it is not - the date and time typed, which the device takes only then. */
-let clockEdited = false;
+ * and - when it is not - the typed time or the browser's current time. */
+let clockTyped = false;
 const isNetworkTime = () => byId("time_auto").getAttribute("aria-pressed") === "true";
 byId("time-zone").addEventListener("submit", async event => {
   event.preventDefault();
-  const moment = new Date(byId("clock-value").value).getTime();
+  const networkTime = isNetworkTime();
+  const moment = clockTyped ? new Date(byId("clock-value").value).getTime() : Date.now();
   const isSaved = await busy(event.submitter, async () => {
+    if (!networkTime && isNaN(moment)) throw new Error("Invalid value.");
     await ask("/api/settings", post({ ...chosenZone(), ntp_server: byId("ntp_server").value,
-                                      time_auto: isNetworkTime() }));
-    if (!isNetworkTime() && clockEdited && !isNaN(moment)) await ask("/api/clock", post({ unix: Math.round(moment / 1000) }));
+                                      time_auto: networkTime }));
+    if (!networkTime) await ask("/api/clock", post({ unix: Math.round(moment / 1000) }));
   });
   if (isSaved) {
-    clockEdited = false;
+    clockTyped = false;
     await loadSettings();
     loadStatus();
   }
@@ -219,17 +221,18 @@ function localNow() {
  * cannot be typed. Typed, they are this computer's wall time, and the moment goes to the device. */
 function drawClock() {
   byId("clock-value").disabled = isNetworkTime();
-  if (!byId("clock-value").value || isNetworkTime()) byId("clock-value").value = localNow();
+  if (!clockTyped || isNetworkTime()) byId("clock-value").value = localNow();
 }
 
 byId("time_auto").addEventListener("click", () => {
   byId("time_auto").setAttribute("aria-pressed", String(!isNetworkTime()));
   byId("clock-value").value = localNow();
-  clockEdited = !isNetworkTime();
+  clockTyped = false;
   drawClock();
 });
 
-byId("clock-value").addEventListener("input", () => { clockEdited = true; });
+byId("clock-value").addEventListener("input", () => { clockTyped = true; });
+setInterval(drawClock, 1000);
 
 /* ---- the network: where the device is, and another to join ---- */
 

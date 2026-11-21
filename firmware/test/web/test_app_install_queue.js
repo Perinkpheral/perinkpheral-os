@@ -226,19 +226,32 @@ async function testCatalogPrecedence() {
       });
       vm.runInContext(apps.slice(apps.indexOf("function catalogAuthorIsAllowed("), apps.indexOf("let offeredSources")) +
         apps.slice(apps.indexOf("/* One reading at a time"), apps.indexOf("/* ---- sources ---- */")), test.context);
+      vm.runInContext("offeredSources = sources.slice()", test.context);
       const previous = test.context.offered;
+      const previousSources = vm.runInContext("offeredSources", test.context);
+      const previousGeneration = vm.runInContext("catalogGeneration", test.context);
       await test.context.loadCatalogs();
       assert.deepEqual(reads, Array.from({ length: failedSource + 1 }, (_, index) => index));
-      assert.notStrictEqual(test.context.offered, previous, "a partial read publishes only sources with established precedence");
-      assert.equal(test.context.offered.length, failedSource === 0 ? 0 : 3);
-      assert(test.context.offered.every(offer => offer.source < failedSource));
-      assert.equal(test.context.catalogsRead, true);
+      assert.equal(vm.runInContext("catalogGeneration", test.context), previousGeneration + 1,
+        "every failed read invalidates previous handlers");
+      if (failedSource === 0) {
+        assert.strictEqual(test.context.offered, previous, "first-source failure keeps previous offers visible");
+        assert.strictEqual(vm.runInContext("offeredSources", test.context), previousSources,
+          "kept offers retain their source list");
+        assert.equal(test.context.offered.length, 3);
+        assert.equal(test.context.catalogsRead, false, "kept offers cannot be installed or updated");
+      } else {
+        assert.notStrictEqual(test.context.offered, previous, "a partial read publishes only sources with established precedence");
+        assert.equal(test.context.offered.length, 3);
+        assert(test.context.offered.every(offer => offer.source < failedSource));
+        assert.equal(test.context.catalogsRead, true);
+      }
       assert.equal(await test.start(2), false, "old individual offers cannot install");
       if (queued) assert.equal(await queued, false, "failure cancels queued installs");
       const batch = test.all();
       if (active) { test.requests[0].reply(); await active; }
       await batch;
-      assert.equal(test.requests.length, previouslyRead ? 1 : 0, "Update all cannot use an incomplete catalog");
+      assert.equal(test.requests.length, previouslyRead ? 1 : 0, "Update all cannot use old offers after failure");
       assert(test.messages.some(message => message.text.includes("Source unavailable")));
       if (failedSource > 0) {
         test.context.askForApp = requestApp;

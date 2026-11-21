@@ -562,8 +562,19 @@ function drawCatalog() {
   /* Until the sources answer the catalog says so, over whatever it has to show meanwhile. */
   const state = stateOf("catalog") === "failed" ? "failed"
     : catalogsRead ? (offers.length ? "" : "empty") : stateOf("catalog");
-  const note = state ? sameNote(view, state) || stateNote(state, loadCatalogs)
-    : rows.length ? null : make("p", { className: "note", textContent: "Nothing found." });
+  const failedSource = state === "failed" && offers.length ? catalogFailedSource : "";
+  let note = state ? sameNote(view, state) : null;
+  if (note && (note.dataset.source || "") !== failedSource) note = null;
+  if (!note && failedSource) {
+    note = make("p", { className: "note state", textContent: t("Source unavailable: {0}", failedSource) });
+    note.dataset.state = state;
+    note.dataset.source = failedSource;
+    const refresh = make("button", { type: "button", className: "quiet", textContent: "Refresh" });
+    refresh.addEventListener("click", () => busy(refresh, loadCatalogs));
+    note.append(refresh);
+  }
+  note = note || (state ? stateNote(state, loadCatalogs)
+    : rows.length ? null : make("p", { className: "note", textContent: "Nothing found." }));
   view.replaceChildren(...(note ? [note] : []), ...rows);
 }
 
@@ -701,6 +712,7 @@ function keptCatalog(store) {
 /* Offers belong to the source list that was read, including its indices. */
 let offeredSources = null;
 let catalogGeneration = 0, sourcesSaving = false;
+let catalogFailedSource = "";
 
 function isCurrentOffer(offer) {
   return !sourcesSaving && catalogsRead && offer.generation === catalogGeneration;
@@ -709,6 +721,7 @@ function isCurrentOffer(offer) {
 function invalidateCatalogs() {
   catalogGeneration++;
   catalogsRead = false;
+  catalogFailedSource = "";
   loadState.catalog = "loading";
   forgetKeptCatalog();
   cancelQueuedInstalls();
@@ -762,7 +775,7 @@ async function readCatalogs(redrawSources = true) {
         if (isDrawable(app) && !found.some(offer => offer.app.name === app.name)) found.push({ app, source, generation });
     } catch (error) {
       if (generation !== catalogGeneration || sourcesSaving) return;
-      silent.push({ source: from[source], error });
+      silent.push({ source: from[source], index: source, error });
       /* A later source may reuse a name owned by the unavailable source. */
       break;
     }
@@ -773,9 +786,12 @@ async function readCatalogs(redrawSources = true) {
     found.forEach(offer => { offer.generation = catalogGeneration; });
   }
   /* Sources before the first failure have established precedence for their names. */
-  offered = found;
-  offeredSources = from;
-  catalogsRead = true;
+  catalogsRead = !silent.length || silent[0].index > 0;
+  if (catalogsRead) {
+    offered = found;
+    offeredSources = from;
+  }
+  catalogFailedSource = silent.length ? silent[0].source : "";
   loadState.catalog = silent.length ? "failed" : "ready";
   drawTiles();
   /* Kept only once it was drawn: what cannot be drawn must not come back at the next visit. */
