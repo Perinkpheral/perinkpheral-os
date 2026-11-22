@@ -7,7 +7,7 @@ const vm = require("node:vm");
 
 module.exports = async function () {
   const source = fs.readFileSync(path.join(__dirname, "../../main/web/js/settings.js"), "utf8");
-  const loader = source.slice(source.indexOf("async function loadSettings()"), source.indexOf("function drawDefaultApp()"));
+  const loader = source.slice(source.indexOf("async function loadSettings()"), source.indexOf("function drawDefaultApp("));
   const elements = new Map();
   const byId = id => {
     if (!elements.has(id)) elements.set(id, {

@@ -4,7 +4,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const source = fs.readFileSync(path.join(__dirname, "../../main/web/js/settings.js"), "utf8");
+const read = name => fs.readFileSync(process.env.PERINKPHERAL_TEST_PAGE || path.join(__dirname, "../../main/web/js", name), "utf8");
+const source = read("settings.js");
 const section = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
 
 async function test() {
@@ -25,9 +26,10 @@ async function test() {
     });
     return elements.get(id);
   };
-  const response = { wifi_ssid: "Network A", language: "en", time_auto: true };
+  const response = { wifi_ssid: "Network A", language: "en", time_auto: true, default_app: "clock" };
   const context = vm.createContext({
-    settings: {}, Date: Clock, byId, make: (_tag, values) => values,
+    settings: {}, installed: [{ name: "clock", title: "Clock" }, { name: "weather", title: "Weather" }],
+    Date: Clock, byId, make: (_tag, values) => values,
     setInterval: (callback, delay) => { assert.equal(delay, 1000); intervals.push(callback); },
     ask: async (url, options) => {
       if (!options) return response;
@@ -38,16 +40,46 @@ async function test() {
     post: values => values, reading: (_what, read) => read(), drawSettingsState() {},
     ZONE_NOT_SET: "unset", setLanguage() {}, showZone() {},
     showWifiNetworks(_networks, selected) { byId("wifi-networks").value = selected; },
-    drawDefaultApp() {}, drawStatus() {}, drawTiles() {}, loadStatus() {}, t: text => text,
+    drawStatus() {}, drawTiles() {}, loadStatus() {}, t: text => text,
+    openInside() {}, wantedInside: null,
     chosenZone: () => ({ tz: "UTC0", tz_city: "" }),
     busy: async (_button, run) => { try { await run(); return true; } catch { return false; } },
     send: async (button, url, options) => { await context.ask(url, options); return true; },
   });
-  vm.runInContext(section("async function loadSettings()", "function drawDefaultApp()"), context);
+  vm.runInContext(section("async function loadSettings()", "function saveSettings("), context);
+  const apps = read("apps.js");
+  vm.runInContext(apps.slice(apps.indexOf("async function loadApps("), apps.indexOf("async function loadRemoved(")), context);
   vm.runInContext(section("function saveSettings(", "/* ---- the time zone:"), context);
   vm.runInContext(section("function localNow()", "/* ---- the network:"), context);
   const submit = id => byId(id).listeners.submit({ preventDefault() {}, submitter: {} });
   await context.loadSettings();
+  assert.equal(byId("default_app").value, "clock", "initial settings select the saved default");
+  const savedAsk = context.ask;
+  let finishApps;
+  context.ask = (url, options) => url === "/api/apps" ? new Promise(resolve => { finishApps = resolve; })
+                                                      : savedAsk(url, options);
+  const refreshApps = context.loadApps(false);
+  byId("default_app").value = "weather";
+  byId("device_name").value = "Desk";
+  finishApps([...context.installed, { name: "timer", title: "Timer" }]);
+  await refreshApps;
+  assert.equal(byId("default_app").value, "weather", "an installation refresh preserves the drafted default");
+  assert.equal(byId("device_name").value, "Desk");
+  await submit("general");
+  assert.equal(requests.at(-1).values.default_app, "weather", "Save sends the drafted default");
+  assert.equal(requests.at(-1).values.device_name, "Desk");
+  byId("default_app").value = "";
+  context.drawDefaultApp();
+  assert.equal(byId("default_app").value, "", "None is also a draft");
+  byId("default_app").value = "weather";
+  context.installed = context.installed.filter(app => app.name !== "weather");
+  context.drawDefaultApp();
+  assert.equal(byId("default_app").value, "weather", "a removed draft remains selectable");
+  assert(byId("default_app").options.some(option => option.value === "weather"));
+  response.default_app = "clock";
+  await context.loadSettings();
+  assert.equal(byId("default_app").value, "clock", "an explicit settings reload resets the draft");
+  context.ask = savedAsk;
   byId("ssid").value = "Network B";
   byId("password").value = "password-b";
   await submit("general");
@@ -117,7 +149,7 @@ async function test() {
   const beforeInvalid = requests.length;
   await submit("time-zone");
   assert.equal(requests.length, beforeInvalid, "an invalid typed time cannot report a successful save");
-  console.log("Settings drafts: Wi-Fi passwords, live browser time and manual clock saves passed.");
+  console.log("Settings drafts: default app refresh, Wi-Fi passwords, live browser time and manual clock saves passed.");
 }
 module.exports = test;
 if (require.main === module) test().catch(error => { console.error(error); process.exitCode = 1; });

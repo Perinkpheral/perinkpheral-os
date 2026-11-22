@@ -35,3 +35,11 @@ tasks.register<Jar>("cli") {
         exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/versions/**")
     }
 }
+
+val pageTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.PageTest")
+}
+tasks.check { dependsOn(pageTest) }
+tasks.test { failOnNoDiscoveredTests.set(false) }

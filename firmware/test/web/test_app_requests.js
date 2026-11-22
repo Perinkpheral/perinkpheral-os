@@ -373,6 +373,7 @@ async function testAuthors() {
   await require("./test_settings_languages.js")();
   await require("./test_settings_drafts.js")();
   await require("./test_wifi_scan.js")();
+  await require("./test_app_navigation.js")();
   await require("./test_control_screen.js")();
   await require("./test_load_states.js")();
   console.log("App requests: retry, exhaustion, update all and refusal checks passed.");
