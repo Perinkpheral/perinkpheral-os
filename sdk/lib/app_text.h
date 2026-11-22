@@ -13,8 +13,9 @@
 /* The degree sign, which the host draws in any font: "21" APP_TEXT_DEGREE. */
 #define APP_TEXT_DEGREE "\xC2\xB0"
 
-/* A string builder over a caller-provided buffer. The buffer is always
- * null-terminated and never overrun; text that does not fit is dropped. */
+/* A string builder over a caller-provided buffer. A buffer with positive
+ * capacity is always null-terminated and never overrun; text that does not
+ * fit is dropped. With capacity 0, the buffer may be NULL and nothing is written. */
 typedef struct {
     char *next;
     char *last; /* position of the terminator when the buffer is full */
@@ -34,7 +35,8 @@ void app_text_add_padded(app_text_t *text, int32_t value, int32_t digits);
 int32_t app_text_length(const char *text);
 
 /* Copies `from` to `to` as a null-terminated string of at most
- * `size` - 1 characters. */
+ * `size` - 1 bytes, cut between UTF-8 characters. With size 0, `to` may be
+ * NULL and nothing is written. */
 void app_text_copy(char *to, int32_t size, const char *from);
 
 /* True if the two texts are the same. */

@@ -357,7 +357,7 @@ static bool setting_of(void *context, const char *key, char *value, size_t value
         return snprintf(value, value_size, "%s", each->item) < (int)value_size;
     }
     int32_t length = kv_get(s_options.app, key, value, (int32_t)value_size - 1);
-    if (length > 0) {
+    if (length >= 0) {
         value[length] = '\0';
         return true;
     }

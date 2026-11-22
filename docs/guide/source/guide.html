@@ -677,7 +677,7 @@ void app_on_load(void)
 <h2 id="storage-files">Files</h2>
 <p>Use files for data that does not fit in a store value: a downloaded list, a cache, a picture.</p>
 <p><code>file_read()</code> and <code>file_write()</code> take an offset. A file can be read and extended in parts, so it never has to be held in memory in full.</p>
-<p>The files from the <code>files/</code> folder of the package are installed with the application.</p>
+<p>The files from the <code>files/</code> folder of the package are installed with the application. Each must contain at least one byte; the build refuses empty data files.</p>
 <ul>
   <li>Existing files remain unless an update supplies a file with the same name, which replaces it. Use names outside the package's filenames for writable caches. Files are removed with the application.</li>
   <li>A write starts inside the file or at its end. To replace a file with a shorter one, delete it first: <code>file_write()</code> with length 0 at offset 0.</li>
@@ -763,7 +763,7 @@ app_text_add_fixed(&amp;text, price - previous, 2, APP_FIXED_SIGN);        /* "+
   <li>Inside the handler, <code>answer_info(&amp;response, sizeof response)</code> copies response metadata and returns the bytes written: status, Content-Length, Content-Type, ETag, Last-Modified, Location, Link and Retry-After. It copies at most Perinkpheral OS's struct size; absent fields are zeroed, except length is -1 when absent.</li>
 </ul>
 
-<p>Successful response chunks share metadata. A terminal HOST_DATA_FAILED callback may have no metadata: answer_info() returns the failure code as status, length -1 and empty header strings. Invalid or incomplete picked JSON gives HOST_FAILED_NO_ANSWER even if an HTTP response arrived.</p>
+<p>Successful response chunks share metadata. A terminal HOST_DATA_FAILED callback may have no metadata: answer_info() returns the failure code as status, length -1 and empty header strings. For picked responses, the extractor checks balanced, matching containers (up to 64 levels), valid number/true/false/null literals and completed strings with hexadecimal \u escapes. Other escape letters and raw control bytes in strings are not rejected. Failed checks give HOST_FAILED_NO_ANSWER even if an HTTP response arrived. Member/value separators and a single root value are not enforced: empty input and other malformed documents may be accepted.</p>
 <p>From firmware 0.1.51, <code>answer_header(name, name_length, occurrence, value, capacity)</code> reads a response header inside either data handler. Names are case-insensitive HTTP tokens, 1–63 bytes. Occurrence starts at 0; repeated Set-Cookie fields remain separate, in arrival order. The result is the value length without a terminating NUL. A missing field returns HOST_ERR_NOT_FOUND; invalid arguments return HOST_ERR_ARGUMENT. A value that does not fit returns HOST_ERR_NO_SPACE without writing.</p>
 <p>Perinkpheral OS keeps up to 1024 bytes of headers, counting each name, value and two NUL separators. If the complete set does not fit, every answer_header call returns HOST_ERR_NO_SPACE, including fields received before overflow. answer_info remains available. Only the final response after redirects is exposed. No cookies are sent or stored automatically.</p>
 <p>For authentication across background unloads, save a small session record with kv_set when the session changes, not on every poll. Include the server/account identity and handshake step; restore them on load. Clear the session when settings change or the server rejects it. Declare a cookie field as secret if it belongs in settings; stored values are not encrypted. session_set belongs to a scene and is not a background credential store.</p>
@@ -1399,8 +1399,8 @@ const char *json_pick_element(json_pick_t *pick, int index, int element);   /* i
 /* an element did not fit the buffer */
 bool        json_pick_is_cut(const json_pick_t *pick);
 </pre>
-<p>json_pick_finish() returns false if the document did not end whole. Do not accept extracted values as a complete response in that case.</p>
-<p>Paths have at most 63 bytes, property names at most 31 ASCII bytes, and extraction reaches at most eight containers; each property or array index uses one level. Deeper containers are skipped. Closing brackets must match their containers, and literals must be numbers, true, false or null. Validation keeps one bit per container and rejects nesting beyond 64. A broken document makes <code>json_pick_finish()</code> return false.</p>
+<p>json_pick_finish() returns false if containers or strings remain open or a check below failed. Do not accept extracted values as a complete response in that case. True does not guarantee valid JSON.</p>
+<p>Paths have at most 63 bytes, property names at most 31 ASCII bytes, and extraction reaches at most eight containers; each property or array index uses one level. Deeper containers are skipped. The extractor checks balanced, matching containers, valid number/true/false/null literals and completed strings with hexadecimal \u escapes. Other escape letters and raw control bytes in strings are not rejected. Validation keeps one bit per container and rejects nesting beyond 64. Member/value separators and a single root value are not enforced: empty input, trailing commas, missing colons and other malformed documents may be accepted.</p>
 <h2 id="lib-generated">Generated headers: strings.h and pictures.h</h2>
 <pre>/* generated from strings/:  enum { STR_NO_EVENTS, ... };  const char *app_string(int32_t id); */
 #include "strings.h"

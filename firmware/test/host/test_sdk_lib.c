@@ -140,6 +140,28 @@ static void test_text(void)
     app_text_copy(cut, sizeof cut, "ab\xD0\x96\xD0\x96");
     CHECK_STR(cut, "ab\xD0\x96");
 
+    char untouched = 'x';
+    app_text_t text;
+    for (int32_t size = 0; size >= -1; size--) {
+        app_text_start(&text, &untouched, size);
+        app_text_add(&text, "more");
+        app_text_add(&text, "\x80");
+        app_text_add_number(&text, -123);
+        app_text_add_padded(&text, 7, 2);
+        app_text_copy(&untouched, size, "copy");
+        CHECK(untouched == 'x');
+        app_text_start(&text, NULL, size);
+        app_text_add(&text, "more");
+        app_text_add(&text, "\x80");
+        app_text_add_number(&text, -123);
+        app_text_add_padded(&text, 7, 2);
+        app_text_copy(NULL, size, "copy");
+        app_text_copy(NULL, size, "\x80");
+    }
+    char terminator[2] = { 'x', 'y' };
+    app_text_copy(terminator, 1, "more");
+    CHECK(terminator[0] == '\0' && terminator[1] == 'y');
+
     char said[32];
     CHECK(app_time_text(0, HOST_TIME_DATE, said, sizeof said) == 10);
     CHECK_STR(said, "Fri 13 Nov");
@@ -210,6 +232,27 @@ static void test_fixed_numbers_at_the_edges(void)
     CHECK(app_fixed_ratio(-3689348814741910323LL, 4, 1) == INT64_MIN);
     CHECK(app_fixed_ratio(0, INT64_MIN, 9) == 0);
     CHECK(app_fixed_ratio(1, 0, 2) == 0);
+
+    CHECK(app_fixed_rescale(INT64_MAX, 0, 1) == 0);
+    CHECK(app_fixed_rescale(INT64_MIN, 0, 1) == 0);
+    CHECK(app_fixed_rescale(INT64_MAX / 10, 0, 1) == INT64_MAX / 10 * 10);
+    CHECK(app_fixed_rescale(INT64_MIN / 10, 0, 1) == INT64_MIN / 10 * 10);
+    CHECK(app_fixed_rescale(INT64_MAX / 10 + 1, 0, 1) == 0);
+    CHECK(app_fixed_rescale(INT64_MIN / 10 - 1, 0, 1) == 0);
+    CHECK(app_fixed_rescale(INT64_MAX, 9, 9) == INT64_MAX);
+    CHECK(app_fixed_rescale(INT64_MIN, 9, 9) == INT64_MIN);
+    CHECK(app_fixed_rescale(9, 0, 18) == 9000000000000000000LL);
+    CHECK(app_fixed_rescale(-9, 0, 18) == -9000000000000000000LL);
+    CHECK(app_fixed_rescale(10, 0, 18) == 0);
+    CHECK(app_fixed_rescale(-10, 0, 18) == 0);
+    CHECK(app_fixed_rescale(1, 0, 19) == 0);
+    CHECK(app_fixed_rescale(-1, 0, 19) == 0);
+    CHECK(app_fixed_rescale(0, 0, 19) == 0);
+    CHECK(app_fixed_rescale(1, INT32_MIN, INT32_MAX) == 0);
+    CHECK(app_fixed_rescale(INT64_MIN, INT32_MAX, INT32_MIN) == 0);
+    CHECK(app_fixed_rescale(35627, 2, 0) == 356);
+    CHECK(app_fixed_rescale(355, 1, 0) == 36);
+    CHECK(app_fixed_rescale(-355, 1, 0) == -36);
 }
 
 static void test_paces(void)

@@ -2059,8 +2059,8 @@ Use files for data that does not fit in a store value: a downloaded list, a cach
 <code>file_read()</code> and <code>file_write()</code> take an offset. A file can be read and extended in parts, so it never has to be held in memory in full.
 <code>file_read()</code> и <code>file_write()</code> принимают смещение. Файл можно читать и дописывать частями, поэтому держать его в памяти целиком не требуется.
 
-The files from the <code>files/</code> folder of the package are installed with the application.
-Файлы из папки <code>files/</code> пакета устанавливаются вместе с приложением.
+The files from the <code>files/</code> folder of the package are installed with the application. Each must contain at least one byte; the build refuses empty data files.
+Файлы из папки <code>files/</code> пакета устанавливаются вместе с приложением. Каждый файл должен содержать хотя бы один байт; сборка отклоняет пустые файлы данных.
 
 Existing files remain unless an update supplies a file with the same name, which replaces it. Use names outside the package's filenames for writable caches. Files are removed with the application.
 Существующие файлы остаются, если обновление не содержит файла с тем же именем: такой файл заменяется. Для записываемых кешей используйте имена, которых нет в пакете. При удалении приложения файлы удаляются.
@@ -2203,8 +2203,8 @@ Replace the displayed data only on <code>HOST_DATA_LAST</code>. Delivery can sto
 Inside the handler, <code>answer_info(&amp;response, sizeof response)</code> copies response metadata and returns the bytes written: status, Content-Length, Content-Type, ETag, Last-Modified, Location, Link and Retry-After. It copies at most Perinkpheral OS's struct size; absent fields are zeroed, except length is -1 when absent.
 В обработчике <code>answer_info(&amp;response, sizeof response)</code> копирует метаданные ответа и возвращает число записанных байт: status, Content-Length, Content-Type, ETag, Last-Modified, Location, Link и Retry-After. Копируется не больше размера структуры Perinkpheral OS; отсутствующие поля обнулены, кроме length, равного -1 при отсутствии длины.
 
-Successful response chunks share metadata. A terminal HOST_DATA_FAILED callback may have no metadata: answer_info() returns the failure code as status, length -1 and empty header strings. Invalid or incomplete picked JSON gives HOST_FAILED_NO_ANSWER even if an HTTP response arrived.
-Успешные части ответа имеют общие метаданные. Завершающий вызов с HOST_DATA_FAILED может не иметь метаданных: answer_info() возвращает код ошибки как status, length -1 и пустые строки заголовков. Неверный или незавершённый JSON с извлечением значений даёт HOST_FAILED_NO_ANSWER, даже если HTTP-ответ получен.
+Successful response chunks share metadata. A terminal HOST_DATA_FAILED callback may have no metadata: answer_info() returns the failure code as status, length -1 and empty header strings. For picked responses, the extractor checks balanced, matching containers (up to 64 levels), valid number/true/false/null literals and completed strings with hexadecimal \u escapes. Other escape letters and raw control bytes in strings are not rejected. Failed checks give HOST_FAILED_NO_ANSWER even if an HTTP response arrived. Member/value separators and a single root value are not enforced: empty input and other malformed documents may be accepted.
+Успешные части ответа имеют общие метаданные. Завершающий вызов с HOST_DATA_FAILED может не иметь метаданных: answer_info() возвращает код ошибки как status, length -1 и пустые строки заголовков. Для ответов с извлечением значений проверяются сбалансированные скобки соответствующих контейнеров (до 64 уровней), корректные литералы чисел, true, false и null, а также завершённость строк с шестнадцатеричными escape-последовательностями \u. Другие буквы после обратной косой черты и неэкранированные управляющие байты в строках не отклоняются. Ошибка проверки даёт HOST_FAILED_NO_ANSWER, даже если HTTP-ответ получен. Разделители членов и значений и наличие единственного корневого значения не проверяются: пустой ввод и другие некорректные документы могут приниматься.
 
 Requests from code
 Запросы из кода
@@ -4012,11 +4012,11 @@ in order is fast
 an element did not fit the buffer
 элемент не поместился в буфер
 
-json_pick_finish() returns false if the document did not end whole. Do not accept extracted values as a complete response in that case.
-json_pick_finish() возвращает false, если документ не завершён целиком. В таком случае не принимайте извлечённые значения за полный ответ.
+json_pick_finish() returns false if containers or strings remain open or a check below failed. Do not accept extracted values as a complete response in that case. True does not guarantee valid JSON.
+json_pick_finish() возвращает false, если контейнеры или строки остались незакрытыми либо не пройдена одна из проверок ниже. В таком случае не принимайте извлечённые значения за полный ответ. Значение true не гарантирует корректность JSON.
 
-Paths have at most 63 bytes, property names at most 31 ASCII bytes, and extraction reaches at most eight containers; each property or array index uses one level. Deeper containers are skipped. Closing brackets must match their containers, and literals must be numbers, true, false or null. Validation keeps one bit per container and rejects nesting beyond 64. A broken document makes <code>json_pick_finish()</code> return false.
-Пути содержат не более 63 байт, имена свойств - не более 31 байта ASCII, а извлечение охватывает не более восьми контейнеров; каждое свойство или индекс массива занимает один уровень. Более глубокие контейнеры пропускаются. Закрывающие скобки должны соответствовать контейнерам, а литералы должны быть числами, true, false или null. Проверка хранит один бит на контейнер и отклоняет вложенность свыше 64. Для повреждённого документа <code>json_pick_finish()</code> возвращает false.
+Paths have at most 63 bytes, property names at most 31 ASCII bytes, and extraction reaches at most eight containers; each property or array index uses one level. Deeper containers are skipped. The extractor checks balanced, matching containers, valid number/true/false/null literals and completed strings with hexadecimal \u escapes. Other escape letters and raw control bytes in strings are not rejected. Validation keeps one bit per container and rejects nesting beyond 64. Member/value separators and a single root value are not enforced: empty input, trailing commas, missing colons and other malformed documents may be accepted.
+Пути содержат не более 63 байт, имена свойств - не более 31 байта ASCII, а извлечение охватывает не более восьми контейнеров; каждое свойство или индекс массива занимает один уровень. Более глубокие контейнеры пропускаются. Проверяются сбалансированные скобки соответствующих контейнеров, корректные литералы чисел, true, false и null, а также завершённость строк с шестнадцатеричными escape-последовательностями \u. Другие буквы после обратной косой черты и неэкранированные управляющие байты в строках не отклоняются. Проверка хранит один бит на контейнер и отклоняет вложенность свыше 64. Разделители членов и значений и наличие единственного корневого значения не проверяются: пустой ввод, завершающие запятые, пропущенные двоеточия и другие некорректные документы могут приниматься.
 
 Generated headers: strings.h and pictures.h
 Сгенерированные заголовки: strings.h и pictures.h

@@ -150,11 +150,18 @@ static uint64_t magnitude_of(int64_t value)
 
 int64_t app_fixed_rescale(int64_t value, int32_t from_decimals, int32_t to_decimals)
 {
-    int32_t shift = to_decimals - from_decimals;
+    int64_t shift = (int64_t)to_decimals - from_decimals;
     if (shift >= 0) {
-        return shift < POWERS ? value * (int64_t)POWER_OF_TEN[shift] : 0;
+        if (shift >= POWERS - 1) {
+            return 0; /* even 10^19 is beyond either signed endpoint */
+        }
+        int64_t factor = (int64_t)POWER_OF_TEN[shift];
+        if (value > INT64_MAX / factor || value < INT64_MIN / factor) {
+            return 0;
+        }
+        return value * factor;
     }
-    uint64_t magnitude = divide_by_power(magnitude_of(value), -shift);
+    uint64_t magnitude = shift <= -POWERS ? 0 : divide_by_power(magnitude_of(value), (int32_t)-shift);
     return value < 0 ? -(int64_t)magnitude : (int64_t)magnitude;
 }
 

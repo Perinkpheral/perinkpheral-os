@@ -13,13 +13,16 @@
 void app_text_start(app_text_t *text, char *buffer, int32_t buffer_size)
 {
     text->next = buffer;
-    text->last = buffer + buffer_size - 1;
-    *text->next = '\0';
+    text->last = buffer;
+    if (buffer_size > 0) {
+        text->last = buffer + buffer_size - 1;
+        *text->next = '\0';
+    }
 }
 
 static void add_char(app_text_t *text, char character)
 {
-    if (text->next < text->last) {
+    if (text->next != text->last) {
         *text->next++ = character;
         *text->next = '\0';
     }
@@ -28,13 +31,13 @@ static void add_char(app_text_t *text, char character)
 void app_text_add(app_text_t *text, const char *more)
 {
     int32_t added = 0;
-    while (*more != '\0' && text->next < text->last) {
+    while (*more != '\0' && text->next != text->last) {
         add_char(text, *more++);
         added++;
     }
     /* The text is UTF-8: what did not fit must not end inside a character -
      * the bytes of the one cut in two go, back to its first. */
-    if (((unsigned char)*more & 0xC0) == 0x80) {
+    if (added > 0 && ((unsigned char)*more & 0xC0) == 0x80) {
         while (added > 0) {
             bool is_first_byte = ((unsigned char)text->next[-1] & 0xC0) != 0x80;
             text->next--;
