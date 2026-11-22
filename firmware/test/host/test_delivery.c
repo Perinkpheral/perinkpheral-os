@@ -222,6 +222,101 @@ static void test_off_the_screen(void)
     CHECK(app_scene_app(probe) == NULL && state.in_background == NULL);
 }
 
+static void count_delivery(void *context)
+{
+    (*(int *)context)++;
+}
+
+static void test_foreground_stream_interrupted_by_another_owner(void)
+{
+    app_manifest_t manifest;
+    CHECK(app_store_list(root, &manifest, 1) == 1);
+    scene_t *other = app_scene_create(&manifest, root, &SERVICES);
+    CHECK(other != NULL);
+    const int requests[] = { 1, HOST_REQUEST_FIRST };
+    const int endings[] = { HOST_DATA_LAST, HOST_DATA_FAILED };
+    for (size_t index = 0; index < sizeof requests / sizeof requests[0]; index++) {
+        start_on(probe);
+        int calls = 0;
+        uint8_t byte = 3;
+        app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = requests[index],
+            .http_status = 200, .data = &byte, .length = 1, .flags = HOST_DATA_FIRST,
+            .loaded = count_delivery, .loaded_context = &calls };
+        CHECK(app_deliver(&state, &wm, probe, &piece, 0).owner == NULL);
+        uint64_t instance = app_scene_instance(probe);
+        CHECK(instance != 0 && calls == 1 && state.answer_owner == probe);
+
+        /* Ordinary input and its own alarm keep the receiving instance. */
+        app_abandoned_t abandoned;
+        app_delivery_abort(&state, &wm, 1, &abandoned);
+        CHECK(abandoned.owner == NULL && app_scene_instance(probe) == instance);
+        app_delivery_t alarm = { .kind = APP_DELIVERY_ALARM };
+        CHECK(app_deliver(&state, &wm, probe, &alarm, 2).owner == NULL);
+        CHECK(app_scene_instance(probe) == instance);
+
+        abandoned = app_deliver(&state, &wm, other, &alarm, 3);
+        CHECK(abandoned.owner == probe && abandoned.request == requests[index]);
+        CHECK(wm.current == probe && !wm.suspended && app_scene_app(other) == NULL);
+        CHECK(app_scene_instance(probe) != instance);
+        CHECK(state.answer_instance == 0);
+
+        piece.flags = 0;
+        CHECK(app_deliver(&state, &wm, probe, &piece, 4).owner == NULL);
+        CHECK(calls == 1);
+        piece.flags = endings[index];
+        CHECK(app_deliver(&state, &wm, probe, &piece, 5).owner == NULL);
+        CHECK(calls == 1 && state.answer_owner == NULL);
+        /* The retry starts a new response in the restored instance. */
+        piece.flags = HOST_DATA_FIRST | HOST_DATA_LAST;
+        CHECK(app_deliver(&state, &wm, probe, &piece, 6).owner == NULL);
+        CHECK(calls == 2 && state.answer_owner == NULL);
+    }
+    app_scene_destroy(other);
+}
+
+static void test_foreground_stream_interrupted_by_navigation(void)
+{
+    start_on(probe);
+    int calls = 0;
+    app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = 1, .http_status = 200,
+        .flags = HOST_DATA_FIRST, .loaded = count_delivery, .loaded_context = &calls };
+    CHECK(app_deliver(&state, &wm, probe, &piece, 0).owner == NULL);
+    uint64_t instance = app_scene_instance(probe);
+    wm_button(&wm, SCENE_BUTTON_BACK, SCENE_PRESS_LONG);
+    CHECK(app_scene_instance(probe) == 0);
+    wm_open(&wm, probe);
+    CHECK(app_scene_instance(probe) != instance);
+    piece.flags = 0;
+    app_abandoned_t abandoned = app_deliver(&state, &wm, probe, &piece, 1);
+    CHECK(abandoned.owner == probe && abandoned.request == 1 && calls == 1);
+    piece.flags = HOST_DATA_LAST;
+    CHECK(app_deliver(&state, &wm, probe, &piece, 2).owner == NULL);
+    CHECK(calls == 1);
+    piece.flags = HOST_DATA_FAILED;
+    CHECK(app_deliver(&state, &wm, probe, &piece, 3).owner == NULL);
+    CHECK(calls == 2); /* a new request can fail before it has a FIRST */
+}
+
+static void test_stream_owner_cannot_load(void)
+{
+    start_on(probe);
+    app_manifest_t manifest;
+    CHECK(app_store_list(root, &manifest, 1) == 1);
+    strcpy(manifest.name, "missing");
+    scene_t *missing = app_scene_create(&manifest, root, &SERVICES);
+    CHECK(missing != NULL);
+    app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = 1,
+                            .http_status = 200, .flags = HOST_DATA_FIRST };
+    app_abandoned_t abandoned = app_deliver(&state, &wm, missing, &piece, 0);
+    CHECK(abandoned.owner == missing && abandoned.request == 1);
+    CHECK(wm.current == probe && !wm.suspended && state.in_background == NULL);
+    CHECK(app_scene_app(probe) != NULL && app_scene_instance(missing) == 0);
+    piece.flags = HOST_DATA_LAST;
+    CHECK(app_deliver(&state, &wm, missing, &piece, 1).owner == NULL);
+    CHECK(!wm.suspended && state.answer_owner == NULL);
+    app_scene_destroy(missing);
+}
+
 static void test_asks_for_the_screen(void)
 {
     start_on(&menu.scene);
@@ -722,6 +817,9 @@ int main(void)
     test_frozen_settings_translation();
     test_notification_consumption();
     test_on_the_screen();
+    test_foreground_stream_interrupted_by_another_owner();
+    test_foreground_stream_interrupted_by_navigation();
+    test_stream_owner_cannot_load();
     test_off_the_screen();
     test_asks_for_the_screen();
     test_not_twice_in_a_row();

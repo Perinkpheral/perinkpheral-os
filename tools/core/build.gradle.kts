@@ -93,3 +93,10 @@ val pollManifestTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.PollManifestTest")
 }
 tasks.check { dependsOn(pollManifestTest) }
+
+// Targeted native regressions; the full host suite already runs separately in CI.
+val appsysTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.AppsysTest")
+}

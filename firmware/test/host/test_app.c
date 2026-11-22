@@ -606,6 +606,53 @@ static void test_runaway_handlers_are_stopped(void)
     app_unload(app);
 }
 
+static void test_name_subsection_bounds(void)
+{
+    /* An empty import section must not stop validation of later custom
+     * sections. The length wraps back six bytes on a 32-bit device. */
+    static const uint8_t wrapping_name[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x02, 0x01, 0x00,
+        0x00, 0x0b, 0x04, 'n', 'a', 'm', 'e', 0x00, 0xfa, 0xff, 0xff, 0xff, 0x0f
+    };
+    static const uint8_t overlong_name[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x07, 0x04, 'n', 'a', 'm', 'e', 0x00, 0x01
+    };
+    static const uint8_t truncated_length[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x07, 0x04, 'n', 'a', 'm', 'e', 0x00, 0x80
+    };
+    static const uint8_t nul_name[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x0d, 0x06, 'n', 'a', 'm', 'e', 0x00, 'x', 0x00, 0xfa, 0xff, 0xff, 0xff, 0x0f
+    };
+    const struct { const uint8_t *bytes; size_t size; } invalid[] = {
+        { wrapping_name, sizeof wrapping_name }, { overlong_name, sizeof overlong_name },
+        { truncated_length, sizeof truncated_length }, { nul_name, sizeof nul_name },
+    };
+    for (size_t index = 0; index < sizeof invalid / sizeof invalid[0]; index++) {
+        app_t *app = (app_t *)1;
+        CHECK(app_load("x", HOST_API_VERSION, invalid[index].bytes, invalid[index].size,
+                       0, &SERVICES, &app) == APP_ERR_BAD_MODULE);
+        CHECK(app == NULL);
+        app_unload(app);
+    }
+    /* Empty and exactly bounded subsections remain valid, including an
+     * unknown subsection type, which wasm3 skips. */
+    static const uint8_t valid_name[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x02, 0x01, 0x00,
+        0x00, 0x0c, 0x04, 'n', 'a', 'm', 'e', 0x00, 0x00, 0x01, 0x01, 0x00, 0x7f, 0x00
+    };
+    app_t *app = NULL;
+    CHECK(app_load("x", HOST_API_VERSION, valid_name, sizeof valid_name, 0, &SERVICES, &app) == APP_OK);
+    app_unload(app);
+    app = load_probe();
+    CHECK(!app_has_stopped(app));
+    app_unload(app);
+}
+
 static void test_bad_modules(void)
 {
     app_t *app = NULL;
@@ -876,6 +923,7 @@ static void test_probe_contract(void)
     test_trap_stops_the_application();
     test_runaway_handlers_are_stopped();
     test_bad_modules();
+    test_name_subsection_bounds();
 }
 
 static void test_frozen_hello_state(void)

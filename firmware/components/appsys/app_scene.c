@@ -22,6 +22,7 @@ typedef struct {
     size_t                in_place_size;
     const uint8_t        *module;     /* the module's bytes while the application runs */
     app_t                *app;        /* NULL while not on the screen or not loadable */
+    uint64_t              instance;   /* changes on reload even if malloc reuses the address */
     const char           *load_error; /* why app is NULL although the scene is on the screen */
     /* The header's texts as the application last gave them: they outlive
      * the instance, which is unloaded for a delivery to another one. */
@@ -97,6 +98,7 @@ static bool load(app_scene_t *self)
     switch (app_load(self->manifest.name, self->manifest.abi, self->module, module_size, grants, self->services,
                      &self->app)) {
     case APP_OK:
+        self->instance++;
         return true;
     case APP_ERR_NO_MEMORY:
         self->load_error = word(WORD_OUT_OF_MEMORY);
@@ -320,6 +322,12 @@ app_t *app_scene_loaded_app(scene_t *scene)
 {
     app_scene_t *self = (app_scene_t *)scene;
     return is_app_scene(scene) ? self->app : NULL;
+}
+
+uint64_t app_scene_instance(scene_t *scene)
+{
+    app_scene_t *self = (app_scene_t *)scene;
+    return is_app_scene(scene) && self->app != NULL ? self->instance : 0;
 }
 
 app_t *app_scene_app(scene_t *scene)
