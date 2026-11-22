@@ -198,7 +198,7 @@ void wifi_rescue_is_due(void)
     }
 }
 
-static void start_access_point(void)
+static bool start_access_point(void)
 {
     wifi_config_t config = { 0 };
     config.ap.ssid_len = (uint8_t)wifi_copy_field(config.ap.ssid, sizeof config.ap.ssid,
@@ -214,7 +214,7 @@ static void start_access_point(void)
         /* Without it the device cannot be set up, but it must not go
          * into a restart loop over that either. */
         ESP_LOGE(TAG, "cannot bring the setup access point up: %s", esp_err_to_name(err));
-        return;
+        return false;
     }
     s_wifi.access_point_up = true;
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
@@ -222,6 +222,7 @@ static void start_access_point(void)
     xSemaphoreGive(s_wifi.lock);
     captive_dns_enable(true);
     ESP_LOGI(TAG, "setup access point \"%s\" is up", s_wifi.access_point_name);
+    return true;
 }
 
 static void stop_access_point(void)
@@ -275,7 +276,12 @@ static void connect(void)
 static void carry_out(const wifi_plan_actions_t *actions)
 {
     if (actions->start_access_point) {
-        start_access_point();
+        uint32_t retry_ms = wifi_plan_access_point_result(&s_wifi.plan, start_access_point());
+        if (retry_ms > 0) {
+            deadlines_set_in(DEADLINE_WIFI_RESCUE, 0, 0, retry_ms);
+        } else {
+            deadlines_cancel(DEADLINE_WIFI_RESCUE, 0, 0);
+        }
     }
     if (actions->stop_access_point) {
         stop_access_point();

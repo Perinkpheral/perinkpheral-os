@@ -170,6 +170,47 @@ static void test_rescue_without_dhcp(void)
     CHECK(step(WIFI_EVENT_RESCUE_DUE, 320000).start_access_point);
 }
 
+static void test_access_point_start_retries(bool has_network)
+{
+    wifi_plan_init(&plan, has_network, false);
+    wifi_plan_actions_t actions = step(WIFI_EVENT_STARTED, 0);
+    int64_t now = has_network ? 120000 : 0;
+    if (has_network) actions = step(WIFI_EVENT_RESCUE_DUE, now);
+    CHECK(actions.start_access_point);
+
+    const uint32_t pauses[] = { 2000, 4000, 8000, 16000, 30000, 30000 };
+    for (unsigned attempt = 0; attempt < sizeof pauses / sizeof pauses[0]; attempt++) {
+        /* Either driver operation can fail; station retries must not erase
+         * the outstanding access point request or its backoff. */
+        CHECK(wifi_plan_access_point_result(&plan, false) == pauses[attempt]);
+        step(WIFI_EVENT_DISCONNECTED, now);
+        CHECK(step(WIFI_EVENT_RETRY_DUE, now).connect == has_network);
+        now += pauses[attempt];
+        CHECK(step(WIFI_EVENT_RESCUE_DUE, now).start_access_point);
+    }
+    CHECK(wifi_plan_access_point_result(&plan, true) == 0);
+    CHECK(!step(WIFI_EVENT_RESCUE_DUE, now + 30000).start_access_point);
+    CHECK(!step(WIFI_EVENT_DISCONNECTED, now + 60000).start_access_point);
+}
+
+static void test_connection_cancels_access_point_retry(void)
+{
+    wifi_plan_init(&plan, true, false);
+    step(WIFI_EVENT_STARTED, 0);
+    CHECK(step(WIFI_EVENT_RESCUE_DUE, 120000).start_access_point);
+    CHECK(wifi_plan_access_point_result(&plan, false) == 2000);
+    CHECK(step(WIFI_EVENT_CONNECTED, 121000).stop_access_point);
+    CHECK(!step(WIFI_EVENT_RESCUE_DUE, 122000).start_access_point);
+    CHECK(plan.access_point_retry_ms == 0);
+
+    step(WIFI_EVENT_DISCONNECTED, 130000);
+    CHECK(step(WIFI_EVENT_RESCUE_DUE, 250000).start_access_point);
+    CHECK(wifi_plan_access_point_result(&plan, false) == 2000);
+    wifi_plan_init(&plan, false, true);
+    CHECK(wifi_plan_access_point_result(&plan, false) == 0);
+    CHECK(!step(WIFI_EVENT_RESCUE_DUE, 300000).start_access_point);
+}
+
 int main(void)
 {
     test_no_network_is_setup();
@@ -181,5 +222,8 @@ int main(void)
     test_rescue_after_two_minutes();
     test_lost_network_starts_a_fresh_run();
     test_rescue_without_dhcp();
+    test_access_point_start_retries(false);
+    test_access_point_start_retries(true);
+    test_connection_cancels_access_point_retry();
     REPORT();
 }

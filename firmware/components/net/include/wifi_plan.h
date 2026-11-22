@@ -48,6 +48,7 @@ typedef struct {
     bool         has_network;      /* a network is stored */
     int64_t      trying_since_ms;  /* when the current run of failures began */
     int          failed_attempts;  /* in that run */
+    uint32_t     access_point_retry_ms;
 } wifi_plan_t;
 
 /* `is_off`: the user turned Wi-Fi off. A stored network comes first: a
@@ -55,6 +56,10 @@ typedef struct {
 void wifi_plan_init(wifi_plan_t *plan, bool has_network, bool is_off);
 
 wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, int64_t now_ms);
+
+/* The driver reports whether the requested access point started. Returns
+ * the delay before another WIFI_EVENT_RESCUE_DUE, or 0 on success. */
+uint32_t wifi_plan_access_point_result(wifi_plan_t *plan, bool started);
 
 /* The setup access point is up in this phase. */
 bool wifi_phase_has_access_point(wifi_phase_t phase);

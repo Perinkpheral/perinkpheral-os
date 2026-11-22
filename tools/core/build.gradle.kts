@@ -93,3 +93,10 @@ val pollManifestTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.PollManifestTest")
 }
 tasks.check { dependsOn(pollManifestTest) }
+
+val networkRecoveryTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.NetworkRecoveryTest")
+}
+tasks.check { dependsOn(networkRecoveryTest) }

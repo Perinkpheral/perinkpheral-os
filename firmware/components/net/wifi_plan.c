@@ -15,6 +15,20 @@ void wifi_plan_init(wifi_plan_t *plan, bool has_network, bool is_off)
     plan->has_network = has_network;
     plan->trying_since_ms = 0;
     plan->failed_attempts = 0;
+    plan->access_point_retry_ms = 0;
+}
+
+uint32_t wifi_plan_access_point_result(wifi_plan_t *plan, bool started)
+{
+    if (started || !wifi_phase_has_access_point(plan->phase)) {
+        plan->access_point_retry_ms = 0;
+    } else if (plan->access_point_retry_ms == 0) {
+        plan->access_point_retry_ms = FIRST_RETRY_MS;
+    } else {
+        uint32_t next_ms = plan->access_point_retry_ms * 2;
+        plan->access_point_retry_ms = next_ms < LONGEST_RETRY_MS ? next_ms : LONGEST_RETRY_MS;
+    }
+    return plan->access_point_retry_ms;
 }
 
 bool wifi_phase_has_access_point(wifi_phase_t phase)
@@ -75,7 +89,8 @@ wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, i
     if (!plan->has_network) {
         /* Nothing to connect to: the access point from the start, and
          * nothing else ever. */
-        actions.start_access_point = event == WIFI_EVENT_STARTED;
+        actions.start_access_point = event == WIFI_EVENT_STARTED ||
+                                     (event == WIFI_EVENT_RESCUE_DUE && plan->access_point_retry_ms > 0);
         return actions;
     }
     switch (event) {
@@ -88,6 +103,7 @@ wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, i
         actions.stop_access_point = wifi_phase_has_access_point(plan->phase);
         plan->phase = WIFI_PHASE_ONLINE;
         plan->failed_attempts = 0;
+        plan->access_point_retry_ms = 0;
         break;
     case WIFI_EVENT_DISCONNECTED:
         actions = on_disconnected(plan, now_ms);
@@ -96,6 +112,8 @@ wifi_plan_actions_t wifi_plan_step(wifi_plan_t *plan, wifi_plan_event_t event, i
         if (plan->phase == WIFI_PHASE_CONNECTING &&
             now_ms - plan->trying_since_ms >= RESCUE_AFTER_MS) {
             plan->phase = WIFI_PHASE_RESCUE;
+            actions.start_access_point = true;
+        } else if (plan->phase == WIFI_PHASE_RESCUE && plan->access_point_retry_ms > 0) {
             actions.start_access_point = true;
         }
         break;
