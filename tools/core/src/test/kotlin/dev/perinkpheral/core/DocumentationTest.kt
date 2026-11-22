@@ -71,7 +71,12 @@ object DocumentationTest {
         finding(25, agents to "builds all four PDFs", agents to "attaches all four PDFs")
         finding(26, guide to "mocked redirects are delivered as final responses and are not followed",
             simulator to "redirects are delivered as final responses and are not followed")
-        check(findings == 26)
+        finding(27, network to "a receiving instance, on or off the screen, can be unloaded",
+            specification to "Response delivery can be interrupted on or off the screen",
+            guide to "Response delivery can be interrupted on or off the screen",
+            read("docs/guide/source/guide.ru.txt") to
+                "Передача ответа может прерваться как на экране, так и в фоне")
+        check(findings == 27)
         println("DocumentationTest: $findings findings checked")
     }
 }

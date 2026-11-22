@@ -143,7 +143,8 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
      * response may also start without FIRST, unless this stream was lost. */
     bool is_first_piece = delivery->kind != APP_DELIVERY_PIECE ||
                           (delivery->flags & HOST_DATA_FIRST) != 0 ||
-                          ((delivery->flags & HOST_DATA_FAILED) != 0 && state->answer_owner == NULL);
+                          ((delivery->flags & HOST_DATA_FAILED) != 0 &&
+                           !(state->answer_owner == owner && state->answer_request == delivery->request));
     if (!is_first_piece && (state->answer_owner != owner ||
                            state->answer_request != delivery->request || state->answer_instance == 0)) {
         if (state->answer_owner == owner && state->answer_request == delivery->request && is_last(delivery)) {
@@ -164,6 +165,10 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
              * the answer fetched because of them - not when the panel is
              * next due for data. */
             if (delivery->kind == APP_DELIVERY_SETTINGS) {
+                if (state->answer_owner == owner && state->answer_request < HOST_REQUEST_FIRST) {
+                    state->answer_owner = NULL;
+                    state->answer_instance = 0;
+                }
                 state->settings_owner = owner;
                 state->settings_ms = now_ms;
             }
@@ -190,6 +195,7 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     if (delivery->kind == APP_DELIVERY_SETTINGS && state->in_background == owner &&
         state->is_mid_answer && state->answer_request < HOST_REQUEST_FIRST) {
         app_scene_end_background(owner);
+        state->answer_owner = NULL;
         state->answer_instance = 0;
         state->in_background = NULL;
         state->is_mid_answer = false;
@@ -219,7 +225,7 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     if (delivery->kind == APP_DELIVERY_PIECE) {
         state->is_mid_answer = app != NULL && !is_last(delivery);
         if (app == NULL && !is_last(delivery)) {
-            abandoned = abandon_answer(state);
+            state->answer_instance = 0;
         }
     }
     /* Something else for it in the middle of an answer - its settings
