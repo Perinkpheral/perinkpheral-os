@@ -52,8 +52,8 @@ object DocumentationTest {
         finding(13, specification to "two event queues, with input taken first")
         finding(14, specification to "OTA probation, button debounce and network request timeouts keep their own timing")
         check("One module keeps every deadline" !in specification && "One module owns every deadline" !in specification)
-        finding(15, specification to "staging place from the waiting-handler task")
-        finding(16, specification to "after confirmation, when writing the firmware image starts")
+        finding(15, specification to "Package downloads are staged by the web waiting-handler task or the automatic-update task")
+        finding(16, specification to "after physical confirmation, recovery shows")
         finding(17, specification to "unless the instance has already stopped because of a fault")
         finding(18, read("sdk/host/buttons.h").replace(" * ", " ") to
             "BTN_BACK_KEYDOWN without BTN_BACK_KEYUP for that hold")
