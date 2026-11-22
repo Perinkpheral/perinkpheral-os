@@ -4,8 +4,13 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
-## next
+## 0.1.80
 
+- Icons that are symmetric by their subject are exactly symmetric at every size; the set is redrawn in 11, 22 and 44 cells.
+- Jersey: Cyrillic and Kazakh letters told apart from each other and from digits; a narrow zero, a footed one and a flat-topped three.
+- Panel screens polished: centred single values, notices, footers and Russian wording that fits.
+- Device page: a setting that stays on is a checkbox; checkbox marks and icons are centred at every pixel ratio.
+- A user manual in English and Russian is attached to every release.
 - Manifest polls support request methods and templated bodies, with the firmware minimum computed by the build.
 - Failed firmware rejection restarts into recovery after bounded metadata-write retries.
 - Wi-Fi reconnects after scans despite repeated radio requests from button presses.
