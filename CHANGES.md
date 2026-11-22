@@ -4,6 +4,13 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.83
+
+- A fresh install from the web flasher starts the firmware by itself and shows the setup screen; BACK in recovery is needed only after Keep data.
+- Jersey's Cyrillic is the set accepted on the device: Ы and ы with the stem closer, ь with a larger counter, a new б at the title size.
+- The device's page lists applications that are not installed first in the Catalog, the installed ones last.
+- The time setting on the device's page says Automatic, as on the device, on one line.
+
 ## 0.1.82
 
 - Update all appears on the device's page from two updates, as Install and Update show a single one.

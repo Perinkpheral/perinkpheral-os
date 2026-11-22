@@ -83,6 +83,7 @@ Open each, wait for its data, press every button it uses.
 | donut | | | | |
 | ha | | | | |
 | iss | | | | |
+| keenetic | | | | |
 | kit | | | | |
 | life | | | | |
 | metals | | | | |
