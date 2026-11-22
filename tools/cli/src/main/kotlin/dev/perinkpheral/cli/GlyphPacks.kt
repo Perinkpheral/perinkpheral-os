@@ -16,19 +16,16 @@ import javax.imageio.ImageIO
  * The packs and their letters are sdk/languages.json's.
  */
 object GlyphPacks {
-    /** The faces, as gfx_face_t numbers them, and the sizes the firmware's own fonts are made
-     * at. Jersey 20 contributes Cyrillic only: adding its Latin extension too would exceed
-     * the partition. All four Jersey faces can therefore read Russian and Kazakh. */
+    /** The faces and raster sizes of the device-tested pack. Jersey 20 was not included. */
     private val FACES = listOf(
         Triple(0, "DepartureMono-Regular.otf", 11.0),
         Triple(1, "Jersey10-Regular.ttf", 18.6667),
         Triple(2, "Jersey15-Regular.ttf", 27.0),
-        Triple(3, "Jersey20-Regular.ttf", 34.0),
         Triple(4, "Jersey25-Regular.ttf", 41.0),
     )
 
     /** Jersey has no Cyrillic: its letters are made from its Latin ones. */
-    private val MADE = setOf("Jersey10-Regular.ttf", "Jersey15-Regular.ttf", "Jersey20-Regular.ttf", "Jersey25-Regular.ttf")
+    private val MADE = setOf("Jersey10-Regular.ttf", "Jersey15-Regular.ttf", "Jersey25-Regular.ttf")
 
     /** Letters a face has under another code: the Kazakh schwa is the shape of the Latin one,
      * which Departure Mono has drawn. */
@@ -51,7 +48,7 @@ object GlyphPacks {
 
     private fun facePart(number: Int, font: File, px: Double, codePoints: List<Int>): Triple<ByteArray, List<Int>, Map<Int, FontFace.Glyph>> {
         val face = FontFace(font, px)
-        val made = if (font.name in MADE) JerseyCyrillic(face::glyph).glyphs() else emptyMap()
+        val made = if (font.name in MADE) JerseyCyrillic(face::rasterGlyph).glyphs() else emptyMap()
         val entries = java.io.ByteArrayOutputStream()
         val bits = java.io.ByteArrayOutputStream()
         val missing = ArrayList<Int>()
@@ -115,7 +112,6 @@ object GlyphPacks {
             require(name.length <= NAME_MAX) { "$name: a pack's name is $NAME_MAX letters at most" }
             val parts = ArrayList<ByteArray>()
             for ((number, fontFile, px) in FACES) {
-                if (number == 3 && name != "cyrillic") continue
                 val (part, missing, drawn) = facePart(number, File(root, "assets/fonts/$fontFile"), px, codePoints)
                 require(name != "cyrillic" || missing.isEmpty()) { "$fontFile: incomplete Cyrillic pack" }
                 if (drawn.isEmpty()) continue

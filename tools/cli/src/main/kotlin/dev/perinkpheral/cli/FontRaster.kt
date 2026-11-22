@@ -50,7 +50,8 @@ class FontFace(file: File, private val px: Double) {
             JerseyDigits.glyph(codePoint, original, digitReference) else original
     }
 
-    private fun rasterGlyph(codePoint: Int): Glyph? {
+    /** Original outline, before digit masters: Cyrillic constructions use these source shapes. */
+    fun rasterGlyph(codePoint: Int): Glyph? {
         val gid = cmap.getGlyphId(codePoint)
         if (gid == 0) return null
         val advance = ((mulFix(font.getAdvanceWidth(gid).toLong(), scale) + 32) and 63L.inv()) shr 6
