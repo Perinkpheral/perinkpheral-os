@@ -22,11 +22,10 @@ The first candidate is firmware 0.1.63.
 Run from the repository root with Java 21 or later, a C compiler and wasi-sdk:
 
 ```sh
-cd firmware/test/host
-WASI_SDK_PATH="$HOME/opt/wasi-sdk" make -s test
+make -C firmware/test/host -s test
 ```
 
-`WASI_SDK_PATH` names the local SDK installation; it need not be at that example path.
+Set `WASI_SDK_PATH` to the installed wasi-sdk directory before running this command.
 The host tests cover the pure modules, the real wasm interpreter, answer delivery,
 frozen ABI 3 packages and the contract snapshot. They also check layers, languages and
 the generated city table. CI runs them on Linux with the sanitizers selected by the
@@ -50,8 +49,10 @@ The simulator compares application frames with reviewed pictures:
 tools/perinkpheral sim-test firmware/test/sim
 ```
 
-`--update` replaces the expected pictures and requires visual review. A simulator frame
-has no panel latency. Its network can use canned responses from each scenario.
+If an expected PNG is missing, `sim-test` writes it and fails even without `--update`.
+Review that picture before committing it. `--update` also replaces existing expected
+pictures. A simulator frame has no panel latency. Its network can use canned responses
+from each scenario.
 
 Scenarios run several at a time (`--jobs N`; one a processor by default, `1` for one by
 one) and are reported in their own order. Each has its own simulator, state folder and a
@@ -74,9 +75,12 @@ Use the current tools, with `PERINKPHERAL_HOST` set to the bench device:
 ```sh
 tools/perinkpheral status
 tools/perinkpheral log --follow
-tools/perinkpheral open hello --shot hello.png
+tools/perinkpheral open clock --shot clock.png
 tools/perinkpheral press 1 2 3 4 --shot after.png
 ```
+
+Choose an application installed on the candidate. Hello is an SDK sample and must
+be uploaded before it can be opened.
 
 `/api/status` reports `free_memory`, `least_free_memory`, `largest_free_block`,
 `memory_refusals`, `failed_allocations`, `uptime_s`, `reset_reason`, `last_panic`,
@@ -151,8 +155,10 @@ applications and versions, network, power profile, duration and operations perfo
 
 Exercise screen changes, settings saves, polls, file and store use, alarms, notifications
 and background delivery. Return to the same quiet state periodically and compare free
-memory and largest free block. Check that navigation and unfinished edits survive a
-background delivery through the session, and disappear after leaving the application.
+memory and largest free block. Check that navigation and unfinished edits survive
+background delivery and switching to a sibling application and back. Check that
+exiting the application with short BACK, or opening the menu with long BACK, discards
+its session.
 
 A failure is:
 

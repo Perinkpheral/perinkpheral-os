@@ -30,8 +30,8 @@ Holds:
   or with both ports in {80, 443}, bypass the allowlist check and retain application headers.
   Other raw-request redirect destinations must be in `hosts`; application headers are dropped there.
   GET polls follow redirects even to other hosts. Other methods deliver the redirect
-  response without replaying the request. User information and letter case do not change
-  the host-name comparison.
+  response without replaying the request. Host names are compared without case sensitivity.
+  URLs containing user information are rejected by host authorization and same-host checks.
 - It cannot move the server the user gave it: `kv_set` on a `url` or `link` setting is refused. Queued raw-request destinations are
   authorized again before sending; headers use the same current settings view. Manifest
   polls expand their destinations at dispatch and do not use the `hosts` allowlist.
@@ -52,8 +52,10 @@ Does not hold:
 
 ### A catalog, or whoever controls one
 
-Holds: a source is `https://` and nothing else (2026-11-13); every file is taken only with
-the size and SHA-256 its index gives; the official source cannot be removed.
+Catalog source URLs must use HTTPS. The installer checks each downloaded file against
+the size and SHA-256 supplied in the installation request. The browser obtains these
+values from the catalog index; automatic updates read the index in firmware. These
+checks do not authenticate the publisher. The official source cannot be removed.
 
 Does not hold:
 - There are no signatures. Whoever can write to a source - its owner, or somebody who took
@@ -62,6 +64,11 @@ Does not hold:
 - An update is not shown to differ from what was installed: new hosts, a new request for
   secrets, nothing is pointed out. Only `"system": true` and a certificate authority of its
   own are asked about.
+
+When automatic application updates are enabled, compatible newer versions may be
+installed daily without another click. Automatic updates restrict changes to
+destination declarations, system access, file-writing privileges and certificate
+authorities. They do not authenticate replacement application code.
 
 ### Somebody on the same network
 
@@ -82,13 +89,17 @@ Holds:
 Does not hold:
 - **There is no password on the page.** Anybody who can reach port 80 may install and
   remove applications, add a catalog, change every setting, restart the device or enter
-  recovery, read the log and what is set (but for secrets) - with a command line; the checks above are
-  against browsers. The owner chose this scope on 2026-11-12.
+  recovery, read the log and exposed settings values, excluding secrets and stored
+  custom links - with a command line; the checks above are against browsers. The owner
+  chose this scope on 2026-11-12.
 - Entering recovery does not require physical confirmation and interrupts normal
   applications until main is started again. Replacing main still requires a new
   physical OK after recovery has shown the image's version. Main refuses direct
   firmware uploads; recovery cannot write its own image, the bootloader or the
-  partition table through its HTTP API.
+  partition table through its HTTP API. Firmware uploads are not authenticated by a
+  publisher signature. Recovery checks image compatibility and integrity, then requires
+  physical OK. The displayed version is supplied by the uploaded image and does not
+  establish its origin.
 - **They can change application credentials and servers.** The settings API does not
   require confirmation. A network peer can disrupt pairing or redirect later requests.
   Changing a url/link destination whose previous stored or default value is nonempty
@@ -108,7 +119,9 @@ Does not hold:
 - With no saved network and Wi-Fi enabled, or after two minutes of failing to join a
   saved network, it puts up an **open** access point. Deliberately disabled Wi-Fi starts
   no access point. Whoever is in range is then "somebody on the same network",
-  with everything above. Jamming the home Wi-Fi for two minutes is enough to bring it up.
+  with everything above. Sustained connection failure can expose the rescue access point
+  after two minutes of active connection attempts. Power saving can stop the radio and
+  postpone this transition.
   From there, as from any network, what cannot be undone - another network, a firmware,
   a reset - is asked about on the screen; the rest is not.
 - Recovery always exposes the open `perink-recovery` access point at `192.168.4.1`,
@@ -133,6 +146,10 @@ Does not hold: plain `http` is allowed, so a token sent over it crosses the netw
 clear. Packaged authority roots are supported for that application only; a setting for
 a user-supplied server certificate is not implemented.
 
+The connection-cut timer does not cover TLS setup because ESP-TLS exposes the socket
+only after the handshake finishes. A slow handshake can therefore block the poller
+and keep the radio active beyond the response deadlines.
+
 ### A companion page
 
 A page of the application's author, opened from the device's page. It is given the
@@ -148,10 +165,9 @@ above describe that scope; they are not a backlog of promised protections.
 
 The sandbox addresses **untrusted applications from third-party catalogs**:
 
-1. **The owner's decision, 2026-11-13.** **What an application is, in words, for whoever
-   wants to look**: a button on its tile beside the gear opens its manifest as a person
-   reads it - where it connects, how often, what it keeps. Not before installing: an
-   application has to install in one click, or nobody will use the catalog.
+1. Application information is available through Info on an installed application's
+   tile. It describes destinations, polling and storage. This information is not
+   shown before installation.
 2. **Home Assistant** uses an integration-issued secret for a device screen, rather than
    the user's general access token. The integration is in the separate
    `perinkpheral-hacs` repository; this repository does not test an HA server.
@@ -163,7 +179,7 @@ being developed; a release is built without them.
 
 ## Decided, so that it is not argued again
 
-No backend, no accounts, no telemetry. The level above: a thing at home, not a product
-to be defended against its own network. No signatures for applications before there is
-somebody to sign. The page open to the home network for what can be taken back. The
-battery's and the device's physical safety are the builder's.
+The project provides no backend, accounts or telemetry. Its protection scope trusts
+local-network peers and physical access. Application signatures are not implemented.
+The device page permits reversible operations without authentication. The builder is
+responsible for battery and device safety.

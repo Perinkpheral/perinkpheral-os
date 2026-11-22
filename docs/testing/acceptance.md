@@ -14,7 +14,7 @@ a dated record beside this file, as [acceptance-2026-11-20.md](acceptance-2026-1
 | Item | Value |
 |---|---|
 | Firmware release | |
-| Firmware image ID (Device page) | |
+| Firmware image ID (`image_id` from `GET /api/status`) | |
 | Recovery version | |
 | Catalog commit | |
 | Applications installed, with versions | |
@@ -27,7 +27,7 @@ a dated record beside this file, as [acceptance-2026-11-20.md](acceptance-2026-1
 |---|---|---|---|
 | 1.1 | Device page, Firmware, Check for updates | The candidate is offered; no older or equal version is | |
 | 1.2 | Install it; confirm on the device | Recovery screen, progress, restart into the candidate | |
-| 1.3 | Device page after restart | Version and image ID are the candidate's; probation completes | |
+| 1.3 | Read `GET /api/status` after restart | `firmware` and `image_id` identify the candidate; `on_probation` becomes false | |
 | 1.4 | Compare settings and installed applications with before | Nothing lost, no application reset to defaults | |
 | 1.5 | Installed apps, Update all | Every application reaches the catalog's version; ISS and Life open afterwards | |
 | 1.6 | Look for GitHub activity in the menu and in Installed apps | Note whether it is still installed; remove it by hand if so | |
@@ -65,7 +65,7 @@ a dated record beside this file, as [acceptance-2026-11-20.md](acceptance-2026-1
 | # | Do | Expect | Result |
 |---|---|---|---|
 | 4.1 | Life: let it run, switch to the next application with BACK and DOWN, come back with BACK and UP | The same field and generation count, from where it stopped; it does not run while away | |
-| 4.2 | ISS: open, switch away for some minutes, come back | The track and position are kept; the night screen is inverted whole | |
+| 4.2 | ISS: open, switch away for some minutes, come back | The stored track and latest available position are retained | |
 | 4.3 | Calendar or HA: go two pages in, wait for a background poll of another application, look again | The same page | |
 | 4.4 | Leave an application with BACK from its first page, open it again | It starts from its first page | |
 | 4.5 | After 4.1, a short BACK | The menu, not the application switched from | |
@@ -80,6 +80,7 @@ Open each, wait for its data, press every button it uses.
 | air | | | | |
 | calendar | | | | |
 | clock | | | | |
+| donut | | | | |
 | ha | | | | |
 | iss | | | | |
 | kit | | | | |
@@ -119,7 +120,7 @@ network on the shelf device unless this pass is meant to include them.
 | 7.4 | Settings, Wi-Fi, Forget network, OK | The device restarts into its default or last application, or the menu - not the setup screen. No `Perinkpheral-XXXX` network in a phone's list. The header's Wi-Fi icon is struck through; the clock runs; an application that needs the network says "No network". Settings, Wi-Fi: Network "Not set", Status "Off", and Connect to Wi-Fi in place of Forget network. About: Wi-Fi "Off", no address | |
 | 7.5 | With Wi-Fi off: restart the device; then General, Date & time, set the time by hand | It starts the same way, still with no access point; the header shows the time set | |
 | 7.6 | With Wi-Fi off: Settings, Wi-Fi, Connect to Wi-Fi; join a network through the portal | The device restarts to the setup screen with its access point up, as in 7.3. After joining it is on the network, the page opens at its address, and the applications and their settings are as before | |
-| 7.7 | Flash the candidate from scratch (the flasher's fresh install, which erases the board), set up Wi-Fi, then look at the menu, the log and the device page; open each application; remove Clock on the page, then install it from the Catalog | The menu: Air quality, Calendar, Clock, ISS, Stocks, Stopwatch, Timer, Weather, then Settings and About; no Hello. The log says "installed" once for each of the eight. Each opens. Installed apps: the eight with the versions of `firmware/preinstalled.properties`' commit, Update where the catalog is newer; no default application. Removed, Clock leaves the menu and the Catalog offers Install; installed again, it is in the menu and opens | |
+| 7.7 | Flash the candidate from scratch using the flasher's fresh install, which erases the board. On the recovery screen, press BACK to start main with probation, then set up Wi-Fi. Look at the menu, the log and the device page; open each application; remove Clock on the page, then install it from the Catalog | The menu: Air quality, Calendar, Clock, ISS, Stocks, Stopwatch, Timer, Weather, then Settings and About; no Hello. The log says "installed" once for each of the eight. Each opens. Installed apps: the eight with the versions of `firmware/preinstalled.properties`' commit, Update where the catalog is newer; no default application. Removed, Clock leaves the menu and the Catalog offers Install; installed again, it is in the menu and opens | |
 
 ## 8. Alarms, notifications, power
 
@@ -127,9 +128,10 @@ network on the shelf device unless this pass is meant to include them.
 |---|---|---|---|
 | 8.1 | Timer for one minute, switch to another application | The notification over that application; OK dismisses it | |
 | 8.2 | Pomodoro across a restart | It resumes as its screen says | |
-| 8.3 | Power profile Auto, no presses for its idle time | The screen keeps its picture; a press wakes it at the first try | |
+| 8.3 | With the battery connected, select Auto, disconnect the USB host and leave the device without presses until network work and the two-minute awake window have ended | The panel retains its picture; each physical button wakes the device on the first press | |
 
 ## After the pass
 
-Any `fail` is a fix in the candidate's branch, not a new release, unless it blocks the
-endurance run. The endurance run starts on the same image the pass was made on.
+A firmware fix creates a new candidate image. Record its image ID and repeat the
+affected acceptance checks before endurance testing. Start the endurance run on that
+accepted image. Any firmware change after the run starts requires a new run.

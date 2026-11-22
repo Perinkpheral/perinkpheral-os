@@ -45,12 +45,12 @@ Temperature: `0x18` after reset = `0x48` (external sensor, which the module does
 - Do not leave the display powered without sleep: after a refresh `0x10` or removing power is mandatory, otherwise the panel holds high voltage and degrades irreversibly. The controller turns the voltages off itself at the end of every refresh (`0x22 0xF7` / `0xFF` end with it), which is why the firmware may leave it awake 1.5 s for the next partial refresh.
 - The recommended interval between refreshes is at least 180 s, and at least one refresh per day. Use periodic full refreshes according to this vendor guidance.
 - Operating temperature 0..50 C, storage -25..70 C, humidity 35-65 %. Not in sunlight and no UV - the particles dry out irreversibly. Clear the screen before long storage.
-- Panel supply 2.3-3.6 V (not below 2.5 V), logic 3.3 V. Power during refresh 26.4 mW typ., standby < 0.01 µA. Controller logic ~1 mA in operation.
+- This assembly supplies the panel and logic from 3V3. Confirm permitted supply limits against the panel and module specifications before using another supply. Power during refresh 26.4 mW typ., standby < 0.01 µA. Controller logic ~1 mA in operation.
 - Do not bend the flex cable toward the front side or perpendicularly; secure it for the duration of development.
 
 ## Power
 - On battery the 5V pin is empty; 3V3 up to ~700 mA. Battery voltage is not routed to the ADC.
-- XIAO ESP32-C6 deep sleep per Seeed data ~15 µA at 3.8 V; light sleep 3.1 mA; modem sleep 30 mA. For wake-up by button - ext1 on GPIO0-7 (there is no ext0 on the C6); the buttons on GPIO0-2 are suitable, button 4 on GPIO21 is not.
+- XIAO ESP32-C6 deep sleep per Seeed data ~15 µA at 3.8 V; light sleep 3.1 mA; modem sleep 30 mA. Deep-sleep button wake uses ext1 on GPIO0-7 (there is no ext0 on the C6); buttons 1-3 are suitable and button 4 on GPIO21 is not. Main firmware uses light sleep, with all four buttons configured as GPIO wake sources.
 
 ## Open questions
 - The cause of the BUSY hang with block CS is not established. Per-byte CS remains a driver constraint (pitfall 1).
