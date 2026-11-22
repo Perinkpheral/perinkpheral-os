@@ -109,9 +109,9 @@ Review the generated sheets and real text together. Set `WASI_SDK_PATH` to the
 installed wasi-sdk directory:
 
 ```sh
-JAVA_TOOL_OPTIONS=-Djava.awt.headless=true tools/perinkpheral glyph-packs --out /tmp/jersey-packs --sheet /tmp/jersey-sheets
-tools/perinkpheral preview /tmp/jersey-preview --font jersey
-tools/perinkpheral sim <application> --font jersey --language ru --glyphs /tmp/jersey-packs
+JAVA_TOOL_OPTIONS=-Djava.awt.headless=true tools/perinkpheral glyph-packs --out <glyph-pack-directory> --sheet <glyph-sheet-directory>
+tools/perinkpheral preview <preview-directory> --font jersey
+tools/perinkpheral sim <application> --font jersey --language ru --glyphs <glyph-pack-directory>
 ```
 
 The generator checks coverage, counters, selected confusable pairs and sector-rounded

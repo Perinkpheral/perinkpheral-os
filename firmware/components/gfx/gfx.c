@@ -784,9 +784,8 @@ int gfx_font_cap_height(const gfx_font_t *font)
 
 /* A family has every size. Departure Mono is one bitmap at whole
  * multiples; Jersey is four faces, picked so that the capitals of a size
- * are as tall as Departure Mono's - 10, 15, 25, 30, 50 and 80 pixels for
- * its 8, 16, 24, 32, 48 and 80 - and what is laid out for one family
- * holds for the other. */
+ * are close to Departure Mono's - 10, 15, 25, 30, 50 and 80 pixels for
+ * its 8, 16, 24, 32, 48 and 80; layouts measure the selected family. */
 static const gfx_font_t FONTS[GFX_FAMILY_COUNT][GFX_FONT_COUNT] = {
     [GFX_FAMILY_DEPARTURE_MONO] = {
         [GFX_FONT_TEXT] = DEPARTURE_MONO(2),    [GFX_FONT_MEDIUM] = DEPARTURE_MONO(3),

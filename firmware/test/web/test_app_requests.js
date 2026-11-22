@@ -220,7 +220,8 @@ function testUpdateAllVisibility() {
   };
   const context = vm.createContext({
     CATALOG_INSTALLED_MAX: 24, settings: { app_auto_update: false },
-    installed: [{ name: "iss", version: "1.0.0" }, { name: "clock", version: "1.0.0" }],
+    installed: [{ name: "iss", version: "1.0.0" }, { name: "clock", version: "1.0.0" },
+      { name: "air", version: "1.0.0" }],
     offered: [], byId, inMenuOrder: apps => apps, tile: () => ({}), drawCatalog() {},
     catalogsRead: true, stateOf: () => "ready", sayState() {},
     compatibilityProblem: app => app.incompatible ? "Update the firmware." : "",
@@ -233,22 +234,27 @@ function testUpdateAllVisibility() {
     apps.indexOf("/* Bulk and individual updates share the queue")), context);
   for (const automatic of [false, true]) {
     context.settings.app_auto_update = automatic;
-    for (const count of [0, 1, 2]) {
+    for (const count of [0, 1, 2, 3]) {
       context.offered = context.installed.map((app, index) => ({
         source: 0, app: { ...app, version: index < count ? "2.0.0" : app.version },
       }));
       context.drawTiles();
-      assert.equal(byId("update-all").hidden, count === 0,
+      assert.equal(byId("update-all").hidden, count < 2,
         `Update all visibility with ${count} updates and Auto-update ${automatic}`);
       assert.equal(byId("auto-update-apps").attributes["aria-pressed"], String(automatic));
     }
   }
   context.offered = [
     { source: 0, generation: 0, app: { name: "iss", version: "2.0.0", incompatible: true } },
+    { source: 0, generation: 0, app: { name: "clock", version: "2.0.0" } },
     { source: 0, generation: 0, app: { name: "weather", version: "2.0.0" } },
   ];
   context.drawTiles();
-  assert.equal(byId("update-all").hidden, true, "only compatible installed updates count");
+  assert.equal(byId("update-all").hidden, true,
+    "one compatible installed update stays below the threshold despite other offers");
+  context.offered.push({ source: 0, generation: 0, app: { name: "air", version: "2.0.0" } });
+  context.drawTiles();
+  assert.equal(byId("update-all").hidden, false, "two compatible installed updates show Update all");
 }
 
 async function testAuthors() {

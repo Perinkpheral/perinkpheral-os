@@ -24,9 +24,10 @@
  * `value` is then unchanged. */
 bool app_fixed_parse(const char *text, int32_t decimals, int64_t *value);
 
-/* The same number with another number of decimals, rounded half away from
- * zero: 35627 from 2 to 0 decimals is 356. Returns 0 if an upward rescale
- * does not fit in int64_t. */
+/* Rescales a number, rounding half away from zero when reducing precision:
+ * 35627 from 2 to 0 decimals is 356. Use decimal counts from 0 to
+ * APP_FIXED_DECIMALS_MAX. Returns 0 if an increase of precision does not
+ * fit in int64_t. */
 int64_t app_fixed_rescale(int64_t value, int32_t from_decimals, int32_t to_decimals);
 
 /* part / whole with `decimals` decimals, rounded half away from zero; 0 if

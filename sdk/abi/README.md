@@ -8,10 +8,10 @@ ABI 2 has no adapter and receives "Update the app."
 
 `WASI_SDK_PATH=<wasi-sdk> tools/perinkpheral contract snapshot` creates or extends
 `3.txt` and `3/fixtures.txt`. It refuses to replace a recorded entry. `contract check`
-rejects changed, removed or unrecorded entries and runs with the host tests in CI.
+rejects changed, removed or unrecorded entries, except that `HOST_ICON_COUNT` may grow
+when contiguous icon IDs are appended, and runs with the host tests in CI.
 Record additions with `contract snapshot` before running the check.
-`HOST_ICON_COUNT` may grow only with a contiguous set of appended icon IDs;
-existing icon IDs remain fixed. Actual
+Existing icon IDs remain fixed. Actual
 Wasm types are also checked during every application build. Compiler measurements
 use wasm32 C11, independently of the native host's pointer width.
 

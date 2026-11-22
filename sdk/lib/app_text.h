@@ -34,7 +34,7 @@ void app_text_add_padded(app_text_t *text, int32_t value, int32_t digits);
 
 int32_t app_text_length(const char *text);
 
-/* Copies `from` to `to` as a null-terminated string of at most
+/* Copies `from` to `to` as a null-terminated string using at most
  * `size` - 1 bytes, cut between UTF-8 characters. With size 0, `to` may be
  * NULL and nothing is written. */
 void app_text_copy(char *to, int32_t size, const char *from);
