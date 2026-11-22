@@ -24,7 +24,7 @@ async function run(replies, action = "install", options = {}) {
     t: (text, ...values) => text.replace(/\{(\d+)\}/g, (_, at) => values[at]),
     installed: options.fresh ? [] : [{ name: "iss", version: options.installedVersion || "1.0.0" }, { name: "clock", version: "1.0.0" }],
     document: { getElementById: () => button },
-    compatibilityProblem: () => options.incompatible ? "Update the firmware." : null,
+    compatibilityProblem: () => options.incompatible ? "Update Perinkpheral OS." : null,
     confirmed: async () => false,
     offerSays: offer => offer.app.name === "clock" ? "Clock" : "ISS",
     updates: () => [offer, { source: 0, generation: 0, app: { name: "clock", version: "2.0.0", files: [] } }],
@@ -224,7 +224,7 @@ function testUpdateAllVisibility() {
       { name: "air", version: "1.0.0" }],
     offered: [], byId, inMenuOrder: apps => apps, tile: () => ({}), drawCatalog() {},
     catalogsRead: true, stateOf: () => "ready", sayState() {},
-    compatibilityProblem: app => app.incompatible ? "Update the firmware." : "",
+    compatibilityProblem: app => app.incompatible ? "Update Perinkpheral OS." : "",
     t: (text, ...values) => text.replace(/\{(\d+)\}/g, (_, at) => values[at]),
   });
   vm.runInContext(read("compatibility.js"), context);

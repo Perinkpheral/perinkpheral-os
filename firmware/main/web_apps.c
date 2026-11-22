@@ -666,7 +666,7 @@ static esp_err_t handle_install(httpd_req_t *request)
     json_free(json);
     if (problem != NULL) {
         bool conflict = strcmp(problem, "Not enough storage.") == 0 ||
-                        strcmp(problem, "Update the firmware.") == 0 || strcmp(problem, "Update the app.") == 0;
+                        strcmp(problem, "Update Perinkpheral OS.") == 0 || strcmp(problem, "Update the app.") == 0;
         const char *status = strcmp(problem, "Not enough memory.") == 0 || strcmp(problem, "Device busy.") == 0
                                 ? "503 Service Unavailable"
                              : strcmp(problem, "Storage error.") == 0 ? "500 Internal Server Error"

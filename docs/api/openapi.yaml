@@ -573,7 +573,7 @@ paths:
         200 JSON ok: Installed.
         400 JSON error: Invalid request.
         403 JSON error: Not confirmed.
-        409 JSON error: Not enough storage., Update the firmware., or Update the app.
+        409 JSON error: Not enough storage., Update Perinkpheral OS., or Update the app.
         500 JSON error: Storage error.
         503 JSON error: Device busy. or Not enough memory.
         502 JSON error: Invalid catalog entry., Download failed., Checksum mismatch.,
@@ -622,7 +622,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409":
           description: >-
-            Not enough storage, or the application needs a newer firmware ("Update the firmware.",
+            Not enough storage, or the application needs a newer firmware ("Update Perinkpheral OS.",
             "firmware" of its manifest) or an unsupported ABI ("Update the app.").
             The downloaded manifest governs compatibility; the index is not authoritative.
           content:

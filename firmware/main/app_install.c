@@ -141,7 +141,7 @@ static const char *install_file(const char *source, int source_index, const char
         } else if (!catalog_author_is_allowed(manifest.author, source_index)) {
             problem = "Invalid app author.";
         } else if (!app_manifest_runs_on(&manifest, esp_app_get_description()->version)) {
-            problem = "Update the firmware.";
+            problem = "Update Perinkpheral OS.";
         } else {
             *asks_for_system = manifest.system;
             *writes_files = manifest.writes_files;

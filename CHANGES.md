@@ -4,6 +4,11 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.88
+
+- The device calls its own system "Perinkpheral OS" where it said "firmware": the update question, the start and check screens of recovery, the message of an application that needs a newer system on the device and on its page, and the About row. The update question no longer fits the large font and is set in the regular one.
+- The Ink mascot is recorded as a concept in `docs/concepts/ink.md`; nothing ships with it.
+
 ## 0.1.87
 
 - An update through recovery no longer loses the network while the device asks for OK. Recovery stops reading the image until OK; with the unread image waiting, the device lost the access point about 25 seconds later and the update was lost. Received frames are now copied out of the Wi-Fi driver at once, in recovery and in the main firmware. Recovery reaches devices through the web flasher's Keep data or USB.

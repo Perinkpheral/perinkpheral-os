@@ -172,7 +172,7 @@ const RUSSIAN = {
   "Application ABIs": "ABI приложений",
   "Update the app.": "Обновите приложение.",
   "Incompatible firmware version.": "Несовместимая версия прошивки.",
-  "Update the firmware.": "Обновите прошивку.", "App not found.": "Приложение не найдено.",
+  "Update Perinkpheral OS.": "Обновите Perinkpheral OS.", "App not found.": "Приложение не найдено.",
   "Not installed.": "Не установлено.", "No image.": "Нет образа.", "Forbidden.": "Запрещено.",
   "Source not found.": "Источник не найден.", "Too many sources.": "Слишком много источников.",
   "Source unavailable (HTTP {0}).": "Источник недоступен (HTTP {0}).",

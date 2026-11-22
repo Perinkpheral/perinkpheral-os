@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 
     /* The host's notices take the whole screen. */
     gfx_init(&g, fb, W, H);
-    const notice_t asking = { .first = "Update", .second = "firmware?", .icon = GFX_ICON_UPDATE,
+    const notice_t asking = { .first = "Update", .second = "Perinkpheral OS?", .icon = GFX_ICON_UPDATE,
         .ok = "Update", .back = "Cancel" };
     memset(fb, 0xFF, sizeof fb);
     notice_draw(&g, &asking);
