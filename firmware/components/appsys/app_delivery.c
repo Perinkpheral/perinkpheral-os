@@ -11,6 +11,8 @@ void app_delivery_init(app_delivery_state_t *state)
 {
     state->in_background = NULL;
     state->is_mid_answer = false;
+    state->answer_owner = NULL;
+    state->answer_instance = 0;
     state->has_given_focus = false;
     state->last_focus_ms = 0;
     state->last_press_ms = 0;
@@ -94,27 +96,67 @@ static void end_background(app_delivery_state_t *state, wm_t *wm, app_t *app, in
     }
 }
 
+static app_abandoned_t abandon_answer(app_delivery_state_t *state)
+{
+    app_abandoned_t abandoned = { .owner = state->answer_owner, .request = state->answer_request };
+    state->answer_instance = 0;
+    return abandoned;
+}
+
+static app_abandoned_t check_instance(app_delivery_state_t *state)
+{
+    if (state->answer_instance != 0 &&
+        state->answer_instance != app_scene_instance(state->answer_owner)) {
+        return abandon_answer(state);
+    }
+    return (app_abandoned_t){0};
+}
+
+static void note_piece(app_delivery_state_t *state, scene_t *owner,
+                       const app_delivery_t *delivery)
+{
+    if (delivery->kind != APP_DELIVERY_PIECE) {
+        return;
+    }
+    state->answer_owner = is_last(delivery) ? NULL : owner;
+    state->answer_instance = is_last(delivery) ? 0 : app_scene_instance(owner);
+    state->answer_request = delivery->request;
+}
+
 void app_delivery_abort(app_delivery_state_t *state, wm_t *wm, int64_t now_ms,
                            app_abandoned_t *abandoned)
 {
-    abandoned->owner = NULL;
+    *abandoned = check_instance(state);
     if (state->in_background != NULL) {
         if (state->is_mid_answer) {
-            abandoned->owner = state->in_background;
-            abandoned->request = state->answer_request;
+            *abandoned = abandon_answer(state);
         }
         end_background(state, wm, NULL, now_ms);
     }
 }
 
-void app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owner,
-                 const app_delivery_t *delivery, int64_t now_ms)
+app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owner,
+                            const app_delivery_t *delivery, int64_t now_ms)
 {
+    app_abandoned_t abandoned = check_instance(state);
+    /* Continuations belong to the instance that received FIRST. A failed
+     * response may also start without FIRST, unless this stream was lost. */
+    bool is_first_piece = delivery->kind != APP_DELIVERY_PIECE ||
+                          (delivery->flags & HOST_DATA_FIRST) != 0 ||
+                          ((delivery->flags & HOST_DATA_FAILED) != 0 && state->answer_owner == NULL);
+    if (!is_first_piece && (state->answer_owner != owner ||
+                           state->answer_request != delivery->request || state->answer_instance == 0)) {
+        if (state->answer_owner == owner && state->answer_request == delivery->request && is_last(delivery)) {
+            state->answer_owner = NULL;
+        }
+        return abandoned;
+    }
     bool is_on_screen = wm->current == owner && !wm->suspended;
     if (is_on_screen) {
         app_t *app = app_scene_loaded_app(owner);
         if (app != NULL) {
             call(app, delivery);
+            note_piece(state, owner, delivery);
             /* On the screen there is nothing to ask for. */
             app_take_focus_request(app);
             /* Somebody has just saved its settings and is looking at the
@@ -137,27 +179,20 @@ void app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owner,
             state->in_background = NULL;
             state->is_mid_answer = false;
         }
-        return;
+        return abandoned;
     }
 
     if (delivery->only_on_screen) {
-        return;
+        return abandoned;
     }
     /* The rest of the old poll will be suppressed. Start the settings
      * callback in a fresh instance and keep the foreground suspended. */
     if (delivery->kind == APP_DELIVERY_SETTINGS && state->in_background == owner &&
         state->is_mid_answer && state->answer_request < HOST_REQUEST_FIRST) {
         app_scene_end_background(owner);
+        state->answer_instance = 0;
         state->in_background = NULL;
         state->is_mid_answer = false;
-    }
-    /* A piece that is not the first, for an application that is not taking
-     * the answer: the instance that took the start gave way to a press, or
-     * was replaced. The rest of that answer is nobody's. */
-    bool is_first_piece = delivery->kind != APP_DELIVERY_PIECE ||
-                      (delivery->flags & (HOST_DATA_FIRST | HOST_DATA_FAILED)) != 0;
-    if (!is_first_piece && state->in_background != owner) {
-        return;
     }
     app_t *app;
     if (state->in_background == owner) {
@@ -170,15 +205,22 @@ void app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owner,
             end_background(state, wm, NULL, now_ms);
         }
         wm_suspend(wm);
+        app_abandoned_t interrupted = check_instance(state);
+        if (interrupted.owner != NULL) {
+            abandoned = interrupted;
+        }
         app = app_scene_begin_background(owner);
         state->in_background = owner;
     }
     if (app != NULL) {
         call(app, delivery);
     }
+    note_piece(state, owner, delivery);
     if (delivery->kind == APP_DELIVERY_PIECE) {
-        state->is_mid_answer = !is_last(delivery);
-        state->answer_request = delivery->request;
+        state->is_mid_answer = app != NULL && !is_last(delivery);
+        if (app == NULL && !is_last(delivery)) {
+            abandoned = abandon_answer(state);
+        }
     }
     /* Something else for it in the middle of an answer - its settings
      * changed, its alarm came - is taken by the instance that is taking
@@ -186,4 +228,5 @@ void app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owner,
     if (!state->is_mid_answer) {
         end_background(state, wm, app, now_ms);
     }
+    return abandoned;
 }

@@ -193,15 +193,44 @@ static const uint8_t *read_name(wasm_reader_t *reader, uint32_t *length)
 }
 
 #define WASM_HEADER_BYTES    8
+#define WASM_SECTION_CUSTOM  0
 #define WASM_SECTION_IMPORT  2
 #define WASM_IMPORT_FUNCTION 0
 
-/* Whether everything the module imports is a function of the host API.
+/* wasm3 skips name subsections by adding their declared length to a
+ * pointer. Check those lengths before it can wrap on a 32-bit device. */
+static bool check_custom_section(wasm_reader_t reader)
+{
+    static const char NAME_SECTION[] = "name";
+    uint32_t length;
+    const uint8_t *name = read_name(&reader, &length);
+    if (reader.failed) {
+        return false;
+    }
+    /* wasm3 compares the name as a C string, including an embedded NUL. */
+    size_t name_length = sizeof NAME_SECTION - 1;
+    if (length < name_length || memcmp(name, NAME_SECTION, name_length) != 0 ||
+        (length > name_length && name[name_length] != 0)) {
+        return true;
+    }
+    while (reader.next < reader.end) {
+        read_byte(&reader); /* the subsection's type */
+        uint32_t payload_length = read_leb_u32(&reader);
+        if (reader.failed || payload_length > (size_t)(reader.end - reader.next)) {
+            return false;
+        }
+        reader.next += payload_length;
+    }
+    return true;
+}
+
+/* Whether the module's custom sections are bounded and everything it
+ * imports is a function of the host API.
  * The interpreter would load a module that imports something else and
  * fail only when it is called. APP_OK, or why not: APP_ERR_OTHER_API for a
  * call of the host's own that this host does not have - a module made
  * for another version of it - and APP_ERR_BAD_MODULE for anything else. */
-static app_load_result_t check_imports(const uint8_t *wasm, size_t wasm_size, unsigned grants)
+static app_load_result_t check_module(const uint8_t *wasm, size_t wasm_size, unsigned grants)
 {
     if (wasm_size < WASM_HEADER_BYTES) {
         return APP_ERR_BAD_MODULE;
@@ -213,18 +242,24 @@ static app_load_result_t check_imports(const uint8_t *wasm, size_t wasm_size, un
         if (reader.failed || section_size > (size_t)(reader.end - reader.next)) {
             return APP_ERR_BAD_MODULE;
         }
+        const uint8_t *section_end = reader.next + section_size;
+        if (section == WASM_SECTION_CUSTOM &&
+            !check_custom_section((wasm_reader_t){ reader.next, section_end, false })) {
+            return APP_ERR_BAD_MODULE;
+        }
         if (section != WASM_SECTION_IMPORT) {
             reader.next += section_size;
             continue;
         }
-        uint32_t import_count = read_leb_u32(&reader);
-        for (uint32_t i = 0; i < import_count && !reader.failed; i++) {
+        wasm_reader_t imports = { reader.next, section_end, false };
+        uint32_t import_count = read_leb_u32(&imports);
+        for (uint32_t i = 0; i < import_count && !imports.failed; i++) {
             uint32_t module_length, field_length;
-            const uint8_t *module_name = read_name(&reader, &module_length);
-            const uint8_t *field_name = read_name(&reader, &field_length);
-            uint8_t kind = read_byte(&reader);
-            read_leb_u32(&reader); /* the function's type */
-            if (reader.failed || kind != WASM_IMPORT_FUNCTION) {
+            const uint8_t *module_name = read_name(&imports, &module_length);
+            const uint8_t *field_name = read_name(&imports, &field_length);
+            uint8_t kind = read_byte(&imports);
+            read_leb_u32(&imports); /* the function's type */
+            if (imports.failed || kind != WASM_IMPORT_FUNCTION) {
                 return APP_ERR_BAD_MODULE;
             }
             if (is_offered(module_name, module_length, field_name, field_length, grants)) {
@@ -239,7 +274,10 @@ static app_load_result_t check_imports(const uint8_t *wasm, size_t wasm_size, un
                                          APP_GRANT_SYSTEM | APP_GRANT_FILES);
             return is_host_module && !is_granted ? APP_ERR_OTHER_API : APP_ERR_BAD_MODULE;
         }
-        return reader.failed ? APP_ERR_BAD_MODULE : APP_OK;
+        if (imports.failed || imports.next != section_end) {
+            return APP_ERR_BAD_MODULE;
+        }
+        reader.next = section_end;
     }
     return APP_OK;
 }
@@ -505,7 +543,7 @@ app_load_result_t app_load(const char *name, uint32_t abi, const uint8_t *wasm, 
         }
         return APP_ERR_NO_MEMORY;
     }
-    app_load_result_t imports = check_imports(wasm, wasm_size, grants);
+    app_load_result_t imports = check_module(wasm, wasm_size, grants);
     if (imports != APP_OK) {
         return imports;
     }

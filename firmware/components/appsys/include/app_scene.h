@@ -41,6 +41,9 @@ app_t *app_scene_app(scene_t *scene);
  * For delivery bookkeeping; handlers on a stopped instance are skipped. */
 app_t *app_scene_loaded_app(scene_t *scene);
 
+/* Identifies this scene's loaded instance across unloads and reloads; 0 when unloaded. */
+uint64_t app_scene_instance(scene_t *scene);
+
 /* What the application asked for in a handler the host called past the
  * scene interface - data arrived - as a reaction for the window manager. */
 scene_reaction_t app_scene_take_reaction(scene_t *scene);

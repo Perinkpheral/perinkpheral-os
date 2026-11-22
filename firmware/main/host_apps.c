@@ -53,6 +53,10 @@ static void drop_app_scene(scene_t *scene, void *context)
 {
     (void)context;
     wm_close(&host_wm, scene);
+    if (host_delivery.answer_owner == scene) {
+        host_delivery.answer_owner = NULL;
+        host_delivery.answer_instance = 0;
+    }
     if (host_delivery.in_background == scene) {
         /* In the middle of an answer that now has nobody to go to; the scene
          * that gave way to it comes back. */
@@ -191,8 +195,15 @@ void host_deliver(const char *app_name, const app_delivery_t *delivery)
             host_end_background_answer();
         }
         s_is_delivering = true;
-        app_deliver(&host_delivery, &host_wm, owner, delivery, esp_timer_get_time() / US_PER_MS);
+        app_abandoned_t abandoned = app_deliver(&host_delivery, &host_wm, owner, delivery,
+                                                esp_timer_get_time() / US_PER_MS);
         s_is_delivering = false;
+        if (abandoned.owner != NULL) {
+            const char *interrupted = launcher_app_name(abandoned.owner);
+            if (interrupted != NULL) {
+                poller_answer_was_abandoned(interrupted, abandoned.request);
+            }
+        }
     }
 }
 
