@@ -48,7 +48,7 @@
 | 3.3 | ok |
 | 3.4 | ok |
 | 3.5 | ok |
-| 3.6 | re-check - the device still had the Cyrillic pack from before the Jersey polish (pack not updated; reinstalled 2026-11-22). Seen with the old pack: Jersey: the stem of Ы stands too far from its Ь; no caption touches a number or the rule |
+| 3.6 | ok after rework - the Cyrillic pack the owner accepted on the panel on 2026-11-22 (see Findings); no caption touches a number or the rule |
 
 ## 4. Session and background delivery
 
@@ -66,7 +66,7 @@
 | Application | Result |
 |---|---|
 | air | ok |
-| calendar | re-check - Jersey Ь in "воскресенье" (the device had the old Cyrillic pack) |
+| calendar | ok - with the accepted Cyrillic pack |
 | clock | ok |
 | donut | ok |
 | ha | ok |
@@ -75,7 +75,7 @@
 | kit | skip - not installed |
 | life | ok |
 | metals | ok |
-| pomodoro | re-check - Jersey Б in "Работа" (the device had the old Cyrillic pack) |
+| pomodoro | ok - with the accepted Cyrillic pack (Jersey 25 б redrawn) |
 | rates | ok |
 | status | ok |
 | stocks | ok |
