@@ -124,7 +124,7 @@ const RUSSIAN = {
   "Power saving": "Экономия батареи", "Disabled": "Выкл", "Always": "Всегда", "Auto": "Авто",
   "Date and time": "Дата и время",
   "NTP server": "NTP-сервер", "Detect": "Определить",
-  "Set": "Установить", "Time zone": "Часовой пояс", "Network time": "Время из сети", "Custom": "Свой",
+  "Set": "Установить", "Time zone": "Часовой пояс", "Automatic": "Автоматически", "Custom": "Свой",
   "Font": "Шрифт", "Full refresh": "Полное обновление", "Every update": "Каждое обновление",
   "Every {0} updates": "Каждые {0}", "Never": "Никогда", "Min. interval, s": "Мин. интервал, с",
   "Forced refresh, h": "Принудительное обновление, ч", "Fast refresh": "Быстрое обновление",

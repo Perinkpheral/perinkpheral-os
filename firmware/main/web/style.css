@@ -144,8 +144,9 @@ label + .rows { margin-top: 0; } /* under its label as an input is */
 /* A date and time is never cut: without room for both, its button goes under it. */
 .rows div:has(> input[type=datetime-local]) { flex-wrap: wrap; }
 .rows div > input[type=datetime-local] { min-width: 13.5rem; }
-/* The time pane's buttons stand in one column: Network time over Detect. */
+/* The time pane's buttons stand in one column: Automatic over Detect; Automatic on one line. */
 #time-zone .rows div > button { width: 10.5rem; }
+#time_auto { white-space: nowrap; }
 .rows button { margin: 0; min-width: 2.75rem; padding: 0 .9rem; flex: none; }
 .rows button.add { width: 100%; }
 #logging .rows select { min-width: min(11rem, 45%); }
