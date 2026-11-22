@@ -13,14 +13,21 @@ info:
     GET /api/status and POST /api/ota. It does not serve settings, logs,
     applications or development routes.
 
-    Requests from pages of other sites are refused: a browser request must carry
-    the device's own Origin, or none, and Host must name the device's address or
-    hostname. Main's root page is public; recovery checks Host and Origin there too.
-    Main's errors and plain confirmations are
-    `{"error": "..."}` and `{"ok": "..."}`, but for a request refused for its origin,
-    answered `Forbidden.` as text. Besides what each route lists, any of them may be
-    answered 503 in main when the device is busy or short of memory, and 500 when its storage
-    fails.
+    Main requires Host to name the station address, 192.168.4.1, the configured
+    hostname or its .local form, compared case-insensitively without the port.
+    Main strips a Host port without validating it. When Origin is present, the
+    text after :// must exactly equal Host. Recovery accepts the same names but
+    permits only an omitted port or :80; a present Origin must exactly equal
+    http:// followed by Host. Main's root page is exempt from these checks.
+
+    Main's ordinary API handlers return JSON error and confirmation objects,
+    {"error":"..."} and {"ok":"..."}. Development handlers generally return
+    text/plain confirmations and errors; /api/dev/flash uses the ordinary JSON
+    firmware refusal. Protected main operations can return 403 with the non-JSON
+    body `Forbidden.` before the handler runs. Framework error helpers return
+    text/html, including some allocation and serialization failures.
+    Memory-admission and asynchronous-worker refusals return 503 JSON errors on
+    routes that use those checks. Storage failures are documented per operation.
 
     Firmware updates, factory reset and a change of the Wi-Fi network wait for
     a press of OK on the device, up to a minute; installing a system application
@@ -114,18 +121,19 @@ components:
       description: >-
         Every field is optional on POST; what is sent is checked as a whole and stored. The keys
         are the settings' own. Unknown fields are ignored. Wi-Fi changes use /api/wifi.
-        A change to device_name, ntp_server or language returns "Saved. Restart to apply.";
-        it does not restart automatically.
+        If device_name, ntp_server or language differs from its previous value, the
+        response is "Saved. Restart to apply." Otherwise it is "Saved." The request
+        does not restart the device. Other accepted changes take effect immediately.
         The system application API has a smaller explicit allowlist: it cannot access
         refresh_min_button_ms. See sdk/host/sys.h.
       properties:
-        device_name: { type: string }
+        device_name: { type: string, description: "1..32 UTF-8 bytes; control characters are refused" }
         hostname: { type: string, readOnly: true }
         wifi_ssid: { type: string, readOnly: true }
         wifi_off: { type: boolean, readOnly: true, description: "No network on purpose: no setup access point. Follows /api/wifi" }
-        ntp_server: { type: string }
-        tz: { type: string, description: POSIX TZ string }
-        tz_city: { type: string, description: "The city the zone was chosen by, by its English name; empty for a zone of its own" }
+        ntp_server: { type: string, description: "1..64 bytes; ASCII letters, digits, dots, colons and hyphens only" }
+        tz: { type: string, description: "1..47 printable ASCII bytes without spaces; checked lexically, not parsed as a POSIX TZ expression before storage" }
+        tz_city: { type: string, description: "0..31 printable ASCII bytes; city label in English; empty means no selected city" }
         refresh_min_data_s: { type: integer, minimum: 10, maximum: 3600, default: 60, description: Seconds between refreshes driven by data }
         refresh_full_every:
           type: integer
@@ -134,7 +142,7 @@ components:
           description: "Full refresh after so many partial ones; 0 always full, 255 no periodic full refresh"
         refresh_keepalive_h: { type: integer, minimum: 1, maximum: 168, default: 24, description: Hours before a refresh is forced }
         dither: { type: boolean }
-        font: { type: integer, description: "0 Departure Mono, 1 Jersey" }
+        font: { type: integer, description: "Only 0 (Departure Mono) and 1 (Jersey) are accepted" }
         refresh_fast: { type: boolean }
         header_clock: { type: boolean, description: Time instead of the date in the header }
         app_auto_update: { type: boolean, default: false, description: Check installed applications for updates daily without an open browser }
@@ -142,8 +150,8 @@ components:
         log_level: { type: integer, enum: [1, 2, 3], description: "1 errors, 2 warnings, 3 information; applied immediately" }
         time_auto: { type: boolean, description: Time from the network }
         power_saving: { type: integer, enum: [0, 1, 2], description: "0 off, 1 always, 2 auto" }
-        default_app: { type: string }
-        language: { type: string, examples: ["en", "ru"] }
+        default_app: { type: string, description: "0..13 bytes; lowercase ASCII letters, digits, underscores and hyphens only; empty means none" }
+        language: { type: string, description: "Only en and ru are accepted", examples: ["en", "ru"] }
         languages:
           type: array
           readOnly: true
@@ -170,7 +178,20 @@ components:
         description: { type: string, description: "Translated description, when provided" }
         icon: { type: array, items: { type: string }, description: 11 rows of 11 characters }
         hosts: { type: array, items: { type: string } }
-        polls: { type: array, items: { type: object } }
+        polls:
+          type: array
+          items: { type: object }
+          description: >-
+            Up to four manifest poll objects. Each requires url (URL template, at
+            most 511 bytes) and every (10..86400 seconds, or a declared setting
+            reference of the form {{key}}). Optional headers maps up to four names
+            of at most 31 bytes to value templates of at most 255 bytes. Optional
+            pick contains up to 16 JSON extraction paths of at most 63 bytes each.
+            each names a declared list setting. prefix requires each and contains
+            1..15 printable ASCII bytes without spaces. method is GET by default,
+            or POST, PUT, DELETE, PATCH, HEAD, PROPFIND or REPORT. Optional body is
+            a text template of at most 1024 bytes before and after expansion;
+            its presence is forbidden with GET and HEAD, even when empty.
         intents: { type: array, items: { type: string } }
         system: { type: boolean }
         writes_files: { type: boolean }
@@ -202,7 +223,12 @@ components:
         type: { type: string, enum: [text, secret, number, choice, toggle, place, url, link, list] }
         hidden: { type: boolean, default: false, description: Omitted from the page form; writable through /api/apps/settings }
         help: { type: string }
-        default: {}
+        default:
+          description: >-
+            List settings use a nonempty array of string items; other supported
+            defaults are nonempty text. Secret and place settings have no default.
+            A list default must fit the 255-byte stored value, including LF separators;
+            each item contains 1..63 printable ASCII bytes.
         options: { type: array, items: { type: string } }
         labels: { type: array, items: { type: string }, description: "Translated choice labels, when available" }
         latitude: { type: string, description: Key of the latitude setting for a place }
@@ -243,6 +269,11 @@ paths:
     get:
       tags: [Device]
       summary: The device's web page
+      description: |
+        302 redirects captive portal requests to http://192.168.4.1/ with
+        Cache-Control: no-store and an empty body. Main redirects only while its
+        setup access point is active. Recovery can return 400 text/html with
+        body Forbidden. and Connection: close for invalid Host or Origin.
       responses:
         "200":
           description: >-
@@ -257,7 +288,10 @@ paths:
   /api/status:
     get:
       tags: [Device]
-      summary: What the device is and how it is doing
+      summary: Read device status
+      description: |
+        Recovery returns 400 text/html with body Forbidden. and Connection: close
+        for invalid Host or Origin.
       responses:
         "200":
           description: Status
@@ -292,6 +326,8 @@ paths:
     post:
       tags: [Device]
       summary: Restart
+      description: |
+        200 application/json: {"ok":"Restarting."}.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
 
@@ -299,6 +335,10 @@ paths:
     post:
       tags: [Device]
       summary: Factory reset, confirmed on the device
+      description: |
+        200 application/json: {"ok":"Reset. Restarting."}.
+        403 JSON error: Not confirmed.
+        503 JSON error: Device busy. or Not enough memory.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "403": { $ref: "#/components/responses/Error" }
@@ -317,6 +357,17 @@ paths:
     post:
       tags: [Settings]
       summary: Change settings
+      description: |
+        The body must contain 1..511 bytes.
+        200 JSON ok: Saved. or Saved. Restart to apply.
+        400 JSON error: Invalid request., Invalid value., or a configuration-validation
+        message. These include Device name is empty., Device name has control
+        characters., NTP server is empty., NTP server has invalid characters.,
+        Time zone must be a POSIX TZ string (max 47)., Invalid city., Unknown language.,
+        and Invalid default app. Type, range and text-length failures detected
+        while reading fields return Invalid value.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy.
       requestBody:
         required: true
         content:
@@ -330,6 +381,9 @@ paths:
     post:
       tags: [Settings]
       summary: Scan nearby Wi-Fi networks without changing the saved connection
+      description: |
+        503 JSON error: Wi-Fi is busy. Try again shortly., Could not scan networks.
+        Try again., Device busy., or Not enough memory.
       responses:
         "200":
           description: Up to 16 distinct visible network names, strongest signal first
@@ -357,6 +411,16 @@ paths:
         An empty ssid on a device with a network forgets it and turns Wi-Fi off: the device
         restarts with no access point. Connect to Wi-Fi in Settings on the device brings the
         setup access point back.
+        The body must contain 1..511 bytes.
+        200 JSON ok: Saved. Restarting.
+        400 JSON error: Invalid request., Invalid value., or a configuration-validation
+        message. These include Wi-Fi SSID has control characters., Wi-Fi password
+        must be printable ASCII., Wi-Fi password without an SSID., Wi-Fi password
+        must be at least 8 characters., Time zone must be a POSIX TZ string (max 47).,
+        and Invalid city. Wrong field types and oversized fields return Invalid value.
+        403 JSON error: Not confirmed.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy. or Not enough memory.
       requestBody:
         required: true
         content:
@@ -369,7 +433,13 @@ paths:
                 tz: { type: string, description: "Time zone to set alongside Wi-Fi, replacing any existing zone" }
                 tz_city: { type: string, description: "The city the zone was chosen by, by its English name" }
               required: [ssid]
-              description: ssid is required; omitted password, tz and tz_city stay as they were
+              description: >-
+                ssid is required. Omitted password, tz and tz_city retain their
+                previous values. To forget a password-protected network, send both
+                "ssid": "" and "password": "". SSID is at most 32 bytes and must
+                contain no control characters. Password is printable ASCII, at most
+                64 bytes; a nonempty password requires a nonempty SSID and at least
+                8 characters. Time-zone fields use the Settings constraints.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
@@ -379,6 +449,14 @@ paths:
     post:
       tags: [Settings]
       summary: Set the time zone
+      description: |
+        The body must contain 1..511 bytes. Omitting tz_city clears the selected
+        city. tz and tz_city use the Settings constraints.
+        200 JSON ok: Saved.
+        400 JSON error: Invalid request., Invalid value., Time zone must be a POSIX
+        TZ string (max 47)., or Invalid city.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy.
       requestBody:
         required: true
         content:
@@ -397,6 +475,11 @@ paths:
     post:
       tags: [Settings]
       summary: Set the clock by hand; refused while time comes from the network
+      description: |
+        The body must contain 1..511 bytes.
+        200 JSON ok: Saved.
+        400 JSON error: Invalid request., Invalid value., or Time is set automatically.
+        503 JSON error: Device busy.
       requestBody:
         required: true
         content:
@@ -414,6 +497,10 @@ paths:
     get:
       tags: [Apps]
       summary: Installed applications with their settings
+      description: |
+        503 JSON error: Applications unavailable. or Not enough memory.
+        A failure after streaming starts closes the connection without completing
+        the JSON response.
       responses:
         "200":
           description: Applications
@@ -426,7 +513,16 @@ paths:
   /api/apps/settings:
     post:
       tags: [Apps]
-      summary: Store settings of an application; it is told, its polls are fetched again
+      summary: Store application settings
+      description: |
+        The body must contain 1..4608 bytes. After any successful write or secret
+        deletion, the application is notified and its polls are requested again.
+        200 JSON ok: Saved.
+        400 JSON error: Invalid request. or Invalid value: <key>.
+        404 JSON error: App not found.
+        507 JSON error: Not enough storage.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy.
       parameters:
         - $ref: "#/components/parameters/App"
       requestBody:
@@ -445,12 +541,24 @@ paths:
                 declared secrets, including supplied replacements. Destinations are then
                 written before other supplied values, including replacement secrets.
                 A failed save can leave a supplied secret deleted.
+                Each key must be declared in the installed manifest. Each value is
+                at most 255 bytes. Empty text is accepted for every setting type.
+                Other values must match the declared type: toggle is "0" or "1";
+                choice is a declared option; number is decimal text without an
+                exponent; url is an http/https server address without a path,
+                query, fragment or user information; link is a complete http/https
+                address without spaces or user information. Values are printable
+                ASCII except list separators. A nonempty list contains LF-separated,
+                nonempty printable ASCII items of at most 63 bytes, with no trailing LF.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "507":
-          description: Not enough storage; what fitted is stored, and the application is told
+          description: >-
+            Not enough storage. Earlier writes or secret deletions may have
+            succeeded. The application is notified and its polls requested again
+            only if at least one write succeeded. Later write phases may be skipped.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -459,12 +567,23 @@ paths:
     post:
       tags: [Apps]
       summary: Install or update an application from a catalog
+      description: |
+        The body must contain 1..2048 bytes. A newly installed application opens
+        after commit; updating an installed application does not automatically open it.
+        200 JSON ok: Installed.
+        400 JSON error: Invalid request.
+        403 JSON error: Not confirmed.
+        409 JSON error: Not enough storage., Update the firmware., or Update the app.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy. or Not enough memory.
+        502 JSON error: Invalid catalog entry., Download failed., Checksum mismatch.,
+        Invalid manifest., Invalid app author., Source changed., or App or source changed.
       parameters:
         - name: source
           in: query
           required: true
           schema: { type: integer }
-          description: Number of the catalog in /api/sources
+          description: Zero-based index in GET /api/sources; 0 is the fixed official source. An unavailable index is refused.
         - name: app
           in: query
           required: true
@@ -487,7 +606,14 @@ paths:
                   type: array
                   minItems: 2
                   maxItems: 8
-                  description: As the catalog's index lists them; app.wasm first, manifest.json last
+                  description: >-
+                    As listed in the catalog index, with app.wasm first and
+                    manifest.json last. File names must be unique. Each file must
+                    be nonempty; its declared size and SHA-256 must match the
+                    download. app.wasm is limited to 49152 bytes, manifest.json to
+                    8192 bytes. Intermediate files together may use at most 65536
+                    bytes when each is rounded to 4096-byte blocks. Additional
+                    writer-quota and free-storage checks apply.
                   items: { $ref: "#/components/schemas/CatalogFile" }
               required: [files]
       responses:
@@ -508,6 +634,11 @@ paths:
     post:
       tags: [Apps]
       summary: Remove an application; what it stored stays unless forget=1
+      description: |
+        200 JSON ok: Removed.
+        404 JSON error: App not found.
+        500 JSON error: Storage error.
+        503 JSON error: Device busy.
       parameters:
         - $ref: "#/components/parameters/App"
         - name: forget
@@ -520,7 +651,11 @@ paths:
   /api/apps/removed:
     get:
       tags: [Apps]
-      summary: Names of removed applications whose settings are kept
+      summary: List removed applications with retained store values
+      description: |
+        Returns up to 16 removed application names with retained blob store values.
+        This is not a removal history. Stores can be reclaimed when the application-store
+        partition needs space.
       responses:
         "200":
           description: Names
@@ -534,6 +669,9 @@ paths:
     get:
       tags: [Catalogs]
       summary: Catalog sources, the official one first
+      description: |
+        Includes the fixed official source first. Trailing slashes are removed
+        from returned source URLs.
       responses:
         "200":
           description: Sources
@@ -546,6 +684,13 @@ paths:
     post:
       tags: [Catalogs]
       summary: Set the added sources, up to three, https only
+      description: |
+        The body must contain 1..2048 bytes. Each added source is an https:// URL
+        of at most 127 printable ASCII bytes without spaces. The exact fixed
+        official-source URL is ignored if submitted.
+        200 JSON ok: Saved.
+        400 JSON error: Too many sources. or Invalid source URL.
+        500 JSON error: Storage error.
       requestBody:
         required: true
         content:
@@ -562,7 +707,15 @@ paths:
   /api/catalog:
     get:
       tags: [Catalogs]
-      summary: The index of a source, passed on as it comes
+      summary: Stream a catalog index
+      description: |
+        source is a zero-based index in GET /api/sources; 0 is the fixed official
+        source. An unavailable index is refused.
+        404 JSON error: Source not found.
+        502 JSON error: Source unavailable (HTTP <status>).
+        503 JSON error: Not enough memory. or Device busy.
+        After body streaming starts, a failed fetch closes the connection without
+        its final chunk.
       parameters:
         - name: source
           in: query
@@ -600,6 +753,16 @@ paths:
     post:
       tags: [Glyphs]
       summary: Install a glyph pack
+      description: |
+        Upload the complete binary glyph pack, 1..32768 bytes. A pack replaces one
+        with the same embedded name. Invalid data, unavailable glyph storage,
+        insufficient space and write failures return 400 JSON error Invalid pack.
+        If space requires deleting the previous pack first, a failed replacement
+        can leave it removed.
+        200 JSON ok: Installed.
+        503 JSON error: Device busy. or Not enough memory.
+        Allocation failure can return a framework 500 text/html response. An
+        interrupted body can close the connection without an API error object.
       requestBody:
         required: true
         content:
@@ -612,6 +775,10 @@ paths:
     post:
       tags: [Glyphs]
       summary: Remove a glyph pack
+      description: |
+        200 JSON ok: Removed.
+        404 JSON error: Not installed.
+        503 JSON error: Device busy.
       parameters:
         - name: name
           in: query
@@ -630,6 +797,10 @@ paths:
         OTA metadata, but does not erase main or user data and needs no physical OK.
         Wait for status.mode=recovery before uploading. This does not update the
         recovery image itself; replacing recovery requires USB.
+        200 JSON ok: Entering recovery.
+        400 JSON error: Previous update is being verified. or Recovery image unavailable.
+        Restore it over USB.
+        503 JSON error: Device busy. or Not enough memory.
       parameters:
         - name: manual
           in: query
@@ -654,6 +825,14 @@ paths:
         data are preserved. A failed write may leave main incomplete; recovery stays
         available for another upload. A lost HTTP response is not proof of failure
         or success: check mode, boot_id, upload_state and the intended image_id.
+        Send a known Content-Length containing the complete image, at least 304 bytes
+        and no larger than the ota_0 partition. Recovery allows 15 seconds to receive
+        the initial header and 180 seconds to receive the remaining image after
+        confirmation. Error responses close the connection.
+        Main returns 409 application/json with
+        {"error":"Enter recovery before uploading firmware."} and Connection: close.
+        Shared asynchronous-worker refusals in main can return 503 JSON errors
+        Device busy. or Not enough memory.
       requestBody:
         required: true
         content:
@@ -670,7 +849,12 @@ paths:
                   message: { type: string, const: "Installed. Restarting." }
         "409": { $ref: "#/components/responses/Error" }
         "400":
-          description: Recovery refused the request, confirmation timed out or was cancelled, or the upload failed
+          description: >-
+            Recovery returns 400 text/html and closes the connection. Messages are
+            Forbidden., Device busy., Invalid image size., Upload interrupted.,
+            Invalid image., Image is for another partition table. Flash over USB.,
+            Image is incompatible with this chip revision., Not confirmed.,
+            Write failed., or Image verification failed.
           content:
             text/html:
               schema: { type: string, examples: ["Not confirmed.", "Upload interrupted.", "Forbidden."] }
@@ -681,7 +865,11 @@ paths:
       tags: [Firmware]
       summary: Obsolete device-side downloader; returns 409, download through the browser instead
       deprecated: true
-      description: Main only. The request body is ignored; no download is started.
+      description: |
+        Main only. The request body is ignored; no download is started.
+        409 JSON error: Download perinkpheral.bin from the latest GitHub release,
+        then click Device > Enter recovery and install the file.
+        503 JSON error: Device busy. or Not enough memory.
       responses:
         "409": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -690,6 +878,8 @@ paths:
     get:
       tags: [Development]
       summary: The frame on the panel
+      description: |
+        503 text/plain body: `no memory` or `the host did not answer`
       responses:
         "200":
           description: 1-bit BMP, 400 x 300
@@ -703,6 +893,10 @@ paths:
     post:
       tags: [Development]
       summary: Press a button
+      description: |
+        200 text/plain body: pressed
+        400 text/plain body: button=1..4 is missing or
+        button is 1..4, press is short, long, down or up
       parameters:
         - name: button
           in: query
@@ -720,6 +914,11 @@ paths:
     post:
       tags: [Development]
       summary: Put an installed application on the screen
+      description: |
+        200 text/plain body: opened
+        400 text/plain body: app=<name> is missing
+        404 text/plain body: no such application is installed
+        503 text/plain body: Device busy.
       parameters:
         - name: app
           in: query
@@ -733,6 +932,19 @@ paths:
     post:
       tags: [Development]
       summary: Upload one file of an application
+      description: |
+        name must be an application name of at most 13 bytes; file must be a permitted
+        package file name of at most 23 bytes. Reserved file names are refused. The
+        body must be nonempty. app.wasm is limited to 49152 bytes, manifest.json to
+        8192 bytes, and other files to 65536 bytes. This stages and commits one file;
+        it does not validate the complete package or reload the installed application
+        list. Use /api/dev/run to restart into the uploaded application.
+        200 text/plain body: stored
+        400 text/plain body: name=<application>&file=<its file>, not a file's name,
+        the file is empty or too large for an application, or
+        not an application's name, or the storage refused
+        503 text/plain body: the device is busy
+        500 text/plain body: the file could not be stored
       parameters:
         - name: name
           in: query
@@ -756,6 +968,14 @@ paths:
     post:
       tags: [Development]
       summary: Restart into an application
+      description: |
+        The application name is checked for permitted characters and a length of
+        1..13 bytes, but is not checked against installed applications before restart.
+        A successful response confirms that the restart was requested, not that the
+        application exists or can start.
+        200 text/plain body: restarting
+        400 text/plain body: app=<name> is missing or is not an application's name
+        503 text/plain body: the device is busy
       parameters:
         - name: app
           in: query
@@ -768,6 +988,19 @@ paths:
     post:
       tags: [Development]
       summary: Write a value into an application's store
+      description: |
+        The body contains 0..1024 raw bytes; an empty body deletes the key. app must
+        use permitted application-name characters and contain 1..13 bytes. key must
+        contain 1..15 bytes. The application need not be installed. This development
+        route writes the store directly, bypassing manifest setting validation,
+        application-side url/link restrictions and destination-change secret clearing.
+        A successful write notifies the application, if installed, and requests its
+        polls again.
+        200 text/plain body: stored
+        400 text/plain body: app=<name>&key=<key>, the value as the body;
+        the value is too long; or the value did not arrive
+        500 text/plain body: not stored
+        503 text/plain body: Device busy.
       parameters:
         - name: app
           in: query
@@ -791,7 +1024,10 @@ paths:
       tags: [Development]
       summary: Obsolete direct upload; enter recovery and upload through /api/ota instead
       deprecated: true
-      description: Always refuses with 409. Development builds do not bypass physical confirmation.
+      description: >-
+        After Host and Origin checks, returns 409 with the JSON error
+        Enter recovery before uploading firmware. Development builds do not bypass
+        physical confirmation. The response closes the connection.
       responses:
         "409": { $ref: "#/components/responses/Error" }
 
@@ -799,13 +1035,15 @@ paths:
     post:
       tags: [Development]
       summary: Restart
+      description: |
+        200 text/plain body: restarting
       responses:
         "200": { $ref: "#/components/responses/Text" }
 
   /api/dev/sockets:
     get:
       tags: [Development]
-      summary: Every socket of the device - its kind, the port here and the other end
+      summary: List socket types, local ports and remote endpoints
       responses:
         "200": { $ref: "#/components/responses/Text" }
 
@@ -820,6 +1058,8 @@ paths:
           schema: { type: string, enum: [wdt, abort] }
       responses:
         "400":
-          description: Another kind. A known kind is not answered - the device faults and restarts
+          description: >-
+            Unknown kind. The actual response is text/html with body `kind=wdt|abort`.
+            Recognized kinds terminate the device without an HTTP response.
           content:
             text/plain: {}

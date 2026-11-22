@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * Manifest limits. The single definition: the host validates manifests
+ * Manifest limits. The single definition: Perinkpheral OS validates manifests
  * against these values, and tools/perinkpheral parses this file to apply the
  * same checks at build time. For that reason every value is a plain
  * number or a product of numbers, one definition per line.
@@ -12,9 +12,8 @@
 /* The name is the application folder, the catalog key and, with a prefix,
  * the namespace of the store. The store namespace sets the limit. */
 #define MANIFEST_NAME_MAX    13
-/* User-visible text is limited in characters. The byte limit is twice the
- * character limit: European alphabets use at most two bytes per character
- * in UTF-8. */
+/* User-visible text has separate character and byte limits.
+ * The byte limit is twice the character limit. */
 #define MANIFEST_TEXT_BYTES_PER_CHARACTER 2
 #define MANIFEST_TITLE_MAX   23
 #define MANIFEST_DESCRIPTION_MAX 95 /* what the application does, in a line: the catalog shows it */
@@ -73,6 +72,6 @@
 #define MANIFEST_CERTIFICATES_MAX      2
 #define MANIFEST_CERTIFICATE_MAX_BYTES 4096
 
-/* The strings of one language, as a table: what the host takes into its
- * own memory, for a moment, on an application's word. */
+/* Perinkpheral OS temporarily loads this table into its own memory
+ * when loading an application's translation. */
 #define MANIFEST_STRINGS_MAX_BYTES (8 * 1024)

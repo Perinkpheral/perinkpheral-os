@@ -70,7 +70,8 @@ HOST_SYSTEM_IMPORT(sys_logo_height, int32_t sys_logo_height(int32_t scale));
  *                      start and are in effect after a restart. HOST_ERR_ARGUMENT
  *                      for a value the setting cannot take, or a key that is
  *                      not set this way (the network: SYS_DO_FORGET_NETWORK,
- *                      or the device's page).
+ *                      or the device's page). Returns HOST_ERR_FAILED
+ *                      if the setting could not be stored.
  * sys_setting_range(): a number's value and its range. HOST_ERR_ARGUMENT for
  *                      a setting that is text. For refresh_full_every,
  *                      range is 0..50; 255 is also accepted.
@@ -83,8 +84,10 @@ HOST_SYSTEM_IMPORT(sys_logo_height, int32_t sys_logo_height(int32_t scale));
  * time_auto: flag 0 manual, 1 network time; no unit.
  * tz: text 1..47, POSIX TZ text; printable ASCII without spaces; empty is invalid.
  * tz_city: printable ASCII text 0..31, city label; empty means custom.
- * language: text "en" or "ru"; app text changes now, system app titles
- *     after restart.
+ * language: text "en" or "ru". Perinkpheral OS interface words change
+ *     immediately. Application string tables use the new language when an
+ *     instance loads. Installed application scenes are reloaded; bundled
+ *     system application titles change after restart.
  * font: integer 0 Departure Mono, 1 Jersey; no unit.
  * refresh_full_every: integer 0..50 partial refreshes before full;
  *     0 always full, 255 no periodic full refresh.

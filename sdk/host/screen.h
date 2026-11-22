@@ -22,13 +22,16 @@ APP_EXPORT(app_on_draw, void app_on_draw(void));
 /* Requests a redraw: Perinkpheral OS calls app_on_draw().
  *
  * When the panel shows the frame depends on the calling handler:
- *   app_on_button(), app_on_back():  immediately;
+ *   app_on_button(), app_on_back(): under the button refresh policy,
+ *                                    subject to refresh_min_button_ms
+ *                                    (default 0);
  *   app_on_timer(), app_on_data(), app_on_alarm(), app_on_intent():
  *                                    when the refresh policy of the user
  *                                    allows, by default once a minute.
  * Settings changes and deliveries to that application for 30 seconds
  * afterwards use the urgent refresh policy while it is on screen.
  *
+ * Explicit redraw flags select their documented refresh policies.
  * Flags:
  *   HOST_REDRAW_NORMAL    Default. Use after a button press and for data
  *                         that can wait.
@@ -151,13 +154,16 @@ HOST_IMPORT(screen_request, void screen_request(void));
 HOST_IMPORT(screen_leave, void screen_leave(void));
 
 /* Queues a notification. Perinkpheral OS shows the notice below its header,
- * over the current screen, until the user presses OK or BACK, and then
- * restores the previous screen.
+ * over the current screen. A short OK or BACK dismisses the displayed
+ * notification and restores the previous screen. A long BACK returns to
+ * the menu and removes the displayed notification; remaining notifications
+ * wait until the next button press.
  * Callable from any handler, typically app_on_alarm() off the screen.
  * The application is not loaded while the notification is shown and is
  * not told when it is dismissed.
  * Fields used: first (required), second, detail, icon.
- * Several notifications queue. A restart clears the queue.
+ * At most four notifications, including the displayed one, are retained.
+ * A restart clears the queue.
  * Returns HOST_OK, HOST_ERR_ARGUMENT, or HOST_ERR_NO_SPACE if the queue
  * is full. */
 HOST_IMPORT(notification_post, int32_t notification_post(const host_notice_t *notice));

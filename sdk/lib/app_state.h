@@ -14,7 +14,8 @@
 /* Loads a struct stored under `key`. The first field of the struct is an
  * int32_t version. Returns true if a value of exactly `size` bytes with
  * this `version` is stored. On false `state` may hold any part of what was
- * read: initialise it whole. */
+ * read: initialise it whole. state must point to an aligned structure of
+ * at least sizeof(int32_t) bytes; size must include its version field. */
 bool app_state_load(const char *key, void *state, int32_t size, int32_t version);
 
 /* Stores `size` bytes of `state` under `key`. One flash write: call it
@@ -61,7 +62,7 @@ int32_t app_setting_count(const char *key);
 int32_t app_setting_item(const char *key, int32_t index, char *text, int32_t text_size);
 
 /* A pace or a delay as a person writes it - "30 s", "15 min", "1 h", "1 d" -
- * in seconds, read as the host reads a poll's "every"; `otherwise` when the
+ * in seconds, parsed by the same rules as a poll's "every" value; `otherwise` when the
  * text says no such thing ("Off", "At start"). */
 int32_t app_seconds_of(const char *text, int32_t otherwise);
 
@@ -70,5 +71,6 @@ int32_t app_setting_seconds(const char *key, int32_t otherwise);
 
 /* A `place` setting's name: what stands before the first comma of "Saint
  * Petersburg, Saint Petersburg, Russia", cut between characters to fit.
- * Returns its length; 0 when the setting is not set. */
+ * Returns its length; 0 when the setting is not set.
+ * name must point to at least size writable bytes; size must be positive. */
 int32_t app_setting_place(const char *key, char *name, int32_t size);

@@ -15,7 +15,7 @@ extern "C" {
 /* Streaming JSON value extractor. Extracts a fixed set of values from a
  * JSON document without holding the document in memory.
  *
- * The host uses it for polls with "pick" in the manifest. An application
+ * Perinkpheral OS uses it for polls with "pick" in the manifest. An application
  * uses it for a streamed answer: feed every piece from app_on_data(), then
  * read the values after the last piece.
  *
@@ -24,9 +24,14 @@ extern "C" {
  *     current.temperature_2m     daily.weather_code[0]     items[2].title
  *
  * Values are returned as text. Numbers, true, false and null are returned
- * as written. Strings are returned without quotes, with escapes resolved,
- * as UTF-8, cut between characters if too long. A path that points to an
- * object, to an array or to nothing has no value.
+ * as written. Strings are returned without quotes. Escaped quotes,
+ * backslashes and slashes are decoded. Unicode escapes become UTF-8;
+ * unpaired surrogate escapes are discarded. Other escaped characters
+ * become spaces. Values are cut between characters when too long.
+ * Only ASCII JSON property names are supported reliably. Non-ASCII key
+ * characters become "?" and can match a path containing "?". Extracted
+ * strings are NUL-terminated text; an embedded NUL ends the exposed value.
+ * A path that points to an object, to an array or to nothing has no value.
  *
  * A path is at most 63 bytes, each key at most 31 ASCII bytes, and a
  * scalar is extracted through at most eight containers. Each property or

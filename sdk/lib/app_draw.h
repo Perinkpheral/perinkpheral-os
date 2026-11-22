@@ -2,8 +2,9 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * Text drawing for null-terminated strings. The host calls take a pointer
- * and a length; these take a string. Valid inside app_on_draw().
+ * Helpers for null-terminated strings. Perinkpheral OS calls take a pointer
+ * and a length; these take a string. Drawing helpers require app_on_draw();
+ * app_text_width() and app_text_center_x() work in any handler.
  */
 #pragma once
 

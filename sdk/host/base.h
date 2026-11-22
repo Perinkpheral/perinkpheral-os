@@ -15,9 +15,12 @@
 /* Every ABI 3 application requires at least 0.1.30. HOST_SINCE_<call>
  * records only a call or contract entry added after that ABI floor, beside
  * its declaration, with the firmware version it will be released in.
- * The build stamps the manifest's "firmware" with the maximum of the ABI
- * floor, the used entries' introduction stamps and an explicit manifest
- * minimum. Older firmware neither installs nor starts the application. */
+ * The build sets the manifest's "firmware" to the maximum required by the
+ * ABI floor, imported calls, exported handlers, recognized manifest features
+ * and an explicit manifest minimum. Behavior and constants not detectable
+ * from the module require an explicit minimum, including sessions larger
+ * than 128 bytes and SYS_DO_WIFI_SETUP. Older firmware neither installs
+ * nor starts the application. */
 #define HOST_ABI_3_FIRMWARE_FIRST "0.1.30"
 #define HOST_FIRMWARE_FIRST     "0.1.30" /* entries without an introduction stamp */
 
@@ -60,8 +63,10 @@
  * only until that handler returns. String-table words are little-endian
  * uint16_t; picture dimensions and bitmap rows are bytes (host/gfx.h).
  *
- * Buffers use byte lengths, without an implicit terminator. Negative
- * lengths/capacities and out-of-memory ranges return HOST_ERR_ARGUMENT.
+ * Buffers use byte lengths, without an implicit terminator. Imports that
+ * return error codes reject negative lengths, negative capacities and ranges
+ * outside module memory with HOST_ERR_ARGUMENT. log_write() returns no
+ * status and ignores an invalid input range.
  * Zero capacity is accepted for buffer reads except time_text(); the
  * destination must still be a valid memory offset. Successful text reads
  * never append NUL, except the fixed string fields of host_answer_info_t.
@@ -95,7 +100,9 @@
 #define HOST_LOG_WARN  2
 #define HOST_LOG_INFO  3
 #define HOST_LOG_DEBUG 4
-/* Writes one line to the device log. A longer text is cut. Characters
- * other than printable ASCII, including line breaks, are logged as "?". */
+/* Submits one line to the device log, subject to the configured logging
+ * level and compiled logging support. Disabling ordinary logs suppresses
+ * these messages. Text beyond HOST_LOG_TEXT_MAX bytes is cut. Characters
+ * other than printable ASCII, including line breaks, become "?". */
 #define HOST_LOG_TEXT_MAX 200
 HOST_IMPORT(log_write, void log_write(int32_t level, const char *text, int32_t length));

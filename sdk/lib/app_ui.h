@@ -21,7 +21,7 @@
  *     void app_on_draw(void) { app_date_draw(&when); }
  *
  * The application owns the state struct and can read it at any time.
- * Button meanings follow the host: UP and DOWN change the value, OK
+ * Button meanings follow Perinkpheral OS: UP and DOWN change the value, OK
  * confirms, BACK goes back. Lists and date editors also handle long UP
  * and DOWN presses. Pickers handle short presses only.
  * BACK is delivered to an application through app_on_back(); pass it to
@@ -43,7 +43,7 @@ typedef enum {
 
 /* ---- List ---- */
 
-/* List state: the host_list_t of the host API (row count, selected row,
+/* List state: host_list_t from the Perinkpheral OS API (row count, selected row,
  * position on the surface). */
 typedef host_list_t app_list_t;
 
@@ -80,8 +80,10 @@ void app_picker_draw(const app_picker_t *picker, const char *const *labels);
 void app_picker_draw_texts(const app_picker_t *picker, const char *above, const char *chosen,
                            const char *below);
 
-/* Return the index of the value above or below the selected one, or -1
- * at the end of the sequence. */
+/* Returns the neighboring index. At an end, wraps only when wraps is true
+ * and count is greater than 2; otherwise returns -1. A two-value picker
+ * can wrap through button navigation but does not repeat its other value
+ * above and below. */
 int32_t app_picker_above(const app_picker_t *picker);
 int32_t app_picker_below(const app_picker_t *picker);
 
@@ -96,8 +98,9 @@ typedef struct {
     int32_t year_last;
 } app_date_t;
 
-/* Initializes the editor at its first part, with the local time of the
- * device if it is known. */
+/* Initializes the editor at its first part. Uses the current local time
+ * when known and within year_first..year_last; otherwise uses January 1
+ * of year_first at 12:00. */
 void app_date_start(app_date_t *date, int32_t has, int32_t year_first, int32_t year_last);
 
 /* UP increases and DOWN decreases the part, wrapping at the ends; held,
@@ -111,7 +114,7 @@ void app_date_draw(const app_date_t *date);
 
 /* Returns calendar seconds as if the selected fields were UTC. For actual
  * Unix time, pass those fields in a host_local_time_t to
- * time_from_local(&parts, &unix_time) and check for HOST_OK. The host
+ * time_from_local(&parts, &unix_time) and check for HOST_OK. Perinkpheral OS
  * applies the zone, moves skipped times forward by the gap and chooses
  * the earlier occurrence of repeated times. */
 int64_t app_date_seconds(const app_date_t *date);
