@@ -4,6 +4,18 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.81
+
+- A new image whose probation record could not be read or written still goes through probation instead of running unconfirmed.
+- The rescue access point is started again when a first attempt fails, so a device with a wrong password stays reachable.
+- A long BACK opens the menu even when presses pile up during a refresh.
+- An application's own file named like an internal staging file is no longer deleted on reload.
+- A short memory shortage while listing catalog sources can no longer make Save delete the added sources.
+- Another site in the browser can no longer start Wi-Fi scans on the device.
+- A malformed application module is refused at load instead of hanging it.
+- A streamed answer cut off by a reload or a settings save is never delivered to a new instance or mistaken for another answer.
+- A finishing installation no longer resets the default application being chosen on the page; a link to an application does not reopen it after leaving for Settings.
+
 ## 0.1.80
 
 - Icons that are symmetric by their subject are exactly symmetric at every size; the set is redrawn in 11, 22 and 44 cells.
