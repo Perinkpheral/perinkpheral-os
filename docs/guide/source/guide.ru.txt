@@ -1393,8 +1393,8 @@ User-visible manifest text has both a character limit and a UTF-8 byte limit of 
 Pictures and icons
 Картинки и иконки
 
-Perinkpheral OS provides 49 built-in icons: Perinkpheral OS's own, the weather, the things of a home and the sky. Each icon is on a grid of 11 x 11 cells, and many are also drawn on 22 and 44 cells. An application uses them instead of drawing its own.
-Perinkpheral OS предоставляет 49 встроенных иконок: системные, погодные, домашние и астрономические. Каждая нарисована на сетке 11 x 11 клеток, многие ещё и на 22 и 44 клетках. Приложение берёт их, а не рисует свои.
+Perinkpheral OS provides 52 built-in icons: Perinkpheral OS's own, the weather, the things of a home, the sky, air quality, 3D printing, progress and volumes. Each icon is on a grid of 11 x 11 cells, and many are also drawn on 22 and 44 cells. An application uses them instead of drawing its own.
+Perinkpheral OS предоставляет 52 встроенные иконки: системные, погодные, домашние, астрономические, для качества воздуха, 3D-печати, прогресса и объёмов. Каждая нарисована на сетке 11 x 11 клеток, многие ещё и на 22 и 44 клетках. Приложение берёт их, а не рисует свои.
 
 <code>gfx_draw_icon()</code> draws an icon with a cell size of 1 to 16 pixels. <code>ui_draw_icon()</code> draws an icon at one of three standard sizes: 22, 44 or 99 px. Perinkpheral OS picks the finest drawing that fits at two pixels per cell or more, so lines keep the weight of the text and curves stay smooth at large sizes. UPDATE (the project mark) always uses its original 11-cell drawing. <code>gfx_icon_ink()</code> gives the pixels an icon covers, to align it by what is visible.
 <code>gfx_draw_icon()</code> рисует иконку с клеткой от 1 до 16 пикселей. <code>ui_draw_icon()</code> рисует иконку одного из трёх стандартных размеров: 22, 44 или 99 px. Perinkpheral OS берёт самый подробный рисунок, который помещается при двух пикселях на клетку или больше: толщина линий соответствует толщине штрихов текста, а кривые на больших размерах остаются гладкими. <code>gfx_icon_ink()</code> сообщает, какие пиксели занимает иконка, для выравнивания по границам видимого рисунка. UPDATE (знак проекта) всегда использует исходный рисунок из 11 ячеек.
@@ -1696,14 +1696,35 @@ HOST_ICON_MASK
 <span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-16px;top:-117px" alt=""></span>poor air quality
 <span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-16px;top:-117px" alt=""></span>плохое качество воздуха
 
+HOST_ICON_LAYERS
+=
+
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-92px;top:-117px" alt=""></span>layers, 3D printing (0.1.84)
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-92px;top:-117px" alt=""></span>слои, 3D-печать (0.1.84)
+
+HOST_ICON_PROGRESS
+=
+
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-168px;top:-117px" alt=""></span>progress, completion (0.1.84)
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-168px;top:-117px" alt=""></span>прогресс, выполнение (0.1.84)
+
+HOST_ICON_CUBE
+=
+
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-244px;top:-117px" alt=""></span>box, volume, chamber (0.1.84)
+<span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons-air.png" style="left:-244px;top:-117px" alt=""></span>коробка, объём, камера (0.1.84)
+
+Applications using <code>HOST_ICON_LAYERS</code>, <code>HOST_ICON_PROGRESS</code> or <code>HOST_ICON_CUBE</code> must set their manifest's <code>firmware</code> to <code>"0.1.84"</code> or later; icon constants are not detected from WebAssembly imports.
+Приложения, использующие <code>HOST_ICON_LAYERS</code>, <code>HOST_ICON_PROGRESS</code> или <code>HOST_ICON_CUBE</code>, должны указать в поле <code>firmware</code> манифеста <code>"0.1.84"</code> или более позднюю версию; константы иконок не определяются по импортам WebAssembly.
+
 Perinkpheral OS's own icons at cell sizes of 2 and 4 pixels
 Собственные иконки Perinkpheral OS при клетке 2 и 4 пикселя
 
 The weather, the things of a home and the sky at cell sizes of 2 and 4 pixels
 Погодные, домашние и астрономические иконки при размере клетки 2 и 4 пикселя
 
-Air quality icons at cell sizes of 2 and 4 pixels
-Иконки качества воздуха с клетками 2 и 4 пикселя
+Air quality, layers, progress and cube icons at cell sizes of 2 and 4 pixels
+Иконки качества воздуха, слоёв, прогресса и куба с клетками 2 и 4 пикселя
 
 An application's own pictures are placed in the <code>pictures/</code> folder. Supported formats are PNG, PBM and text. A text file contains rows of <code>#</code> (ink) and <code>.</code> (paper) and can hold several named pictures:
 Собственные картинки приложения размещаются в папке <code>pictures/</code>. Поддерживаются форматы PNG, PBM и текстовый. Текстовый файл содержит строки из <code>#</code> (чернила) и <code>.</code> (бумага) и может содержать несколько именованных картинок:

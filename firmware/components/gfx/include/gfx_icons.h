@@ -73,6 +73,9 @@ typedef enum {
     GFX_ICON_DUST,
     GFX_ICON_LEAF,
     GFX_ICON_MASK,
+    GFX_ICON_LAYERS,
+    GFX_ICON_PROGRESS,
+    GFX_ICON_CUBE,
     GFX_ICON_COUNT,
 } gfx_icon_id_t;
 

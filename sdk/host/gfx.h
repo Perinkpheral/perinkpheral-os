@@ -199,7 +199,13 @@ HOST_IMPORT(gfx_draw_bitmap_file,
 #define HOST_ICON_DUST           46
 #define HOST_ICON_LEAF           47
 #define HOST_ICON_MASK           48
-#define HOST_ICON_COUNT          49
+#define HOST_ICON_LAYERS         49
+#define HOST_SINCE_HOST_ICON_LAYERS "0.1.84"
+#define HOST_ICON_PROGRESS       50
+#define HOST_SINCE_HOST_ICON_PROGRESS "0.1.84"
+#define HOST_ICON_CUBE           51
+#define HOST_SINCE_HOST_ICON_CUBE "0.1.84"
+#define HOST_ICON_COUNT          52
 #define HOST_ICON_NONE           (-1) /* where an icon is optional: none */
 #define HOST_ICON_CELLS          11
 #define HOST_ICON_CELL_MAX       16

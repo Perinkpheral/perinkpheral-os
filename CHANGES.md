@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.84
+
+- Three new icons for applications: Layers, Progress and Cube (HOST_ICON_LAYERS, HOST_ICON_PROGRESS, HOST_ICON_CUBE).
+
 ## 0.1.83
 
 - A fresh install from the web flasher starts the firmware by itself and shows the setup screen; BACK in recovery is needed only after Keep data.
