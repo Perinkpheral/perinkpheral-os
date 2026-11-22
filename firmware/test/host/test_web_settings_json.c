@@ -4,6 +4,7 @@
 
 #include "tinytest.h"
 #include "web_settings_json.h"
+#include "catalog.h"
 
 static int allocation_count;
 static int fail_at;
@@ -82,6 +83,38 @@ static void check_complete(const json_t *json, const appconf_t *settings)
     CHECK(strcmp(json_at(order, 1)->text, "weather") == 0);
 }
 
+static void check_sources(const char *sources, int expected_count)
+{
+    allocation_count = 0;
+    json_t *json = web_sources_json(sources);
+    CHECK(json != NULL);
+    const json_t *list = json_get(json, "sources");
+    CHECK(json_is_array(list) && json_count(list) == expected_count);
+    char source[CATALOG_SOURCE_URL_MAX + 1];
+    for (int i = 0; i < expected_count; i++) {
+        CHECK(catalog_source_at(sources, i, source, sizeof source));
+        const json_t *item = json_at(list, i);
+        CHECK(json_is_string(item) && strcmp(item->text, source) == 0);
+    }
+    const int total_allocations = allocation_count;
+    json_free(json);
+    CHECK(live_allocations == 0);
+
+    /* A single failure followed by recovery must not return fewer sources. */
+    for (fail_at = 1; fail_at <= total_allocations; fail_at++) {
+        allocation_count = 0;
+        json = web_sources_json(sources);
+        CHECK(json == NULL);
+        json_free(json);
+        CHECK(live_allocations == 0);
+    }
+    fail_at = 0;
+    json = web_sources_json(sources);
+    CHECK(json != NULL && json_count(json_get(json, "sources")) == expected_count);
+    json_free(json);
+    CHECK(live_allocations == 0);
+}
+
 int main(void)
 {
     appconf_t settings;
@@ -110,5 +143,8 @@ int main(void)
     CHECK(json != NULL && json_count(json_get(json, "menu_order")) == 0);
     json_free(json);
     CHECK(live_allocations == 0);
+    check_sources(CATALOG_OFFICIAL_SOURCE, 1);
+    check_sources(CATALOG_OFFICIAL_SOURCE "\nhttps://one.test/catalog\nhttps://two.test/catalog\nhttps://three.test/catalog\n",
+                  CATALOG_SOURCES_MAX);
     REPORT();
 }

@@ -41,8 +41,8 @@ TESTS   += test_answer_headers test_web_settings_json test_web_app_settings
 test_web_app_settings: test_web_app_settings.c tinytest.h $(MAIN)/web_app_settings.c $(MAIN)/web_app_settings.h $(APPSTORE)/json_tree.c
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -I$(MAIN) -o $@ test_web_app_settings.c $(MAIN)/web_app_settings.c $(APPSTORE)/json_tree.c
 
-test_web_settings_json: test_web_settings_json.c tinytest.h $(MAIN)/web_settings_json.c $(MAIN)/web_settings_json.h $(APPCONF)/appconf.c $(APPSTORE)/json_tree.c
-	$(CC) $(CFLAGS) -I$(MAIN) -I$(APPCONF)/include -o $@ test_web_settings_json.c $(APPCONF)/appconf.c
+test_web_settings_json: test_web_settings_json.c tinytest.h $(MAIN)/web_settings_json.c $(MAIN)/web_settings_json.h $(APPCONF)/appconf.c $(APPSTORE)/json_tree.c $(APPSTORE)/catalog.c $(APPSTORE)/include/catalog.h
+	$(CC) $(CFLAGS) -I$(MAIN) -I$(APPCONF)/include -o $@ test_web_settings_json.c $(APPCONF)/appconf.c $(APPSTORE)/catalog.c
 
 test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c $(APPSYS)/include/answer_headers.h
 	$(CC) $(CFLAGS) -I$(APPSYS)/include -I$(SDK) -o $@ test_answer_headers.c $(APPSYS)/answer_headers.c

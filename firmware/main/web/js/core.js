@@ -270,8 +270,10 @@ function currentSection() {
 function showSection() {
   const inside = (location.hash.slice(1) || "apps").split(":").slice(1).join(":");
   const name = currentSection();
-  if (name === "settings") showPane(byId(inside) && byId(inside).classList.contains("pane") ? inside : "general");
-  else openInside(inside);
+  if (name === "settings") {
+    wantedInside = null;
+    showPane(byId(inside) && byId(inside).classList.contains("pane") ? inside : "general");
+  } else openInside(name === "apps" ? inside : null);
   for (const section of document.querySelectorAll("section"))
     section.classList.toggle("current", section.dataset.section === name);
   for (const link of document.querySelectorAll("nav .links a")) {
@@ -292,7 +294,8 @@ function showSection() {
 let wantedInside = null;
 
 function openInside(what) {
-  wantedInside = what || null;
+  const route = location.hash.slice(1) || "apps";
+  wantedInside = currentSection() === "apps" && route === "apps:" + what ? what : null;
   if (!wantedInside) return;
   if (wantedInside === "catalogs") {
     byId("sources-dialog").showModal();

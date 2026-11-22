@@ -94,16 +94,15 @@ async function loadSettings() {
     language => make("option", { value: language.code, textContent: language.name })));
   byId("language-choice").value = settings.language;
   drawClock();
-  drawDefaultApp();
+  drawDefaultApp(settings.default_app || "");
   drawStatus();
   drawTiles();
 }
 
 /* None, and every application there is; one that was removed stays in the
  * list while it is the choice, so that saving the form does not change it. */
-function drawDefaultApp() {
+function drawDefaultApp(chosen = byId("default_app").value) {
   const select = byId("default_app");
-  const chosen = settings.default_app || "";
   const apps = installed.map(have => ({ value: have.name, textContent: have.title }));
   if (chosen && !installed.some(have => have.name === chosen))
     apps.push({ value: chosen, textContent: chosen });

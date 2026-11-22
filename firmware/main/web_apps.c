@@ -4,6 +4,7 @@
  */
 #include "web_apps.h"
 #include "web_app_settings.h"
+#include "web_settings_json.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -503,14 +504,11 @@ static esp_err_t handle_sources(httpd_req_t *request)
         return httpd_resp_send_500(request);
     }
     settings_load_sources(sources, CATALOG_SOURCES_TEXT_MAX);
-    json_t *list = json_new_array();
-    char   source[CATALOG_SOURCE_URL_MAX + 1];
-    for (int i = 0; catalog_source_at(sources, i, source, sizeof source); i++) {
-        json_array_add(list, json_new_string(source));
-    }
+    json_t *json = web_sources_json(sources);
     free(sources);
-    json_t *json = json_new_object();
-    json_add_item(json, "sources", list);
+    if (json == NULL) {
+        return httpd_resp_send_500(request);
+    }
     return web_send_json(request, "200 OK", json);
 }
 

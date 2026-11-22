@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 #include "web_settings_json.h"
+#include "catalog.h"
 
 #include <string.h>
 
@@ -65,6 +66,31 @@ json_t *web_settings_json(const appconf_t *settings, char *order)
             }
             json_array_add(names, item);
         }
+    }
+    return json;
+
+failed:
+    json_free(json);
+    return NULL;
+}
+
+json_t *web_sources_json(const char *sources)
+{
+    json_t *json = json_new_object();
+    if (json == NULL) {
+        return NULL;
+    }
+    json_t *list = json_add_item(json, "sources", json_new_array());
+    if (list == NULL) {
+        goto failed;
+    }
+    char source[CATALOG_SOURCE_URL_MAX + 1];
+    for (int i = 0; catalog_source_at(sources, i, source, sizeof source); i++) {
+        json_t *item = json_new_string(source);
+        if (item == NULL) {
+            goto failed;
+        }
+        json_array_add(list, item);
     }
     return json;
 
