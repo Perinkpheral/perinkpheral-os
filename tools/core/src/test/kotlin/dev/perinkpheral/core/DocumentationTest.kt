@@ -37,7 +37,7 @@ object DocumentationTest {
         }.toTypedArray())
         finding(5, specification to "an empty secret deletes its key",
             guide to "an empty secret deletes its key", settings to "an empty secret deletes its key")
-        finding(6, wifi to "required: [ssid]", wifi to "omitted password, tz and tz_city stay as they were")
+        finding(6, wifi to "required: [ssid]", wifi to "Omitted password, tz and tz_city retain their previous values.")
         finding(7, wifi to "replacing any existing zone")
         finding(8, network to "before the power-saving floor", guide to "before the power-saving floor",
             network to "10 s to 20 s resets it", guide to "10 s to 20 s resets it")

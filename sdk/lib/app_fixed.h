@@ -21,11 +21,14 @@
  * decimal. Returns false if the text is not a number, the result does
  * not fit in -INT64_MAX..INT64_MAX, or digits discarded after the first
  * 18 significant digits would change the result at the requested decimals.
- * `value` is then unchanged. */
+ * `value` is then unchanged. decimals must be 0..APP_FIXED_DECIMALS_MAX;
+ * another value returns false. */
 bool app_fixed_parse(const char *text, int32_t decimals, int64_t *value);
 
-/* The same number with another number of decimals, rounded half away from
- * zero: 35627 from 2 to 0 decimals is 356. */
+/* Rescales a number, rounding half away from zero when reducing precision.
+ * Use decimal counts from 0 to APP_FIXED_DECIMALS_MAX. When increasing
+ * precision, the caller must ensure the multiplication fits in int64_t;
+ * overflow is not checked. */
 int64_t app_fixed_rescale(int64_t value, int32_t from_decimals, int32_t to_decimals);
 
 /* part / whole with `decimals` decimals, rounded half away from zero; 0 if

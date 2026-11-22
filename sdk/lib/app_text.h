@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* The degree sign, which the host draws in any font: "21" APP_TEXT_DEGREE. */
+/* The degree sign, which Perinkpheral OS draws in every font: "21" APP_TEXT_DEGREE. */
 #define APP_TEXT_DEGREE "\xC2\xB0"
 
 /* A string builder over a caller-provided buffer. The buffer is always
@@ -33,8 +33,8 @@ void app_text_add_padded(app_text_t *text, int32_t value, int32_t digits);
 
 int32_t app_text_length(const char *text);
 
-/* Copies `from` to `to` as a null-terminated string of at most
- * `size` - 1 characters. */
+/* Copies `from` to `to` as a null-terminated string using at most
+ * `size` - 1 bytes, cut between UTF-8 characters. */
 void app_text_copy(char *to, int32_t size, const char *from);
 
 /* True if the two texts are the same. */

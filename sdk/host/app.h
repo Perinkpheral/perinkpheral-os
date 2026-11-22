@@ -9,7 +9,11 @@
 
 #include "base.h"
 
-/* ---- Exports (all optional) ---- */
+/* ---- Exports (all optional) ----
+ *
+ * Each exported function, including buffer providers, runs with a 3000 ms
+ * execution budget. Exceeding the budget or trapping stops the instance;
+ * subsequent handlers, including app_on_terminate(), are not called. */
 
 /* Called once, immediately after the module is loaded.
  * Perinkpheral OS unloads an application every time it leaves the screen. State
@@ -51,10 +55,8 @@ APP_EXPORT(app_on_updated, void app_on_updated(void));
  * Called on and off the screen, like the data handlers. */
 APP_EXPORT(app_on_settings, void app_on_settings(void));
 
-/* Where the user is in the application: a page, a selection, a value half
- * set. The application is unloaded whenever another one needs the room - a
- * delivery in the background, a question of Perinkpheral OS - and enters again
- * from what it stored; what is worth no write of the flash goes here.
+/* Session storage retains transient application state, including
+ * navigation, selection and unfinished edits, without writing flash.
  *
  * session_set() keeps up to HOST_SESSION_MAX bytes for the application while
  * it is in the stack: across its unloads, and while another is on top of it.

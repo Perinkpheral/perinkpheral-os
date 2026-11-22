@@ -2,14 +2,19 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * Drawing, inside app_on_draw(): the surface, text and fonts, shapes,
+ * Graphics: the surface, text and fonts, shapes,
  * bitmaps, QR codes, Perinkpheral OS's icons and the application's pictures.
  */
 #pragma once
 
 #include "base.h"
 
-/* ---- Drawing (inside app_on_draw() only) ---- */
+/* ---- Drawing and measurement ----
+ *
+ * Drawing calls require app_on_draw(). Text measurements, font metrics,
+ * gfx_fit_text() and gfx_icon_ink() work in any handler. gfx_draw_qr()
+ * works in any handler when cell is 0. gfx_width() and gfx_height()
+ * require app_on_draw(). */
 
 /* Surface size: 400 x 300 for a full-screen application, 400 x 260 below
  * Perinkpheral OS header otherwise. The origin is the top left corner. The
@@ -133,8 +138,8 @@ HOST_IMPORT(gfx_draw_qr, int32_t gfx_draw_qr(int32_t x, int32_t y, int32_t cell,
 /* Draws a bitmap that Perinkpheral OS reads from an application file, starting
  * at `offset`. The format is that of gfx_draw_bitmap(). A file can hold
  * several bitmaps. The bitmap does not use application memory.
- * Returns HOST_ERR_NOT_FOUND if the file does not exist or ends before
- * the bitmap does. */
+ * offset must be 0..65536. A failed or short read returns
+ * HOST_ERR_NOT_FOUND and may leave part of the bitmap drawn. */
 HOST_IMPORT(gfx_draw_bitmap_file,
             int32_t gfx_draw_bitmap_file(int32_t x, int32_t y, int32_t width, int32_t height,
                                     const char *name, int32_t name_length, int32_t offset));
@@ -142,10 +147,9 @@ HOST_IMPORT(gfx_draw_bitmap_file,
 /* Draws a built-in icon in the current colour. An icon is 11 x 11 cells;
  * (x, y) is its top left corner; `cell` is the cell size in pixels, 1 to
  * HOST_ICON_CELL_MAX. Cell size 2 matches Perinkpheral OS text size. Many are
- * drawn finer too, on 22 and 44 cells: a large one is as smooth as its
- * size allows, with no work of the application's. The weather, the
- * things of a house and the sky are here, for a dashboard to name
- * rather than draw. Returns HOST_ERR_ARGUMENT for an unknown icon. */
+ * available at finer resolutions of 22 and 44 cells. Perinkpheral OS
+ * selects the available icon resolution for the requested size.
+ * Returns HOST_ERR_ARGUMENT for an unknown icon. */
 #define HOST_ICON_SIGNAL         0
 #define HOST_ICON_NO_SIGNAL      1
 #define HOST_ICON_UP             2

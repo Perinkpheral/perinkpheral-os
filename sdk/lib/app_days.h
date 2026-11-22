@@ -2,9 +2,8 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * Dates of the Gregorian calendar as days since 1970-01-01, and back
- * (H. Hinnant's algorithms): for a moment worked out from a date an
- * answer gives, or a date taken from a count of days.
+ * Converts Gregorian calendar dates to days since 1970-01-01 and back
+ * using H. Hinnant's algorithms.
  */
 #pragma once
 

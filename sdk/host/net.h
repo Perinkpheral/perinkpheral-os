@@ -78,7 +78,13 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * answer_value() is valid inside the handler. It copies the value of path
  * number `index` as text without a terminator and returns its length.
  * Numbers, true, false and null are copied as written; strings are copied
- * without quotes. A value is at most HOST_VALUE_MAX bytes; a longer one
+ * without quotes. Escaped quotes, backslashes and slashes are decoded.
+ * Unicode escapes become UTF-8; unpaired surrogate escapes are discarded.
+ * Other escaped characters become spaces. Extracted strings are
+ * NUL-terminated internally, so an embedded NUL ends the exposed value.
+ * Only ASCII property names are supported reliably; non-ASCII key
+ * characters become "?" and can match a path containing "?".
+ * A value is at most HOST_VALUE_MAX bytes; a longer one
  * is cut between characters.
  * Returns HOST_ERR_NOT_FOUND if the answer does not contain the path,
  * HOST_ERR_NO_SPACE if the buffer is too small.
@@ -180,13 +186,19 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
 
 /* Queues a request from code.
  *
- * Destination: only hosts listed under "hosts" in the manifest.
+ * Destination: only hosts listed under "hosts" in the manifest. Host names
+ *              are compared case-insensitively. A literal entry without a
+ *              port permits ports 80 and 443; an explicit port must match.
+ *              A url/link setting entry requires its configured host and
+ *              effective port. URLs must use http:// or https:// without
+ *              user information before the host.
  * Queue:       Perinkpheral OS performs one request at a time for the whole
  *              device. An application has at most HOST_HTTP_PENDING_MAX
  *              requests waiting; with more to ask, it queues the next
  *              ones as answers arrive. The applications take turns, and
- *              polls take turns with requests, so every request is made
- *              in the end. A request is about 6 s over HTTPS.
+ *              queued requests alternate with scheduled polls. A queued
+ *              request can fail before transmission. Completion time depends
+ *              on network availability, queueing and server response time.
  * Answer:      delivered through app_on_data() in pieces, with `tag` as
  *              the request number, on or off the screen. The instance
  *              that receives the answer may not be the one that made the
@@ -200,6 +212,9 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  *              Perinkpheral OS sends "User-Agent: perinkpheral"; a User-Agent header
  *              given here replaces it. The same for polls. Each name is
  *              at most 31 bytes and each raw value at most 255 bytes.
+ *              URL and header input must be printable ASCII. Headers use
+ *              LF only; CRLF returns HOST_ERR_ARGUMENT. The body is a byte
+ *              buffer and is not subject to this text restriction.
  * {{key}}      reads the application's KV store, including keys not
  *              declared as settings. An absent declared setting uses its
  *              manifest default. URL values are percent encoded (except

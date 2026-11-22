@@ -50,8 +50,8 @@ HOST_IMPORT(alarm_set_at, int32_t alarm_set_at(int32_t id, int64_t unix_time));
  * Returns HOST_OK; HOST_ERR_ARGUMENT for an invalid number; HOST_ERR_NO_SPACE
  * when the device's shared pool of HOST_ALARM_REPEATING_MAX alarms is full. One
  * application can use several slots; none are reserved per application.
- * Say so in the log: a line in the header that
- * stops changing is otherwise taken for a hang.
+ * Log a failed repeating-alarm request so a stopped header update can
+ * be diagnosed.
  * Typical use: keeping a header_set_status() text current while the
  * application is off the screen. */
 #define HOST_ALARM_EVERY_MIN 60

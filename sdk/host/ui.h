@@ -15,8 +15,9 @@
  *
  * The ui_* calls draw the parts that Perinkpheral OS screens are built from. The
  * drawing code is in Perinkpheral OS and is the same code that draws the menu
- * and Perinkpheral OS questions. The drawing calls are valid inside app_on_draw()
- * only; ui_text_width() and ui_text_height() work anywhere. */
+ * and Perinkpheral OS questions. Drawing calls, ui_list_visible(),
+ * ui_list_first() and ui_cell_fit() require app_on_draw(). ui_text_width(),
+ * ui_text_height() and ui_value_width() work in any handler. */
 
 /* List.
  *
@@ -133,7 +134,8 @@ HOST_IMPORT(ui_draw_title, int32_t ui_draw_title(const char *text, int32_t lengt
 #define HOST_UI_ICON_LARGE  2 /* 99 px: notice icon */
 HOST_IMPORT(ui_draw_icon, int32_t ui_draw_icon(int32_t x, int32_t y, int32_t icon, int32_t size));
 
-/* One button label: the button name ("UP") white on black, and the action
+/* One button label: name_length must be 1..8 bytes.
+ * The button name ("UP") is white on black, and the action
  * text after it, or before it if `mirrored`. `x` is the left edge of the
  * whole label; `y` is the top of the text line. Returns the width. The
  * width cannot be measured without drawing; use ui_draw_actions() for
@@ -185,16 +187,19 @@ HOST_IMPORT(ui_draw_frame, int32_t ui_draw_frame(int32_t x, int32_t y, int32_t w
                                        int32_t arrows));
 
 /* Cell: a name at the top, and below it a picture and a value side by
- * side, in a box of any size. The value is drawn at the largest size
- * that fits.
+ * side, in a box of any size. Automatic sizing checks the measured value
+ * width against the available width, without checking value height.
+ * A cell covering the whole surface tries size classes 1..5; other cells
+ * try 3..5. The smallest class is used if none fits.
  * Picture size: HOST_UI_CELL_PICTURE_LARGE pixels in a cell that covers
  * the whole surface, HOST_UI_CELL_PICTURE_SMALL otherwise.
  * `picture` is a picture in gfx_draw_picture() format, or 0; `icon` is one of
  * Perinkpheral OS's icons (HOST_ICON_*) drawn in its place, or HOST_ICON_NONE.
  * Cells shown together should use one size: ui_cell_fit() returns the
- * size class that fits a cell (1 is the largest); set `size` of every
- * cell to the largest returned number. size 0 selects the size
- * automatically. */
+ * size class: 1 HOST_FONT_HUGE, 2 HOST_FONT_DISPLAY, 3 HOST_FONT_LARGE,
+ * 4 HOST_FONT_MEDIUM, or 5 HOST_FONT_TEXT. Set `size` of every related cell
+ * to the largest returned class. size 0, or a value outside 1..5, selects
+ * the size automatically. */
 #define HOST_UI_CELL_PICTURE_LARGE 88
 #define HOST_UI_CELL_PICTURE_SMALL 44
 typedef struct host_cell {
@@ -212,6 +217,7 @@ HOST_IMPORT(ui_draw_cell, int32_t ui_draw_cell(const host_cell_t *cell, const ui
  * least and the greatest value of the series.
  * `values`: `count` numbers, 1 to HOST_CHART_VALUES_MAX, oldest first.
  * A value of HOST_CHART_NO_VALUE is a gap in the series.
+ * decimals must be 0..9. width and height must be positive.
  * kind: HOST_CHART_LINE - points joined by a line; HOST_CHART_AREA - the
  * same with the area under the line in grey; HOST_CHART_BARS - one bar
  * per value; HOST_CHART_STEPS - a value holds until the next one.
@@ -261,7 +267,11 @@ HOST_IMPORT(ui_draw_picker, int32_t ui_draw_picker(const host_picker_t *picker))
 /* Date and time editor on the whole surface. The part being set is
  * framed. An empty `ok` or `back` is Perinkpheral OS's own word, in the device's
  * language: Next, or Save on the last part; Back, or Cancel on the first.
- * With nothing being set an empty one is no button. */
+ * With nothing being set an empty one is no button.
+ * All fields must be valid, including hidden parts: year 0..9999,
+ * month 1..12, day 1..31, hour 0..23 and minute 0..59. has must include
+ * HOST_DATE_HAS_TIME or HOST_DATE_HAS_DATE; selected must be
+ * HOST_DATE_HOUR..HOST_DATE_NONE. */
 #define HOST_DATE_HAS_TIME 1
 #define HOST_DATE_HAS_DATE 2
 #define HOST_DATE_HOUR     0

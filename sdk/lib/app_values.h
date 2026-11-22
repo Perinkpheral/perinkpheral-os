@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * The values the host picked out of an answer ("pick" in the manifest).
+ * Values extracted by Perinkpheral OS from an answer ("pick" in the manifest).
  * Value readers are valid inside app_on_picked(); app_parse_number()
  * accepts independent text and works in any handler.
  */
@@ -37,7 +37,9 @@ bool    app_value_element_fixed(int32_t index, int32_t element, int32_t decimals
 
 /* The elements of a list path as numbers for ui_draw_chart(): scaled by
  * 10^decimals, HOST_CHART_NO_VALUE for an element that is not a number
- * ("null") or does not fit in 32 bits. With more elements than `capacity`,
- * `capacity` of them evenly spread, the first and the last among them.
+ * ("null") or does not fit in 32 bits. capacity must be nonnegative.
+ * When capacity is smaller than the element count, values are sampled
+ * across the list. Capacity 1 selects the first element; capacities of
+ * at least 2 include the first and last elements.
  * Returns the number of values written. */
 int32_t app_value_series(int32_t index, int32_t decimals, int32_t *values, int32_t capacity);
