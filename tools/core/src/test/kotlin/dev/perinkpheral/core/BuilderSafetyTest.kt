@@ -147,7 +147,15 @@ object BuilderSafetyTest {
             System.getenv("WASI_SDK_PATH")?.let { wasi ->
                 val realBuilder = AppBuilder(Sdk(root), File(wasi)) {}
                 val built = File(scratch, "built")
+                val sourceFiles = File(source, "files").apply { mkdirs() }
+                File(sourceFiles, "app.wasm.part").writeText("application data")
+                File(sourceFiles, ".app.wasm.part").writeText("private staging data")
                 realBuilder.build(source, built)
+                check(File(built, "app.wasm.part").readText() == "application data")
+                check("app.wasm.part" in AppBuilder.packageFiles(built))
+                check(!File(built, ".app.wasm.part").exists())
+                check(".app.wasm.part" !in AppBuilder.packageFiles(built))
+                sourceFiles.deleteRecursively()
                 // Rebuild both current and pre-marker packages without keeping stale files.
                 File(built, "stale.txt").writeText("old asset")
                 realBuilder.build(source, built)

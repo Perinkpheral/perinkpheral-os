@@ -22,7 +22,7 @@
 static const char *TAG = "app_code";
 
 /* A module being written back into its folder, until it is whole. */
-#define PART_SUFFIX ".part"
+#define PART_FILE "." APP_FILE_MODULE ".part"
 
 #define PARTITION_LABEL   "appcode"
 #define PARTITION_SUBTYPE 0x40 /* the "appcode" type of partitions.csv: one of the application's own */
@@ -341,11 +341,11 @@ static bool place(const char *app_name, const char *path)
  * takes the module's name only when it is complete, so a loss of power on
  * the way leaves a part a start throws away, never a short module that
  * would take the place of the one in the partition. */
-static bool write_back(int extent, const char *path)
+static bool write_back(int extent, const char *path, const char *apps_root, const char *app_name)
 {
     const slot_header_t *header = header_at(s_extents[extent].start);
     char part[APP_STORE_PATH_MAX];
-    if (snprintf(part, sizeof part, "%s" PART_SUFFIX, path) >= (int)sizeof part) {
+    if (snprintf(part, sizeof part, "%s/%s/" PART_FILE, apps_root, app_name) >= (int)sizeof part) {
         return false;
     }
     FILE *file = fopen(part, "wb");
@@ -382,7 +382,8 @@ static void pack(const char *apps_root)
         struct stat existing;
         if (snprintf(path, sizeof path, "%s/%s/" APP_FILE_MODULE, apps_root, name) >=
                 (int)sizeof path ||
-            stat(path, &existing) == 0 || errno != ENOENT || !write_back(extent, path)) {
+            stat(path, &existing) == 0 || errno != ENOENT ||
+            !write_back(extent, path, apps_root, name)) {
             ESP_LOGW(TAG, "\"%s\" cannot be moved: no room for it as a file", name);
             return;
         }
@@ -463,7 +464,8 @@ void app_code_adopt(const char *apps_root)
             continue;
         }
         char part[APP_STORE_PATH_MAX];
-        if (snprintf(part, sizeof part, "%s" PART_SUFFIX, path) < (int)sizeof part) {
+        if (snprintf(part, sizeof part, "%s/%s/" PART_FILE, apps_root, entry->d_name) <
+            (int)sizeof part) {
             remove(part); /* written back when the power went: the partition has it */
         }
         struct stat module;

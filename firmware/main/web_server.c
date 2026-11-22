@@ -816,7 +816,7 @@ static const web_route_t ROUTES[] = {
     { "/api/status", HTTP_GET, handle_status, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/log", HTTP_GET, handle_log, MEMORY_FOR_A_PAGE, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/wifi", HTTP_POST, handle_wifi, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_WAITS },
-    { "/api/wifi/scan", HTTP_GET, handle_wifi_scan, MEMORY_FOR_A_PAGE, WEB_OWN_PAGE, WEB_WAITS },
+    { "/api/wifi/scan", HTTP_POST, handle_wifi_scan, MEMORY_FOR_A_PAGE, WEB_OWN_PAGE, WEB_WAITS },
     { "/api/time", HTTP_POST, handle_time, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/clock", HTTP_POST, handle_clock, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/ota/recovery", HTTP_POST, handle_ota_recovery, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_WAITS },
