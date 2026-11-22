@@ -106,7 +106,7 @@
 | 7.4 | ok |
 | 7.5 | ok |
 | 7.6 | ok |
-| 7.7 | fail on its first step, the rest ok (menu, the eight open, Clock removed and installed again) - a fresh install from the flasher lands in recovery and needs BACK; the owner: "a user will never guess there is something more to do; it must be: press flash, wait, get a working screen" |
+| 7.7 | ok on 0.1.83 - through https://perinkpheral.dev/flash, Fresh install: the setup screen with the QR code straight after flashing, no press; probation passed; the eight applications at the versions of the pin, Hello absent, each opens; Clock removed and installed again. The log lines "installed" were not read: the log is kept for the current start only, and the device restarted to join the network. On 0.1.82 the first step failed: recovery waited for BACK |
 
 ## 8. Alarms, notifications, power
 
@@ -121,6 +121,6 @@
 - 3.6, Jersey's Cyrillic: the device had kept the pack the owner tested on 2026-11-16 while the catalog's had been redrawn since; the owner rejected the redrawn letters. The catalog's pack goes back to the tested one, with Ы and ы (stem closer), ь (larger counter) and Jersey 25's б redrawn, accepted on the device on 2026-11-22 (firmware 0.1.83, catalog after it).
 - 6.1: the Catalog lists installed applications last (0.1.83).
 - 6.5: the time toggle says Automatic, on one line (0.1.83).
-- 7.7: a fresh install started recovery and needed BACK; from 0.1.83 the flasher's fresh install starts main by itself. Tried on the board with 0.1.82's files and the new journal: the setup screen with no press, the image confirmed after 20 seconds. To be passed again through https://perinkpheral.dev/flash after the release.
-- Seen twice after a USB session with esptool (a flash read, then the whole flash written back) and a reset over USB: the device ran, but its Wi-Fi did not start - no attempt in the router's log, no access point - until another reset; Forget network and joining again did not help. Not reproduced yet; to be investigated on a debug build after the release.
+- 7.7: a fresh install started recovery and needed BACK; from 0.1.83 the flasher's fresh install starts main by itself. Tried on the board with 0.1.82's files and the new journal: the setup screen with no press, the image confirmed after 20 seconds. Passed on 0.1.83 through the site's flasher.
+- Seen twice after a USB session with esptool (a flash read, then the whole flash written back) and a reset over USB: the device ran, but its Wi-Fi did not start - no attempt in the router's log, no access point - until another reset; Forget network and joining again did not help. Not seen after the third write of a copy, which joined at the first start. To be investigated on a debug build after the release.
 - Sun and Moon gained optional notifications before sunrise and sunset, at the owner's word (catalog).
