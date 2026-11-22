@@ -10,6 +10,10 @@ the manifest. `apps/specimen` passes them all; the tools' test breaks copies of 
 each break to be caught, and keeps unusual but right copies that must pass. Applications with
 `"system": true` skip both capability checks and their own `test/*.c` tests.
 
+Put application-specific inputs in `test/check.json`: `at`, `tz`, `store` and
+`mocks`. Mocks may be an object or a JSON filename relative to that file. The command
+also discovers and runs `test/*.c`, compiled with the stand-in and sanitizers.
+
 The stand-in arena uses eight-byte alignment, as does the device allocator.
 
 ## Known differences from the device
