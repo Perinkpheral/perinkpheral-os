@@ -366,9 +366,10 @@ paths:
               properties:
                 ssid: { type: string }
                 password: { type: string }
-                tz: { type: string, description: "Time zone to set along, on a device that has none" }
+                tz: { type: string, description: "Time zone to set alongside Wi-Fi, replacing any existing zone" }
                 tz_city: { type: string, description: "The city the zone was chosen by, by its English name" }
-              description: What is left out stays as it was
+              required: [ssid]
+              description: ssid is required; omitted password, tz and tz_city stay as they were
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
@@ -437,9 +438,13 @@ paths:
               additionalProperties: { type: string }
               description: >-
                 Declared setting key to text value, including hidden settings. Missing
-                keys are unchanged; an empty value is stored and overrides a default.
-                Validation precedes writes, but writes are not transactional. Changing
-                a url/link destination clears secrets omitted from this request.
+                keys are unchanged; an empty non-secret value is stored and overrides a
+                default, while an empty secret deletes its key. Validation precedes
+                writes, but writes are not transactional. Changing a url/link destination
+                whose previous stored or default value is nonempty first deletes all
+                declared secrets, including supplied replacements. Destinations are then
+                written before other supplied values, including replacement secrets.
+                A failed save can leave a supplied secret deleted.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }

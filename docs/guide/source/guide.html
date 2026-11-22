@@ -125,7 +125,7 @@
   <tr><td>Transport</td><td class="n">HTTP, HTTPS</td><td>Performed by Perinkpheral OS</td></tr>
   <tr><td>HTTPS trust</td><td class="n">ESP-IDF's root certificate bundle</td><td>Plus up to 2 roots an application brings, for its own requests. Self-signed server certificates are rejected. Plain <code>http</code> is available for home networks</td></tr>
   <tr><td>Hosts for requests from code</td><td class="n">4</td><td>Listed in the manifest, or taken from a <code>url</code> or <code>link</code> setting. Polls use the address in their <code>url</code></td></tr>
-  <tr><td>Polls per manifest</td><td class="n">4</td><td>Interval 10 s to 1 day; minimum 300 s on battery. A poll can go over a list setting: one request per item, one at a time</td></tr>
+  <tr><td>Polls per manifest</td><td class="n">4</td><td>Interval 10 s to 1 day; minimum 300 s while power saving is active. A poll can go over a list setting: one request per item, one at a time</td></tr>
   <tr><td>Concurrent requests</td><td class="n">1</td><td>Per device. Applications and polls take turns</td></tr>
   <tr><td>Requests from code waiting</td><td class="n">16</td><td>Per application</td></tr>
   <tr><td>Request headers / body</td><td class="n">1023 bytes / 512 bytes</td><td>Up to 4 header lines</td></tr>
@@ -424,9 +424,9 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
   <tr><td class="c">list</td><td>A line per item; items are added and removed</td><td>Items of 1 - 63 printable ASCII characters, separated by a line break (<code>\n</code>); 255 bytes in all, about 40 tickers. Read with <code>app_setting_count()</code> and <code>app_setting_item()</code></td></tr>
 </table>
 <ul>
-  <li>An absent setting reads as its <code>default</code> through <code>kv_get()</code> and placeholders. The page uses the default for an unset form field. Saving an empty value through <code>/api/apps/settings</code> stores an empty override; <code>kv_set(..., 0)</code> instead deletes the key and restores the default. A list default is a list of items.</li>
+  <li>An absent setting reads as its <code>default</code> through <code>kv_get()</code> and placeholders. The page uses the default for an unset form field. Saving an empty non-secret value through <code>/api/apps/settings</code> stores an empty override; an empty secret deletes its key. <code>kv_set(..., 0)</code> deletes the key and restores the default. A list default is a list of items.</li>
   <li>The application can write any setting with <code>kv_set()</code> but <code>url</code> and <code>link</code>; a list as its items with line breaks between them.</li>
-  <li><code>url</code> and <code>link</code> settings are read-only for the application: <code>kv_set()</code> on their keys fails. When the user changes such a setting, Perinkpheral OS erases the secrets that were not entered again, so a token stays with the server it was entered for.</li>
+  <li><code>url</code> and <code>link</code> settings are read-only for the application: <code>kv_set()</code> on their keys fails. Changing a destination whose previous stored or default value is nonempty first deletes all declared secrets, including supplied replacements. Destinations are then written before the other supplied values, including replacement secrets. A failed save can leave a supplied secret deleted.</li>
   <li><code>title</code> is 1 to 31 characters. <code>help</code> is up to 95 characters.</li>
 </ul>
 
@@ -500,7 +500,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 
 <h2 id="screen-pictures">Pictures and icons</h2>
 <p>Perinkpheral OS provides 49 built-in icons: Perinkpheral OS's own, the weather, the things of a home and the sky. Each icon is on a grid of 11 x 11 cells, and many are also drawn on 22 and 44 cells. An application uses them instead of drawing its own.</p>
-<p><code>gfx_draw_icon()</code> draws an icon with a cell size of 1 to 16 pixels. <code>ui_draw_icon()</code> draws an icon at one of three standard sizes: 22, 44 or 99 px. Perinkpheral OS picks the finest drawing that fits at two pixels per cell or more, so lines keep the weight of the text and curves stay smooth at large sizes. <code>gfx_icon_ink()</code> gives the pixels an icon covers, to align it by what is visible.</p>
+<p><code>gfx_draw_icon()</code> draws an icon with a cell size of 1 to 16 pixels. <code>ui_draw_icon()</code> draws an icon at one of three standard sizes: 22, 44 or 99 px. Perinkpheral OS picks the finest drawing that fits at two pixels per cell or more, so lines keep the weight of the text and curves stay smooth at large sizes. UPDATE (the project mark) always uses its original 11-cell drawing. <code>gfx_icon_ink()</code> gives the pixels an icon covers, to align it by what is visible.</p>
 <table>
   <tr><th style="width:27%">Constant</th><th style="width:23%">Meaning</th><th style="width:27%">Constant</th><th>Meaning</th></tr>
   <tr><td class="c">HOST_ICON_SIGNAL</td><td><span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons.png" style="left:-16px;top:-67px" alt=""></span>connected</td><td class="c">HOST_ICON_NO_SIGNAL</td><td><span class="icon-sample"><img src="{{ROOT}}/docs/guide/source/screens/icons.png" style="left:-92px;top:-67px" alt=""></span>not connected</td></tr>
@@ -572,7 +572,7 @@ gfx_draw_picture(x, y, PICTURE_DROP, 2);    /* 22 px: cell size 2 */</pre>
   <tr><td class="c">ui_draw_list_row, ui_list_first, ui_list_visible</td><td>List: one row per line, a value or icon at the right edge, the selected row inverted, a scroll bar. Without a selection, UP and DOWN scroll</td><td>More than three items; menus; settings</td></tr>
   <tr><td class="c">ui_draw_cell, ui_cell_fit</td><td>Name, picture and value in a box of any size; the value at the largest size that fits</td><td>Dashboards with one, two or four values</td></tr>
   <tr><td class="c">ui_draw_value</td><td>Value with its unit on the same baseline: "18 km/h"</td><td>Any number with a unit</td></tr>
-  <tr><td class="c">ui_draw_notice</td><td>Two large lines, one text line, a large icon, button labels</td><td>Questions, errors, empty states, work in progress</td></tr>
+  <tr><td class="c">ui_draw_notice</td><td>Two large lines, one or two detail lines, a large icon, button labels</td><td>Questions, errors, empty states, work in progress</td></tr>
   <tr><td class="c">ui_draw_reason</td><td>Standard notice for a request status: "Loading", "Not set up", "No network", "Access denied", "No answer"</td><td>Any screen that depends on the network</td></tr>
   <tr><td class="c">ui_draw_actions, ui_draw_button</td><td>Button row at the bottom: OK action at the left, BACK action at the right</td><td>Screens where a button action needs a label</td></tr>
   <tr><td class="c">ui_draw_picker</td><td>One value from a sequence: the selected value framed, neighbours above and below</td><td>Selection among a few values with UP and DOWN</td></tr>
@@ -780,7 +780,7 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
   <li>An application can have 16 requests waiting (<code>HOST_HTTP_PENDING_MAX</code>). Queue additional requests as responses arrive. Applications and polls take turns while queued work remains valid. <code>HOST_ERR_NO_SPACE</code> means that 16 are waiting, or that the device has no memory for another.</li>
   <li>Perinkpheral OS sends <code>User-Agent: perinkpheral</code>. A <code>User-Agent</code> header given by the application replaces it, in a poll and in a request.</li>
   <li>A response to a request from code that was interrupted (section 3) is dropped: the request is not repeated. Ask again from <code>app_on_terminate()</code> or later if the response is still needed.</li>
-  <li>Perinkpheral OS follows up to three redirects for a <code>GET</code>. A redirect to a host outside the list fails with <code>HOST_FAILED_NOT_ALLOWED</code>. A request of another method is sent once; its redirect response is delivered as the response.</li>
+  <li>Perinkpheral OS follows up to three redirects for a <code>GET</code>. Redirects to the same name with the same port, or with both ports in {80, 443}, bypass the allowlist check and retain request headers. Other destinations must be in the list or fail with <code>HOST_FAILED_NOT_ALLOWED</code>; request headers are dropped there. A request of another method is sent once; its redirect response is delivered as the response.</li>
   <li><code>poll_run(n)</code> requests poll <code>n</code> through the shared queue without waiting for a response; repeated pending requests are coalesced, for example when the user presses a refresh button. <code>poll_set_interval(n, seconds)</code> changes the interval of a poll from code, for example to honour a Retry-After header.</li>
 </ul>
 
@@ -941,7 +941,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <div class="rule"><b>Take text input on the web page.</b> Declare text such as a token, an address or a city as a manifest setting; the user enters it on the device's web page. On the device, let the user choose from a few values with UP and DOWN.</div>
 <div class="rule"><b>Take the screen rarely.</b> Use a notification only for events the user asked to be told about, such as a timer or a meeting. Let other information wait until the user looks.</div>
 <div class="rule"><b>Send user data only where the user directs.</b> List only the hosts the application needs. Use a <code>url</code> setting for the user's own server. Use a <code>secret</code> setting for a token and send it through a header placeholder.</div>
-<div class="rule"><b>Poll no more often than the data changes.</b> Offer the interval as a setting with a reasonable default. On battery power Perinkpheral OS limits every poll to one per five minutes.</div>
+<div class="rule"><b>Poll no more often than the data changes.</b> Offer the interval as a setting with a reasonable default. While power saving is active Perinkpheral OS limits every poll to one per five minutes.</div>
 
 <h1 id="tools">14. Tools and debugging</h1>
 <table>
@@ -957,7 +957,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
   <tr><td class="c">tools/perinkpheral press 3 3 2L [--shot f.png]</td><td>Sends button presses: 1 - 4 short, 1L - 4L long, in device order</td></tr>
   <tr><td class="c">tools/perinkpheral open &lt;name&gt;</td><td>Opens an installed application</td></tr>
   <tr><td class="c">tools/perinkpheral log [--follow] [--app]</td><td>Prints the device log. <code>--app</code>: application lines only. <code>--follow</code> continues across restarts of the device</td></tr>
-  <tr><td class="c">tools/perinkpheral set &lt;app&gt; &lt;key&gt; &lt;value&gt;</td><td>Writes a value to an application's store, as the web page saves a setting: <code>app_on_settings()</code> is called and the polls are repeated. A list is its items with line breaks</td></tr>
+  <tr><td class="c">tools/perinkpheral set &lt;app&gt; &lt;key&gt; &lt;value&gt;</td><td>Writes raw bytes to an application's store through the development route <code>/api/dev/kv</code>, without manifest-setting validation or destination-change secret clearing. An empty value deletes the key. Then <code>app_on_settings()</code> is called and polls are requested again. A list is its items with line breaks</td></tr>
   <tr><td class="c">tools/perinkpheral status</td><td>Prints firmware, network, free memory and the last reset reason</td></tr>
   <tr><td class="c">tools/perinkpheral pictures &lt;files&gt;</td><td>Prints pictures as rows of # and . as the build reads them</td></tr>
   <tr><td class="c">tools/perinkpheral video &lt;video&gt; --out &lt;bin&gt;</td><td>Converts a video to a 1-bit stream that fits in an application file</td></tr>
@@ -973,7 +973,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <table>
   <tr><th style="width:34%">Device</th><th>Simulator</th></tr>
   <tr><td>Store, files</td><td>A folder on the computer, with the device's limits. Kept between runs, as across an update on the device</td></tr>
-  <tr><td>Network</td><td>The computer's. Redirects, hosts and headers follow the device's rules. Responses can be replaced by mocks</td></tr>
+  <tr><td>Network</td><td>The computer's. Real network redirects, hosts and headers follow the device's rules. Responses can be replaced by mocks; mocked redirects are delivered as final responses and are not followed</td></tr>
   <tr><td>Clock</td><td>The computer's. Moved forward on request</td></tr>
   <tr><td>Language, font, glyph packs</td><td><code>--language</code>, <code>--font</code>, <code>--glyphs</code></td></tr>
   <tr><td>Where it keeps its state</td><td><code>--state &lt;folder&gt;</code>; by default <code>~/.perinkpheral/simulator/&lt;name&gt;</code></td></tr>
@@ -1039,7 +1039,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <li>The output folder is created anew on every run. It must be empty or an earlier catalog, and must not contain the applications.</li>
   <li>The index lists the name, title, version and icon of each application, and its files with their sizes and SHA-256 hashes. The device accepts a file only if both the size and the hash match.</li>
   <li>Trust model: HTTPS to a source that the user selected, plus the sandbox. Packages are unsigned.</li>
-  <li>The official catalog is the <code>perinkpheral-apps</code> repository, with eighteen applications. It is the first source on every device. The user can add up to three HTTPS sources on the device's web page.</li>
+  <li>The official catalog is the <code>perinkpheral-apps</code> repository. It is the first source on every device. The user can add up to three HTTPS sources on the device's web page.</li>
   <li>The web page shows a summary of each installed application, taken from its manifest: the servers it connects to, the polling interval, what it stores, and whether it starts with the device.</li>
   <li>Increase <code>version</code> with every change. The page offers Update for a higher stable catalog version (X.Y.Z, each part 0 to 999 without leading zeroes). If either version is another label, it offers Update when the labels differ. Installed 2.0.0 does not offer catalog 1.9.9. Catalog includes installed applications, marked Installed or Update. Update all appears in Installed apps when at least two compatible updates are available; Refresh fetches the catalogs again.</li>
 </ul>
@@ -1201,7 +1201,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <table>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>
   <tr><td class="c">poll_run(poll)</td><td>Queues a manifest poll; repeated pending requests are coalesced. Does not wait for a response</td></tr>
-  <tr><td class="c">poll_set_interval(poll, seconds)</td><td>Sets a persistent code override of 10 - 86400 s; other nonzero values or an unknown poll give HOST_ERR_ARGUMENT. 0 forgets the override and resumes the manifest or interval setting. The code override takes precedence over that setting. A changed effective interval resets the deadline from now; the same interval does not. HOST_ERR_FAILED means the override could not be kept or forgotten</td></tr>
+  <tr><td class="c">poll_set_interval(poll, seconds)</td><td>Sets a persistent code override of 10 - 86400 s; other nonzero values or an unknown poll give HOST_ERR_ARGUMENT. 0 forgets the override and resumes the manifest or interval setting. The code override takes precedence over that setting. A changed resolved interval, before the power-saving floor, resets the deadline from now; the same resolved interval does not. Changing 10 s to 20 s resets it even when both run at the 300 s floor. HOST_ERR_FAILED means the override could not be kept or forgotten</td></tr>
   <tr><td class="c">http_send(tag, method, url, url_length, headers, headers_length, body, body_length)</td><td>Queues a request; up to 16 of the application's wait. Methods: <code>HOST_HTTP_GET</code>, <code>HOST_HTTP_POST</code>, <code>HOST_HTTP_PUT</code>, <code>HOST_HTTP_DELETE</code>, <code>HOST_HTTP_PATCH</code>, <code>HOST_HTTP_HEAD</code>, <code>HOST_HTTP_PROPFIND</code>, <code>HOST_HTTP_REPORT</code>. Headers: "Name: value" lines</td></tr>
   <tr><td class="c">answer_value(index, text, capacity)</td><td>Inside <code>app_on_picked()</code>: copies the value of path <code>index</code> as text without a terminator. Returns its length. A list path has no value</td></tr>
   <tr><td class="c">answer_count(index)</td><td>Inside <code>app_on_picked()</code>: the number of elements of list path <code>index</code>; 1 or 0 for any other path</td></tr>

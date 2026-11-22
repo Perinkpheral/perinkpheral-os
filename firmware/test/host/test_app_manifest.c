@@ -313,6 +313,13 @@ static void test_a_server_of_the_users_own(void)
                                   setting_value, NULL));
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:9000/api", setting_value, NULL));
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.11:8123/api", setting_value, NULL));
+    server_setting = "http://example.com";
+    CHECK(app_manifest_allows_url(manifest, "http://example.com/api", setting_value, NULL));
+    CHECK(!app_manifest_allows_url(manifest, "https://example.com/api", setting_value, NULL));
+    /* Redirects use the same-host comparison before consulting the allowlist. */
+    CHECK(app_manifest_is_same_host(server_setting, "https://example.com/api"));
+    CHECK(app_manifest_is_same_host(server_setting, "http://example.com:443/api"));
+    CHECK(!app_manifest_is_same_host(server_setting, "https://example.com:8443/api"));
     server_setting = NULL; /* nothing set: nowhere to go */
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:8123/api", setting_value, NULL));
     CHECK(app_manifest_setting_type(manifest, "server") == APP_SETTING_URL);
