@@ -46,6 +46,12 @@ make -C firmware/test/host test
 CI builds and tests every push. Each successful push to `main` creates a
 [release](https://github.com/Perinkpheral/perinkpheral-os/releases) with release and debug firmware.
 
+For a fresh installation, connect the board by USB and choose a fresh install in the
+[web flasher](https://perinkpheral.dev/flash). Wait for flashing and restart to finish.
+The device starts main automatically on probation and shows the Wi-Fi setup screen
+with its QR code. Scan it to set up Wi-Fi; no BACK press is needed. Fresh installation
+erases existing data and installs the bundled applications.
+
 Devices with the old two-slot layout need a one-time USB migration. Choose **Keep data**
 in the [web flasher](https://perinkpheral.dev/flash), then press BACK on the device to start
 the installed firmware. Later updates use Wi-Fi and ask for OK on the device. A failed

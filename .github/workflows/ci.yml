@@ -96,7 +96,7 @@ jobs:
       - name: Firmware and application update clients
         run: |
           tools/cli/gradlew -p tools/core check
-          tools/cli/gradlew -p tools/cli pageTest
+          tools/cli/gradlew -p tools/cli pageTest flashManifestTest
           node firmware/test/web/test_firmware_update.js
           node firmware/test/web/test_app_requests.js
           node firmware/test/web/test_app_settings.js

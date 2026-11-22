@@ -124,6 +124,8 @@ object FirmwareTools {
      * manifest.json beside them in the form of ESP Web Tools: the chip and, for every file,
      * where it goes. `prefix` goes before every name, the manifest's too: the build for
      * debugging stands beside the one for release in one release, as debug-*.
+     * A fresh recovery-layout install selects main on probation; migration keeps IDF's
+     * blank OTA metadata so recovery waits for the user's explicit retry.
      */
     fun flashManifest(build: File, out: File, version: String, prefix: String = "") {
         val args = Json.parse(File(build, "flasher_args.json").readText()) as Map<*, *>
@@ -140,11 +142,18 @@ object FirmwareTools {
             source.copyTo(File(out, prefix + source.name), overwrite = true)
             linkedMapOf("path" to prefix + source.name, "offset" to offset)
         }
+        val firstInstallParts = if (migration != null) {
+            val name = prefix + "ota_data_first_install.bin"
+            File(out, name).writeBytes(firstInstallOtaData())
+            parts.map { part ->
+                if (part["offset"] == 0xf000L) part + ("path" to name) else part
+            }
+        } else parts
         val manifest = linkedMapOf(
             "name" to "perINKpheral",
             "version" to version,
             "new_install_prompt_erase" to true,
-            "builds" to listOf(linkedMapOf("chipFamily" to "ESP32-C6", "parts" to parts)),
+            "builds" to listOf(linkedMapOf("chipFamily" to "ESP32-C6", "parts" to firstInstallParts)),
             "flash" to args["flash_settings"],
         )
         File(out, "${prefix}manifest.json").writeText(Json.pretty(manifest) + "\n")
@@ -154,6 +163,34 @@ object FirmwareTools {
                 "builds" to listOf(linkedMapOf("chipFamily" to "ESP32-C6", "parts" to migrationParts)))
             File(out, "${prefix}migration-manifest.json").writeText(Json.pretty(migrationManifest) + "\n")
         }
+    }
+
+    private const val OTA_SECTOR_BYTES = 0x1000
+    private const val OTA_SEQUENCE_MAIN = 1
+    private const val OTA_STATE_NEW = 0
+    private const val OTA_STATE_OFFSET = 24
+    private const val OTA_CRC_OFFSET = 28
+    private const val CRC32_POLYNOMIAL = 0xedb88320.toInt()
+
+    /** ESP-IDF 5.5 esp_ota_select_entry_t, as selecting ota_0 after erasing the journal. */
+    private fun firstInstallOtaData(): ByteArray {
+        val image = ByteArray(2 * OTA_SECTOR_BYTES) { 0xff.toByte() }
+        val entry = ByteBuffer.wrap(image).order(ByteOrder.LITTLE_ENDIAN)
+        entry.putInt(0, OTA_SEQUENCE_MAIN)
+        entry.putInt(OTA_STATE_OFFSET, OTA_STATE_NEW)
+        // bootloader_common_ota_select_crc uses esp_rom_crc32_le(UINT32_MAX, &ota_seq, 4):
+        // the ROM complements the seed and the result, and covers only the sequence.
+        var crc = 0
+        for (index in 0 until Int.SIZE_BYTES) {
+            crc = crc xor (image[index].toInt() and 0xff)
+            repeat(Byte.SIZE_BITS) {
+                crc = (crc ushr 1) xor if (crc and 1 != 0) CRC32_POLYNOMIAL else 0
+            }
+        }
+        entry.putInt(OTA_CRC_OFFSET, crc.inv())
+        // A second NEW record would retry the same failed main after rollback.
+        // Leave the other sector erased, just as recovery's esp_ota_set_boot_partition does.
+        return image
     }
 
     private data class Partition(val offset: Long, val size: Int, val type: Int, val subtype: Int)

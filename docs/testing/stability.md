@@ -326,7 +326,8 @@ below, including those already recorded above, with settings and applications ba
 
 - Migrate over USB with the migration manifest: no full erase, no apps image. Compare the
   bytes of nvs, appkv, appcode, apps and glyphs before and after migration.
-- First installation starts recovery. BACK tries the supplied main with probation. Holding
+- A fresh install from the web flasher starts main with probation by itself and shows the
+  setup screen; `idf.py flash` and Keep data start recovery, where BACK tries main. Holding
   BACK at reset for three seconds enters recovery and preserves all user data.
 - Upload from a browser and CLI over saved WPA2 and WPA3 networks, and through the recovery
   access point with no saved network and with damaged NVS. Verify the displayed version,

@@ -42,4 +42,10 @@ val pageTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.cli.PageTest")
 }
 tasks.check { dependsOn(pageTest) }
+val flashManifestTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.FlashManifestTest")
+}
+tasks.check { dependsOn(flashManifestTest) }
 tasks.test { failOnNoDiscoveredTests.set(false) }

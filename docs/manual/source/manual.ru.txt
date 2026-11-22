@@ -306,3 +306,6 @@ Button
 
 When the page asks for confirmation on the device, press <code>OK</code> within one minute. <code>BACK</code> cancels. If the request expires, repeat the action on the page.
 Когда страница просит подтвердить действие на устройстве, нажмите <code>OK</code> в течение минуты. <code>BACK</code> отменяет действие. Если время истекло, повторите действие на странице.
+
+If you are installing firmware for the first time, use the <a href="https://perinkpheral.dev/flash">web flasher</a> with the device connected by USB. A fresh install erases existing data. Wait for flashing and restart to finish: the Wi-Fi setup screen with its QR code appears automatically. Continue below.
+Если вы устанавливаете прошивку впервые, подключите устройство по USB и используйте <a href="https://perinkpheral.dev/flash">прошивку через браузер</a>. Чистая установка стирает имеющиеся данные. Дождитесь завершения прошивки и перезапуска: экран настройки Wi-Fi с QR-кодом появится автоматически. Продолжайте по инструкции ниже.
