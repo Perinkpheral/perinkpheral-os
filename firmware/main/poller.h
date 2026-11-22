@@ -81,7 +81,8 @@ int32_t poller_set_interval(const char *app_name, int poll, uint32_t every_s);
  * done. `take` returns false to stop. False when the request could not be
  * made, broke off, was stopped, or the answer was longer than max_bytes;
  * *http_status is the server's status, HOST_FAILED_NO_MEMORY if admission
- * failed, or 0 when there is no answer. One caller at a time, outside
+ * failed, HOST_FAILED_NO_ANSWER/HOST_FAILED_TIMEOUT for an interrupted body,
+ * or 0 when there is no answer. One caller at a time, outside
  * the poller and host loop. */
 typedef bool (*poller_take_fn)(void *context, const uint8_t *piece, size_t length);
 bool poller_fetch(const char *url, size_t max_bytes, poller_take_fn take, void *context,

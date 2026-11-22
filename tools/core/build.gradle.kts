@@ -100,3 +100,11 @@ val appsysTest by tasks.registering(JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("dev.perinkpheral.core.AppsysTest")
 }
+tasks.check { dependsOn(appsysTest) }
+
+val networkRecoveryTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.NetworkRecoveryTest")
+}
+tasks.check { dependsOn(networkRecoveryTest) }

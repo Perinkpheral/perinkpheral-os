@@ -919,6 +919,9 @@ bool poller_net_fetch(const char *url, size_t max_bytes, poller_net_take_fn take
             is_ok = false;
         }
     }
+    if (is_ok && length < 0) {
+        *http_status = length == READ_TOO_LONG ? HOST_FAILED_TIMEOUT : HOST_FAILED_NO_ANSWER;
+    }
     cut_stop();
     esp_http_client_cleanup(client);
     return is_ok && length == 0;

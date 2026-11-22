@@ -63,7 +63,9 @@ void poller_net_request(const char *app_name, const poller_ask_t *ask);
 void poller_net_tell_failure(const char *app_name, int number, int why);
 
 /* A file for the host itself: `take` gets it in pieces. True when it came
- * whole; `http_status` is 0 when the server was not reached. */
+ * whole; `http_status` is 0 when the server was not reached, or
+ * HOST_FAILED_NO_ANSWER/HOST_FAILED_TIMEOUT when its body was interrupted.
+ * Consumer refusals and size limits retain the HTTP status. */
 typedef bool (*poller_net_take_fn)(void *context, const uint8_t *piece, size_t length);
 bool poller_net_fetch(const char *url, size_t max_bytes, poller_net_take_fn take, void *context,
                       int *http_status);

@@ -12,7 +12,7 @@ static char test_root[sizeof "/tmp/perink-install-XXXXXX"];
 
 static app_manifest_t present;
 static bool has_present, mutex_taken, marker, fail_commit, is_host;
-static bool change_id, change_source, turn_off, mismatch;
+static bool change_id, change_source, turn_off, mismatch, interrupt_body, reject_body;
 static bool last_retryable, id_conflict;
 static int network_error, downloads, opens, commits, radio_holds, approved_authorities;
 static appconf_t config;
@@ -119,6 +119,11 @@ bool poller_fetch(const char *url, size_t maximum, poller_take_fn take, void *co
     if (change_source) strcpy(source_text, "https://changed.example/catalog");
     if (turn_off) config.app_auto_update = 0;
     *status = 200;
+    if (interrupt_body || reject_body) {
+        CHECK(take(context, (const uint8_t *)bytes, strlen(bytes) / 2));
+        if (interrupt_body) *status = HOST_FAILED_NO_ANSWER;
+        return false;
+    }
     if (mismatch) bytes = "wrong";
     CHECK(strlen(bytes) <= maximum || mismatch);
     return take(context, (const uint8_t *)bytes, strlen(bytes));
@@ -146,6 +151,7 @@ static void reset(const char *previous) {
     char directory[APP_STORE_PATH_MAX]; snprintf(directory, sizeof directory, "%s/test", test_root); CHECK(mkdir(directory, 0700) == 0);
     id_conflict = false;
     has_present = previous != NULL; marker = fail_commit = change_id = change_source = turn_off = mismatch = false;
+    interrupt_body = reject_body = false;
     downloads = opens = commits = radio_holds = network_error = 0; sequence[0] = '\0';
     config.app_auto_update = 1; strcpy(source_text, CATALOG_OFFICIAL_SOURCE);
     new_manifest = NEW; new_certificate = NULL; approved_authorities = 0;
@@ -170,6 +176,12 @@ int main(void) {
     reset(OLD); CHECK(run(true) == NULL); CHECK_STR(sequence, "CR"); CHECK(opens == 0); cleanup();
     reset(NULL); network_error = HOST_FAILED_NO_ANSWER; CHECK_STR(run(false), "Download failed."); CHECK(commits == 0 && opens == 0 && last_retryable); cleanup();
     reset(NULL); network_error = HOST_FAILED_NOT_TRUSTED; CHECK_STR(run(false), "Download failed."); CHECK(commits == 0 && opens == 0 && !last_retryable); cleanup();
+    reset(OLD); interrupt_body = true;
+    CHECK_STR(run(true), "Download failed."); CHECK(last_retryable && commits == 0 && opens == 0);
+    char path[APP_STORE_PATH_MAX]; file_path(path, "app.wasm.new"); CHECK(access(path, F_OK) != 0);
+    interrupt_body = false; CHECK(run(true) == NULL); CHECK(commits == 1 && opens == 0); cleanup();
+    reset(OLD); reject_body = true;
+    CHECK_STR(run(true), "Download failed."); CHECK(!last_retryable && commits == 0 && opens == 0); cleanup();
     reset(NULL); mismatch = true; CHECK_STR(run(false), "Checksum mismatch."); CHECK(commits == 0 && opens == 0 && !last_retryable); cleanup();
     reset(NULL); new_manifest = OLD; CHECK_STR(run(false), "Invalid manifest."); CHECK(commits == 0 && opens == 0); cleanup();
     reset(NULL); fail_commit = true; CHECK_STR(run(false), "Storage error."); CHECK_STR(sequence, "CRR"); CHECK(has_present && opens == 0 && !marker); fail_commit = false; CHECK(run(false) == NULL); CHECK(opens == 0); cleanup();
