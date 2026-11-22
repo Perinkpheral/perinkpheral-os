@@ -221,6 +221,18 @@ reported reset reason 5 and an interrupt-watchdog panic in the Wi-Fi task
 `2a1b813cedeccf96be593d93158e84170d9565506e0f8971fd9d90753b95d770`.
 This remains an unresolved device failure; passing host tests does not close it.
 
+### Run of 0.1.83, 2026-11-22
+
+Started 2026-11-22 16:19 UTC on the release image, power saving disabled. About six hours in,
+the owner made an OTA update to 0.1.84 part of the run. 0.1.84 never joined the network:
+on the owner's Keenetic mesh a node restriction makes the extender ignore the device, and
+every attempt of main went back to the extender (reason 2, authentication expired) until
+probation gave up and the device stayed in recovery. The same fault explains the earlier
+"Wi-Fi did not start after a USB session" cases. Fixed in 0.1.85 (`wifi_search.c`). During
+uploads through recovery, recovery once lost the access point's beacons (`bcn_timeout`) in the
+middle of writing and the upload failed; it did not happen again in the uploads that followed
+and is not explained yet. The owner restarts the run on the fixed release.
+
 ### 15 dBm Wi-Fi experiment
 
 The owner approved a 15 dBm transmit-power limit on 2026-11-18 for the next run.
