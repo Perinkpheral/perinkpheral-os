@@ -44,7 +44,10 @@ static uint8_t *read_file(const char *path, size_t max_bytes, size_t *size)
             }
         }
     }
+    /* Closing the file must not hide a memory refusal from the scene loader. */
+    int read_errno = errno;
     fclose(file);
+    errno = read_errno;
     return content;
 }
 

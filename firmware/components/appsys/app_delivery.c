@@ -152,6 +152,11 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
         }
         return abandoned;
     }
+    if (delivery->kind == APP_DELIVERY_SETTINGS && state->answer_owner == owner &&
+        state->answer_request < HOST_REQUEST_FIRST) {
+        state->answer_owner = NULL;
+        state->answer_instance = 0;
+    }
     bool is_on_screen = wm->current == owner && !wm->suspended;
     if (is_on_screen) {
         app_t *app = app_scene_loaded_app(owner);
@@ -165,10 +170,6 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
              * the answer fetched because of them - not when the panel is
              * next due for data. */
             if (delivery->kind == APP_DELIVERY_SETTINGS) {
-                if (state->answer_owner == owner && state->answer_request < HOST_REQUEST_FIRST) {
-                    state->answer_owner = NULL;
-                    state->answer_instance = 0;
-                }
                 state->settings_owner = owner;
                 state->settings_ms = now_ms;
             }
@@ -195,8 +196,6 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     if (delivery->kind == APP_DELIVERY_SETTINGS && state->in_background == owner &&
         state->is_mid_answer && state->answer_request < HOST_REQUEST_FIRST) {
         app_scene_end_background(owner);
-        state->answer_owner = NULL;
-        state->answer_instance = 0;
         state->in_background = NULL;
         state->is_mid_answer = false;
     }
@@ -220,6 +219,10 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     }
     if (app != NULL) {
         call(app, delivery);
+    }
+    if (app == NULL && app_scene_needs_memory(owner) &&
+        (delivery->kind == APP_DELIVERY_PIECE || delivery->kind == APP_DELIVERY_VALUES)) {
+        abandoned = (app_abandoned_t){ .owner = owner, .request = delivery->request };
     }
     note_piece(state, owner, delivery);
     if (delivery->kind == APP_DELIVERY_PIECE) {

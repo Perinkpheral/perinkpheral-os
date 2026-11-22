@@ -5,6 +5,7 @@
 #include "words.h"
 #include "app_scene.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +25,7 @@ typedef struct {
     app_t                *app;        /* NULL while not on the screen or not loadable */
     uint64_t              instance;   /* changes on reload even if malloc reuses the address */
     const char           *load_error; /* why app is NULL although the scene is on the screen */
+    bool                  needs_memory;
     /* The header's texts as the application last gave them: they outlive
      * the instance, which is unloaded for a delivery to another one. */
     char                  header[HOST_HEADER_RIGHT + 1][HOST_HEADER_TEXT_MAX + 1];
@@ -77,6 +79,7 @@ static bool load(app_scene_t *self)
         return self->app != NULL;
     }
     self->load_error = NULL;
+    self->needs_memory = false;
     /* Made with an SDK newer than this firmware: it may call what the firmware
      * does not have. It is the firmware that is out of date, not the app. */
     const char *firmware = self->services != NULL && self->services->firmware_version != NULL
@@ -86,11 +89,13 @@ static bool load(app_scene_t *self)
         return false;
     }
     size_t module_size = self->in_place_size;
+    errno = 0;
     self->module = self->in_place != NULL ? self->in_place
                                           : app_store_read_module(self->store_root,
                                                                   self->manifest.name, &module_size);
     if (self->module == NULL) {
-        self->load_error = word(WORD_FILE_NOT_FOUND);
+        self->needs_memory = errno == ENOMEM;
+        self->load_error = word(self->needs_memory ? WORD_OUT_OF_MEMORY : WORD_FILE_NOT_FOUND);
         return false;
     }
     unsigned grants = (self->manifest.system ? APP_GRANT_SYSTEM : 0) |
@@ -101,6 +106,7 @@ static bool load(app_scene_t *self)
         self->instance++;
         return true;
     case APP_ERR_NO_MEMORY:
+        self->needs_memory = true;
         self->load_error = word(WORD_OUT_OF_MEMORY);
         break;
     case APP_ERR_OTHER_API:
@@ -328,6 +334,12 @@ uint64_t app_scene_instance(scene_t *scene)
 {
     app_scene_t *self = (app_scene_t *)scene;
     return is_app_scene(scene) && self->app != NULL ? self->instance : 0;
+}
+
+bool app_scene_needs_memory(scene_t *scene)
+{
+    app_scene_t *self = (app_scene_t *)scene;
+    return is_app_scene(scene) && self->needs_memory;
 }
 
 app_t *app_scene_app(scene_t *scene)

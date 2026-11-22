@@ -298,7 +298,7 @@ test_polls: test_polls.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c
 test_delivery: test_delivery.c tinytest.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(WASM3) \
 		-Dd_m3MaxLinearMemoryPages=1 $(QR_INCS) -o $@ test_delivery.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
-		$(MAIN)/question_press.c $(APPSTORE)/app_store.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
+		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
 
 test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store.c \

@@ -76,7 +76,12 @@ object DocumentationTest {
             guide to "Response delivery can be interrupted on or off the screen",
             read("docs/guide/source/guide.ru.txt") to
                 "Передача ответа может прерваться как на экране, так и в фоне")
-        check(findings == 27)
+        finding(28, *listOf(specification, guide, network,
+            read("docs/guide/source/guide.ru.txt")).map {
+            it to "Saving the application's settings also stops a poll stream; the instance may stay loaded, with no call to end the stream."
+        }.toTypedArray(), read("docs/guide/source/guide.ru.txt") to
+            "Сохранение настроек приложения также останавливает поток ответа на опрос; экземпляр может остаться загруженным без вызова, завершающего поток.")
+        check(findings == 28)
         println("DocumentationTest: $findings findings checked")
     }
 }

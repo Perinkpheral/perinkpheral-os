@@ -44,6 +44,9 @@ app_t *app_scene_loaded_app(scene_t *scene);
 /* Identifies this scene's loaded instance across unloads and reloads; 0 when unloaded. */
 uint64_t app_scene_instance(scene_t *scene);
 
+/* The last load failed for lack of memory and may be retried. */
+bool app_scene_needs_memory(scene_t *scene);
+
 /* What the application asked for in a handler the host called past the
  * scene interface - data arrived - as a reaction for the window manager. */
 scene_reaction_t app_scene_take_reaction(scene_t *scene);
