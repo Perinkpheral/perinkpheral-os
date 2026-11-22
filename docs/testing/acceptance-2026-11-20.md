@@ -11,17 +11,22 @@ The page's loading states, the sources dialog and the tall dialogs of 0.1.69, Se
 list, ISS without day and night and Donut under its new title were accepted by the owner the same evening,
 after one update through recovery from the renamed repository.
 
-The first round of acceptance is passed. Next by docs/testing/stability.md: the endurance run, on the owner's word. The three are fixed in
-0.1.64, with the chord turned off in the menu. To pass on 0.1.64: rows 2.2, 2.3, 2.8, 2.12,
-4.1, 4.5, 4.6 and 6.5 of [acceptance.md](acceptance.md) as it is after those fixes.
+Exact image IDs, recovery versions and catalog commits for the follow-up checks were
+not recorded here. This record documents acceptance observations across several
+candidates; it does not identify one complete firmware and application set for
+endurance qualification.
+
+The first acceptance round is recorded as passed after the follow-up checks listed
+above. The navigation and clock fixes first appeared in 0.1.64 and were accepted on
+0.1.67. The next stage is an owner-started endurance run under [stability.md](stability.md).
 
 ## Candidate
 
 | Item | Value |
 |---|---|
 | Firmware release | 0.1.63; the device had 0.1.62 (image d173a04a...) before the pass |
-| Firmware image ID (Device page) | 3f79997e30d223a53e3973359e90ee797022deada7d9076bae9ab4e1e44c7c0b (read over the API) |
-| Recovery version | |
+| Firmware image ID (`image_id` from `GET /api/status`) | 3f79997e30d223a53e3973359e90ee797022deada7d9076bae9ab4e1e44c7c0b (read over the API) |
+| Recovery version | Not recorded |
 | Catalog commit | 1f26433 (Bad Apple removed) |
 | Applications installed, with versions | Before: ha 0.3.17, stocks 0.2.10, life 0.1.3, calendar 0.4.15, air 0.1.6, rates 0.1.3, iss 0.1.10, metals 0.1.2, weather 0.2.15, pomodoro 0.1.2, stopwatch 0.1.11, sun 0.1.9, status 0.1.1, timer 0.3.10, clock 0.1.9; kit not installed. After 1.5 the same list: every installed application was already at the catalog's version |
 | Font, language, power profile | Departure Mono, Russian, no power saving |

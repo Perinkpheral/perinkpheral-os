@@ -74,8 +74,9 @@ The owner rejected it for what is read:
 
 What it would have saved, estimated from generated data and not from a firmware build:
 about 14 KB of the image (one bitmap for four faces) and 8 of the glyph partition's 16
-sectors, with Greek and the largest size's Cyrillic that Jersey lacks. Flash room is not the
-constraint today. Not tried: Tiny5 Bold and Mono, and the physical panel.
+sectors, with Greek and the largest size's Cyrillic missing from Jersey at the time of
+the Tiny5 comparison. Flash room was not the constraint. Not tried: Tiny5 Bold and
+Mono, and the physical panel.
 
 The experiment is not in this repository: it was a throwaway substitution behind the Jersey
 selection with scripts outside the Kotlin tools. No production font was changed.
@@ -104,12 +105,13 @@ are unchanged.
   in в, ж, м and У. The other reviewed letters retain their established constructions,
   including Ч's vertical entry and rounded shoulder, and the tails of Қ and Ң.
 
-Review the generated sheets and real text together:
+Review the generated sheets and real text together. Set `WASI_SDK_PATH` to the
+installed wasi-sdk directory:
 
 ```sh
 JAVA_TOOL_OPTIONS=-Djava.awt.headless=true tools/perinkpheral glyph-packs --out /tmp/jersey-packs --sheet /tmp/jersey-sheets
 tools/perinkpheral preview /tmp/jersey-preview --font jersey
-WASI_SDK_PATH="$HOME/opt/wasi-sdk" tools/perinkpheral sim <application> --font jersey --language ru --glyphs /tmp/jersey-packs
+tools/perinkpheral sim <application> --font jersey --language ru --glyphs /tmp/jersey-packs
 ```
 
 The generator checks coverage, counters, selected confusable pairs and sector-rounded

@@ -39,6 +39,10 @@ build stops and says so. To move the pin to the catalog's main:
 `tools/perinkpheral preinstalled bump firmware/preinstalled.properties`, which prints each
 application's version before and after; commit the file it changed.
 
+Preinstallation is enabled by default. Set `CONFIG_APP_BUNDLE_APPS=n` to generate an
+empty `apps` image. A full flash still replaces the `apps` partition. Embedded system
+applications are unaffected.
+
 `IDF_SKIP_CHECK_SUBMODULES=1` in front of `idf.py` skips a git check
 that needs the network. After editing `main/Kconfig.projbuild` or
 adding a component: `idf.py reconfigure`.
@@ -82,16 +86,23 @@ Firmware and application update clients have separate suites, run from the repos
 tools/cli/gradlew -p tools/core firmwareUpdateTest
 node firmware/test/web/test_firmware_update.js
 node firmware/test/web/test_app_requests.js
+tools/cli/gradlew -p tools/cli pageTest
+node firmware/test/web/test_app_settings.js
 ```
 
 The first tests the shared Kotlin client used by the CLI and CLion plugin;
 the second tests the browser update and manual recovery flows; the third tests
-catalog and app-install retries, their limits and permanent refusals. None is
-part of `make test`. The firmware's simulator cases are separate too:
+catalog and app-install retries, their limits and permanent refusals.
+`pageTest` checks the development page. `test_app_settings.js` checks application
+settings fields, including saved empty values and unavailable settings. All five
+suites run separately from `make test`. The firmware's simulator cases are separate too:
 `tools/perinkpheral sim-test firmware/test/sim`. Its scenarios run several at a time, one
 a processor; `--jobs N` sets how many and `--jobs 1` runs them one by one. A `wait` step
-is real time on the computer's clock, so a scenario must not depend on how long the
-computer took: move the clock with `forward`, or mark the scenario `"serial": true`.
+is real time on the computer's clock. Use `forward` for deterministic clock advancement.
+`"serial": true` prevents overlap with other scenarios but does not remove the timing
+dependence of a `wait` step. If an expected PNG is missing, `sim-test` writes it and
+fails even without `--update`. Review that picture before committing it. `--update`
+also replaces existing expected pictures.
 
 `tools/cli/gradlew -p tools/core check` also runs the builder safety and endurance
 observer tests, plus catalog publishing against local Git repositories. They use
@@ -150,8 +161,9 @@ translated HTML is an ignored intermediate in the same folder. PDFs are generate
 in `docs/guide/` locally and are not committed. Rebuild both after an edit. `guide-units missing ru` prints missing
 units but exits successfully; CI requires empty output.
 
-CI's Generated files and guides job runs on Ubuntu 24.04 with Java 21, a C compiler,
-Chromium, poppler-utils, fonts-dejavu-core, fonts-liberation and fonts-noto-core.
+CI's Generated files and guides job runs on a self-hosted runner labelled
+`perinkpheral`, with Java 21, a C compiler, Chromium, poppler-utils,
+fonts-dejavu-core, fonts-liberation and fonts-noto-core.
 It builds all four PDFs from the checked sources and complete translations, and
 attaches all four PDFs and the glyph packs to each release. It keeps glyph sheets as
 run artifacts. The device page is assembled in CI and in each firmware build;
@@ -193,12 +205,12 @@ Fonts: `tools/perinkpheral font <ttf or otf> --px N --name <id> --out
 firmware/components/gfx/fonts/<id>.h` rasterizes a font one bit a pixel
 (printable ASCII) into a `gfx_font_t` for `gfx_text_font()`; the glyph
 packs are `tools/perinkpheral glyph-packs --out <dir>`, the spelling
-tables `tools/perinkpheral spelling --out firmware/components/gfx/spelling.h`. The UI font
-is `assets/fonts/DepartureMono-Regular.otf`, a pixel font: it is rasterized
-once, at 11 px (`--px 11 --name departure_11`), where it lands on its own
-grid. The sizes on the device are that bitmap drawn at whole multiples
-(`gfx_font_t.scale`); a new size is a line in `gfx.c`, not a new header.
-The generated header is committed.
+tables `tools/perinkpheral spelling --out firmware/components/gfx/spelling.h`.
+Departure Mono is the default UI font. Its source is
+`assets/fonts/DepartureMono-Regular.otf`, rasterized once at 11 px with
+`--px 11 --name departure_11`; its sizes use whole bitmap multiples. The selectable
+Jersey family uses four separately rasterized faces. Font sizes and family mappings
+are defined in `firmware/components/gfx/gfx.c`. The generated ASCII headers are committed.
 
 Firmware without the cable, once the device is on a network:
 `curl -X POST http://<address>/api/ota/recovery`, wait for recovery, then
@@ -224,8 +236,8 @@ last 4 KB of it; `l` in the development console prints the same.
 `firmware/CMakeLists.txt` takes the version from `APP_VERSION` when it
 is set.
 
-A build for release has no development tools in it (`sdkconfig.release`)
-and says the version alone:
+From `firmware/`, with the toolchain environment configured, build a release without
+development tools (`sdkconfig.release`) and with the version alone:
 
     APP_VERSION=$(cat ../VERSION) idf.py -B build-release \
         -D SDKCONFIG=build-release/sdkconfig \
@@ -239,8 +251,10 @@ build without publishing (`.github/workflows/ci.yml`).
 
 ### An IDE (CLion, or any that reads CMake)
 
-Three projects, each opened as a folder. All need `WASI_SDK_PATH` in the environment the IDE
-gives CMake (CLion: Settings, Build, CMake, Environment).
+Three projects, each opened as a folder. Application projects and the repository-root
+project need `WASI_SDK_PATH` in the environment supplied to CMake (CLion: Settings,
+Build, CMake, Environment). The firmware project also accepts
+`-DWASI_SDK_PATH=<sdk-directory>` and can discover an installed SDK.
 
 - **An application, or a folder of them.** `tools/perinkpheral new` writes a `CMakeLists.txt` into the
   application; the perinkpheral-apps repository has one for all of its own. The code is
@@ -253,11 +267,11 @@ gives CMake (CLion: Settings, Build, CMake, Environment).
 - **This repository's root.** The sample and the system applications the same way, and the
   project's tools as targets: `host-tests`, `guide`, and with `IDF_PATH` set `firmware` and
   `firmware-send`. The firmware's own code is not part of this project.
-- **The `firmware` folder**, for the firmware's code. It needs no setting up: outside
-  ESP-IDF's environment `firmware/cmake/environment.cmake` finds ESP-IDF (`IDF_PATH`, or
-  `~/esp/esp-idf`) and wasi-sdk (`WASI_SDK_PATH`, `/opt/wasi-sdk`, `~/opt/wasi-sdk`) and puts
-  the tools where the build finds them; anywhere else, `-DIDF_PATH=` and `-DWASI_SDK_PATH=`
-  among the CMake options. The IDE builds into a directory of its own, not `firmware/build`,
+- **The `firmware` folder**, for the firmware's code. Outside ESP-IDF's environment,
+  `firmware/cmake/environment.cmake` discovers ESP-IDF and wasi-sdk and configures their
+  tools. Set `IDF_PATH` and `WASI_SDK_PATH` in the IDE environment, or pass
+  `-DIDF_PATH=<idf-directory>` and `-DWASI_SDK_PATH=<sdk-directory>` to CMake.
+  The IDE builds into a directory of its own, not `firmware/build`,
   which is `idf.py`'s; what is sent to a device is `idf.py`'s build. Flashing and the monitor
   stay `idf.py`'s and `tools/perinkpheral`'s.
 
