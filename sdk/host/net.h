@@ -71,6 +71,12 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * JSON paths, for example "current.temperature_2m" or
  * "daily.weather_code[0]". Perinkpheral OS reads the answer and extracts the
  * values. The application receives this single call instead of pieces.
+ * The picker checks balanced, matching containers (up to 64 levels), valid
+ * number/true/false/null literals and completed strings with hexadecimal
+ * \u escapes. Other escape letters and raw control bytes in strings are
+ * not rejected. Member/value separators and a single root value are not
+ * enforced: empty input and other malformed documents may be accepted.
+ * Failed checks give HOST_FAILED_NO_ANSWER even when an HTTP response arrived.
  *
  * request:     poll number in the manifest.
  * http_status: HTTP status, or a HOST_FAILED_* code.
@@ -116,8 +122,8 @@ HOST_IMPORT(answer_item, int32_t answer_item(void));
  * A header that the server did not send is an empty string. A header
  * longer than its field is cut. A terminal HOST_DATA_FAILED callback may
  * have no metadata: status is the failure code, length is -1 and header
- * strings are empty. Invalid or incomplete picked JSON is reported as
- * HOST_FAILED_NO_ANSWER even when an HTTP response arrived. */
+ * strings are empty. Picked responses that fail the checks described above
+ * are reported as HOST_FAILED_NO_ANSWER even when an HTTP response arrived. */
 typedef struct host_answer_info {
     int32_t status;            /* HTTP status, or a HOST_FAILED_* code */
     int32_t length;            /* Content-Length; -1 if absent */

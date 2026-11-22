@@ -173,6 +173,16 @@ object BuilderSafetyTest {
                     catch (error: BuildError) { check(reason in error.message.orEmpty()) { error.message.orEmpty() } }
                     check(!File(built, "app.wasm").exists())
                 }
+                val emptyFile = File(data, "empty.txt").apply { writeText("") }
+                refusedPackage("empty.txt: data files must not be empty")
+                check(!File(built, "empty.txt").exists())
+                emptyFile.writeText("x")
+                realBuilder.build(packageSource, built)
+                check(File(built, "empty.txt").readText() == "x")
+                emptyFile.writeText("")
+                refusedPackage("empty.txt: data files must not be empty")
+                check(!File(built, "empty.txt").exists())
+                emptyFile.delete()
                 for (number in 1..6) File(data, "data$number").writeText("small")
                 realBuilder.build(packageSource, built)
                 check(AppBuilder.packageFiles(built).size == 8)

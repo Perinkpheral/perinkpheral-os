@@ -19,6 +19,13 @@ extern "C" {
  * uses it for a streamed answer: feed every piece from app_on_data(), then
  * read the values after the last piece.
  *
+ * Checks balanced, matching containers, valid number/true/false/null
+ * literals and completed strings with hexadecimal \u escapes. Other escape
+ * letters and raw control bytes in strings are not rejected. This is a
+ * tolerant extractor, not a full JSON validator: member/value separators
+ * and a single root value are not enforced. Empty input and other malformed
+ * documents may be accepted.
+ *
  * Path syntax:
  *
  *     current.temperature_2m     daily.weather_code[0]     items[2].title
@@ -115,14 +122,14 @@ bool json_pick_path_is_valid(const char *path);
  * Paths beyond JSON_PICK_PATHS_MAX are ignored. */
 void json_pick_init(json_pick_t *pick, const char *const *paths, int path_count);
 
-/* Feeds the next bytes of the document. Returns false once the document
- * is found to be invalid JSON; values extracted before that are kept. */
+/* Feeds the next bytes of the document. Returns false once a check described
+ * above fails; values extracted before that are kept. True does not guarantee
+ * valid JSON. */
 bool json_pick_feed(json_pick_t *pick, const char *bytes, size_t length);
 
 /* Signals the end of the document. Required to complete a number at the
- * very end of the input. Returns whether the document ended whole: every
- * object and array closed, no string left open, nothing invalid on the way -
- * {"price":123 is a value found in a document that is not one. */
+ * very end of the input. Returns true if all containers and strings closed
+ * and the checks above passed. Other malformed documents may be accepted. */
 bool json_pick_finish(json_pick_t *pick);
 
 /* Returns the value of path number `index`, or NULL if the document had

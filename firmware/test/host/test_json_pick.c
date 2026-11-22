@@ -217,6 +217,26 @@ static void test_broken_documents(void)
     CHECK(json_pick_value(&pick, 0) == NULL && json_pick_value(&pick, 1) == NULL);
 }
 
+static void test_tolerant_document_grammar(void)
+{
+    static const char *const PATHS[] = { "a" };
+    static const char *const ACCEPTED[] = { "", "[1,]", "1 2", "{\"a\" 123}", "{\"a\":123,}" };
+    for (size_t index = 0; index < sizeof ACCEPTED / sizeof ACCEPTED[0]; index++) {
+        size_t length = strlen(ACCEPTED[index]);
+        for (size_t piece = 1; piece <= length + 1; piece++) {
+            json_pick_init(&pick, PATHS, 1);
+            for (size_t at = 0; at < length; at += piece) {
+                size_t taken = length - at < piece ? length - at : piece;
+                CHECK(json_pick_feed(&pick, ACCEPTED[index] + at, taken));
+            }
+            CHECK(json_pick_finish(&pick));
+            if (ACCEPTED[index][0] == '{') {
+                CHECK_STR(value(0), "123");
+            }
+        }
+    }
+}
+
 static char list[256];
 
 /* The same document read with list paths, the list given after init. */
@@ -303,5 +323,6 @@ int main(void)
     test_a_value_is_cut_between_characters();
     test_limits();
     test_broken_documents();
+    test_tolerant_document_grammar();
     REPORT();
 }

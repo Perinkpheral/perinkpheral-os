@@ -40,6 +40,16 @@ int main(void)
     set_value("server", "http://first.example");
     set_value("other", "http://second.example");
     set_value("token", "old");
+    set_value("empty", "");
+    char expanded[64];
+    assert(text_template_fill_url("http://first.example/{{empty}}", setting_of, NULL,
+                                  expanded, sizeof expanded));
+    assert(strcmp(expanded, "http://first.example/") == 0);
+    assert(text_template_fill("Bearer {{empty}}", setting_of, NULL, expanded, sizeof expanded));
+    assert(strcmp(expanded, "Bearer ") == 0);
+    assert(text_template_fill_body("value={{empty}}", setting_of, NULL, expanded, sizeof expanded));
+    assert(strcmp(expanded, "value=") == 0);
+    assert(!text_template_fill("{{missing}}", setting_of, NULL, expanded, sizeof expanded));
     app_request_t request = { .tag = 7, .method = HOST_HTTP_GET, .header_count = 1 };
     snprintf(request.url, sizeof request.url, "http://first.example/data");
     snprintf(request.headers[0].name, sizeof request.headers[0].name, "Authorization");
@@ -193,7 +203,7 @@ int main(void)
     reset_jobs();
     free(s_manifest_json);
     char path[PATH_BYTES];
-    const char *keys[] = { "server", "other", "token" };
+    const char *keys[] = { "server", "other", "token", "empty" };
     for (size_t index = 0; index < sizeof keys / sizeof keys[0]; index++) {
         store_path(path, "probe", keys[index]);
         remove(path);

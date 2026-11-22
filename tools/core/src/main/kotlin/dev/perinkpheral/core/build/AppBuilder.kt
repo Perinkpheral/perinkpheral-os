@@ -314,7 +314,9 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
                 throw BuildError("${file.path}: a file's name is 1-$fileNameMax of a-z, 0-9, '.', '-' and '_', " +
                     "not starting with a dot")
             }
-            total += takenBy(file.length())
+            val size = file.length()
+            if (size == 0L) throw BuildError("${file.path}: data files must not be empty")
+            total += takenBy(size)
             file.copyTo(File(outDir, file.name), overwrite = true)
         }
         return total
