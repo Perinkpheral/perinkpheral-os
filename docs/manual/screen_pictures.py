@@ -96,7 +96,9 @@ pbm(target, output / 'setup-en.png')
 
 randomizer = random.Random(417)
 weather = {'current': {'temperature_2m': randomizer.randint(90, 170) / 10, 'weather_code': 2, 'wind_speed_10m': randomizer.randint(8, 20)},
-           'daily': {'weather_code': [2, 3, 61], 'temperature_2m_max': [16, 15, 14], 'temperature_2m_min': [8, 9, 7], 'precipitation_probability_max': [20]}}
+           'daily': {'weather_code': [2, 3, 61], 'temperature_2m_max': [16, 15, 14], 'temperature_2m_min': [8, 9, 7], 'precipitation_probability_max': [20],
+                     'time': ['2026-11-21', '2026-11-22', '2026-11-23']},
+           'utc_offset_seconds': 3600}
 (work / 'mocks.json').write_text(json.dumps({'https://api.open-meteo.com/*': {'body': json.dumps(weather)}, '*': {'status': 503, 'body': ''}}))
 
 def capture_app(app, language, shots, values=None, expected_status=None):
