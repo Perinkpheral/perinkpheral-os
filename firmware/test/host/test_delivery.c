@@ -24,7 +24,7 @@ static void *module_malloc(size_t size)
 {
     if (refuse_module_memory) {
         refuse_module_memory = false;
-        errno = ENOMEM;
+        errno = 0; /* as ESP-IDF's malloc: errno is left alone, read_file must name the cause */
         return NULL;
     }
     return malloc(size);

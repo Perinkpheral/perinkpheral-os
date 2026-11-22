@@ -30,7 +30,7 @@
  * press, screen switch, application-list reload or delivery to another application. Only
  * app_on_terminate() is called then. Saving the application's settings also
  * stops a poll stream; the instance may stay loaded, with no call to end
- * the stream. The next HOST_DATA_FIRST starts a
+ * the stream, and that poll is fetched again at once. The next HOST_DATA_FIRST starts a
  * new answer. Perinkpheral OS repeats an interrupted GET or HEAD poll after one
  * minute, or after its interval when that is shorter; other poll methods keep
  * their normal pace. An

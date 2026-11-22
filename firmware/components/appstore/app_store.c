@@ -30,13 +30,21 @@ static uint8_t *read_file(const char *path, size_t max_bytes, size_t *size)
         return NULL;
     }
     uint8_t *content = NULL;
+    /* Every failure names its cause in errno: ESP-IDF's malloc does not set it, and the scene
+     * loader tells a lack of memory (fetch again soon) from a broken package by it. */
+    errno = EIO;
     if (fseek(file, 0, SEEK_END) == 0) {
         long length = ftell(file);
-        if (length > 0 && (size_t)length <= max_bytes && fseek(file, 0, SEEK_SET) == 0) {
+        if (length <= 0 || (size_t)length > max_bytes) {
+            errno = EFBIG;
+        } else if (fseek(file, 0, SEEK_SET) == 0) {
             content = malloc((size_t)length + 1);
-            if (content != NULL && fread(content, 1, (size_t)length, file) != (size_t)length) {
+            if (content == NULL) {
+                errno = ENOMEM;
+            } else if (fread(content, 1, (size_t)length, file) != (size_t)length) {
                 free(content);
                 content = NULL;
+                errno = EIO;
             }
             if (content != NULL) {
                 content[length] = '\0';

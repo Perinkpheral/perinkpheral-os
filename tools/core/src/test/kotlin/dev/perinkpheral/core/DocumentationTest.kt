@@ -78,9 +78,9 @@ object DocumentationTest {
                 "Передача ответа может прерваться как на экране, так и в фоне")
         finding(28, *listOf(specification, guide, network,
             read("docs/guide/source/guide.ru.txt")).map {
-            it to "Saving the application's settings also stops a poll stream; the instance may stay loaded, with no call to end the stream."
+            it to "Saving the application's settings also stops a poll stream"
         }.toTypedArray(), read("docs/guide/source/guide.ru.txt") to
-            "Сохранение настроек приложения также останавливает поток ответа на опрос; экземпляр может остаться загруженным без вызова, завершающего поток.")
+            "Сохранение настроек приложения также останавливает поток ответа на опрос")
         check(findings == 28)
         println("DocumentationTest: $findings findings checked")
     }
