@@ -24,6 +24,11 @@ Official applications and catalog: [perinkpheral-apps](https://github.com/Perink
 Requires ESP-IDF 5.5, wasi-sdk and Java 21 or later. CI uses ESP-IDF 5.5.5
 and wasi-sdk 34. `tools/perinkpheral` builds the Kotlin tools on first use.
 
+The default build fetches preinstalled applications at the commit pinned in
+`firmware/preinstalled.properties` and caches the packages in the build folder.
+For an offline build without cached packages, set `PERINKPHERAL_APPS` to a catalog
+checkout containing that commit.
+
 ```sh
 export WASI_SDK_PATH=/path/to/wasi-sdk
 . "$IDF_PATH/export.sh"

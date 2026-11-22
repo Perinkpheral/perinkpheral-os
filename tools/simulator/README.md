@@ -3,10 +3,21 @@
 Runs one application on a computer using the firmware's interpreter, Perinkpheral OS API,
 UI kit and window manager. It exposes the rendered framebuffer and simulated input.
 
+Requires Java 21 or later, wasi-sdk selected by `WASI_SDK_PATH`, a C compiler and Make.
+Use `--glyphs <directory>` to load glyph packs for text beyond the built-in font coverage.
+
     tools/perinkpheral sim <application folder> [--language ru] [--mocks mocks.json]
 
-It answers on `http://127.0.0.1:8401` as the device does: `tools/perinkpheral --host
-127.0.0.1:8401 shot | press | log | serve`, and the CLion plugin, work against it.
+The simulator listens at `http://127.0.0.1:8401`. Run commands separately:
+
+```sh
+tools/perinkpheral --host 127.0.0.1:8401 shot screen.png
+tools/perinkpheral --host 127.0.0.1:8401 press 2
+tools/perinkpheral --host 127.0.0.1:8401 log
+tools/perinkpheral --host 127.0.0.1:8401 serve
+```
+
+The CLion plugin can use the same address.
 
 The binary's `--port 0` takes a port of the system's choice and `--port-file <file>` writes
 its number there once the simulator listens. `sim-test` starts every simulator this way, so
@@ -17,7 +28,7 @@ no two of them, and no other program, can be given the same port.
 | Panel | a frame in memory, `/api/dev/screen`; its address in a browser shows the page of `perinkpheral serve` - the screen, the buttons, the log, and the requests below as buttons |
 | Buttons | `/api/dev/button` |
 | Store (NVS) | a folder, a file per key, the device's limits |
-| Files (LittleFS) | the application's folder |
+| Files (LittleFS) | the built package copied to `<state>/apps/<name>`; files written by the application remain there between runs unless replaced by package files; `--state <directory>` selects the state folder |
 | Network | that of the program that started it - tools/perinkpheral, or the CLion plugin in the IDE's own process - asked a JSON line an exchange on `--fetcher-port`; a redirect is followed by the simulator itself, by the firmware's rules (`app_manifest_is_same_host`, `app_manifest_allows_url`): a GET three times at most, a request of the application's own inside its hosts, its headers not to another host; an application's own certificate authorities (`certificates`) trusted for its requests beside the computer's; answers replaced by mocks, whose redirects are delivered as final responses and are not followed |
 | Clock | the computer's, in real time; moved on by `/api/sim/forward` |
 
@@ -40,8 +51,8 @@ every address that begins with the rest.
     }
 
 Not simulated: the menu of several applications, the system API except
-Perinkpheral OS settings (`sys_setting_get`, `sys_setting_set`, `sys_setting_range`) and
-`sys_time_set`, e-paper
+`sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,
+`sys_draw_logo`, `sys_logo_width` and `sys_logo_height`, e-paper
 refresh timing, sleep, the battery or firmware/recovery updates. The device's
 128 KB application area (64 KB Wasm memory and 64 KB interpreter space) is not
 enforced as a combined arena; the module's 64 KB linear-memory limit still applies.
