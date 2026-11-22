@@ -217,11 +217,13 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  *              except for the initial URL check.
  *
  * Redirects: a GET is followed up to three times; the application
- * receives the last answer only. A redirect to a host outside "hosts"
- * fails with HOST_FAILED_NOT_ALLOWED. Request headers are not sent to
- * another host. A request with any other method is sent once; its 3xx
- * status is delivered as the answer. GET polls follow redirects to any
- * host; polls of another method are sent once too.
+ * receives the last answer only. Redirects to the same name with the same
+ * port, or with both ports in {80, 443}, bypass the allowlist check and keep
+ * request headers. Other destinations must be in "hosts" or fail with
+ * HOST_FAILED_NOT_ALLOWED; request headers are dropped there. A request
+ * with any other method is sent once; its 3xx status is delivered as the
+ * answer. GET polls follow redirects to any host; polls of another method
+ * are sent once too.
  *
  * A JSON answer can be parsed with sdk/lib/json_pick.h: feed every piece,
  * read the values after the last one.
@@ -256,7 +258,8 @@ HOST_IMPORT(http_send,
  * except 0 returns HOST_ERR_ARGUMENT, as does an unknown poll. 0 forgets
  * the stored code override and resumes the manifest's interval or its
  * interval setting. A code override takes precedence over that setting.
- * A changed effective interval restarts the deadline from now; setting
- * the same interval does not. Returns HOST_OK, or HOST_ERR_FAILED if the
- * override could not be kept or forgotten. */
+ * A changed resolved interval, before the power-saving floor, restarts the
+ * deadline from now; setting the same resolved interval does not. Changing
+ * 10 s to 20 s resets it even when both run at the 300 s floor. Returns
+ * HOST_OK, or HOST_ERR_FAILED if the override could not be kept or forgotten. */
 HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t seconds));

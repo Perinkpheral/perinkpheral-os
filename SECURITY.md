@@ -26,11 +26,15 @@ Holds:
 - Its store is its own (`a.<name>`; a name has no dot), its files are its own folder, and
   a file's name cannot leave it. It cannot reach another application's secrets.
 - It has no sockets. Polls start at their manifest URLs; requests made with `http_send`
-  and their redirects are confined to `hosts`. Polls follow redirects even to other hosts;
-  application headers are dropped on a redirect to another host. `user@host`, a port and the case of letters do not get
-  round the comparison.
-- It cannot move the server the user gave it: `kv_set` on a `url` or `link` setting is refused. Queued destinations are
-  authorized again before sending; headers use the same current settings view.
+  are confined to `hosts` at dispatch. GET redirects to the same name with the same port,
+  or with both ports in {80, 443}, bypass the allowlist check and retain application headers.
+  Other raw-request redirect destinations must be in `hosts`; application headers are dropped there.
+  GET polls follow redirects even to other hosts. Other methods deliver the redirect
+  response without replaying the request. User information and letter case do not change
+  the host-name comparison.
+- It cannot move the server the user gave it: `kv_set` on a `url` or `link` setting is refused. Queued raw-request destinations are
+  authorized again before sending; headers use the same current settings view. Manifest
+  polls expand their destinations at dispatch and do not use the `hosts` allowlist.
 - The system API - reset, forgetting the network, removing applications - needs
   `"system": true`, which is asked about on the page and on the device's own screen.
 
@@ -87,8 +91,12 @@ Does not hold:
   partition table through its HTTP API.
 - **They can change application credentials and servers.** The settings API does not
   require confirmation. A network peer can disrupt pairing or redirect later requests.
-  Changing a server clears stored secrets; HA Companion's hidden fields are normally
-  provisioned by its integration. A peer can also add a catalog and install an application.
+  Changing a url/link destination whose previous stored or default value is nonempty
+  first deletes all declared secrets, including supplied replacements. Destinations are
+  then written before the other supplied values, including replacement secrets. Writes
+  are not transactional: a failed save can leave a supplied secret deleted.
+  HA Companion's hidden fields are normally provisioned by its integration.
+  A peer can also add a catalog and install an application.
 - **The page is plain `http`.** A token typed into it crosses the network in the clear.
 - In a build with the development tools (`APP_DEV_CONSOLE`, on by default): `/api/dev/flash`
   refuses direct updates (recovery requires physical OK), `/api/dev/kv` writes any key of any

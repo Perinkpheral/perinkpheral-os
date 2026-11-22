@@ -82,7 +82,7 @@ HOST_IMPORT(ui_draw_list_row,
 typedef struct host_notice {
     char    first[64];  /* UTF-8: a field holds half as many two-byte characters */
     char    second[64];
-    char    detail[96]; /* one line of body text below the large lines */
+    char    detail[96]; /* one or two lines of body text below the large lines */
     char    ok[32];     /* OK action: "Remove" */
     char    back[32];   /* BACK action: "Cancel" */
     int32_t icon;       /* HOST_ICON_*, or HOST_ICON_NONE */

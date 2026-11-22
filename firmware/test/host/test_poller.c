@@ -223,9 +223,30 @@ static void test_incompatible_apps(void)
     CHECK(requests_sent == 3);
 }
 
+static void test_interval_below_saving_floor(void)
+{
+    reset_poller();
+    saving_power = true;
+    installed_apps[0].poll_every_s[0] = 10;
+    sent_method = HOST_HTTP_GET;
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    CHECK(run_wanted_poll());
+    deadline_id_t poll = { DEADLINE_POLL, 1, 0 };
+    CHECK(deadline_table_when(&test_deadlines, poll) == 300000);
+    clock_ms = 1000;
+    CHECK(poller_set_interval("probe", 0, 20) == HOST_OK);
+    CHECK(poll_schedule_pace_ms(&s_schedule, 1, 0) == 300000);
+    CHECK(deadline_table_when(&test_deadlines, poll) == 301000);
+    clock_ms = 2000;
+    CHECK(poller_set_interval("probe", 0, 20) == HOST_OK);
+    CHECK(deadline_table_when(&test_deadlines, poll) == 301000);
+}
+
 int main(void)
 {
     test_abandoned_methods();
     test_incompatible_apps();
+    test_interval_below_saving_floor();
     REPORT();
 }

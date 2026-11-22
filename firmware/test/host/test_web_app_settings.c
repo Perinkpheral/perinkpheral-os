@@ -137,6 +137,23 @@ static void test_save(void)
     CHECK(deletions == 1);
 
     reset();
+    CHECK(save("{\"label\":\"\",\"token\":\"\"}", &changed) == HOST_OK);
+    CHECK(changed && writes == 2 && deletions == 1);
+    CHECK_STR(label, "");
+    CHECK_STR(token, "");
+
+    reset();
+    read_error = HOST_ERR_NOT_FOUND;
+    json_t *wanted = json_parse("{\"server\":\"https://b.example\"}");
+    const char *with_default =
+        "{\"settings\":[{\"key\":\"server\",\"type\":\"url\",\"default\":\"https://a.example\"},"
+        "{\"key\":\"token\",\"type\":\"secret\"}]}";
+    CHECK(web_app_settings_save(with_default, "test", wanted, &changed) == HOST_OK);
+    CHECK(changed && deletions == 1);
+    CHECK_STR(token, "");
+    json_free(wanted);
+
+    reset();
     failed_key = "token";
     CHECK(save("{\"token\":\"replacement\",\"feed\":\"https://a.example/feed\",\"label\":\"kept\"}", &changed) == HOST_ERR_FAILED);
     CHECK(changed && writes == 2);

@@ -418,8 +418,8 @@ Listed in the manifest, or taken from a <code>url</code> or <code>link</code> se
 Polls per manifest
 Опросы в манифесте
 
-Interval 10 s to 1 day; minimum 300 s on battery. A poll can go over a list setting: one request per item, one at a time
-Интервал от 10 с до 1 суток; от батареи не меньше 300 с. Опрос может проходить по настройке-списку: по запросу на пункт, по одному за раз
+Interval 10 s to 1 day; minimum 300 s while power saving is active. A poll can go over a list setting: one request per item, one at a time
+Интервал от 10 с до 1 суток; минимум 300 с, пока включено энергосбережение. Опрос может идти по списку настроек: один запрос на элемент, по очереди
 
 Concurrent requests
 Одновременных запросов
@@ -1249,14 +1249,14 @@ A line per item; items are added and removed
 Items of 1 - 63 printable ASCII characters, separated by a line break (<code>\n</code>); 255 bytes in all, about 40 tickers. Read with <code>app_setting_count()</code> and <code>app_setting_item()</code>
 Пункты по 1 - 63 печатных символа ASCII, разделённые переводом строки (<code>\n</code>); всего 255 байт, около 40 тикеров. Читается через <code>app_setting_count()</code> и <code>app_setting_item()</code>
 
-An absent setting reads as its <code>default</code> through <code>kv_get()</code> and placeholders. The page uses the default for an unset form field. Saving an empty value through <code>/api/apps/settings</code> stores an empty override; <code>kv_set(..., 0)</code> instead deletes the key and restores the default. A list default is a list of items.
-Отсутствующая настройка читается как её <code>default</code> через <code>kv_get()</code> и подстановки. Страница берёт значение по умолчанию для незаданного поля. Сохранение пустого значения через <code>/api/apps/settings</code> записывает пустую замену; <code>kv_set(..., 0)</code> удаляет ключ и возвращает значение по умолчанию. Значение по умолчанию для списка - список элементов.
+An absent setting reads as its <code>default</code> through <code>kv_get()</code> and placeholders. The page uses the default for an unset form field. Saving an empty non-secret value through <code>/api/apps/settings</code> stores an empty override; an empty secret deletes its key. <code>kv_set(..., 0)</code> deletes the key and restores the default. A list default is a list of items.
+Отсутствующая настройка читается как её <code>default</code> через <code>kv_get()</code> и подстановки. Страница использует значение по умолчанию для незаданного поля. Сохранение пустого несекретного значения через <code>/api/apps/settings</code> записывает пустое переопределение; пустой секрет удаляет свой ключ. <code>kv_set(..., 0)</code> удаляет ключ и восстанавливает значение по умолчанию. Значение списка по умолчанию - список элементов.
 
 The application can write any setting with <code>kv_set()</code> but <code>url</code> and <code>link</code>; a list as its items with line breaks between them.
 Приложение может записать через <code>kv_set()</code> любую настройку, кроме <code>url</code> и <code>link</code>; список - пунктами через перевод строки.
 
-<code>url</code> and <code>link</code> settings are read-only for the application: <code>kv_set()</code> on their keys fails. When the user changes such a setting, Perinkpheral OS erases the secrets that were not entered again, so a token stays with the server it was entered for.
-Настройки типов <code>url</code> и <code>link</code> доступны приложению только для чтения: <code>kv_set()</code> по их ключам завершается ошибкой. Когда пользователь меняет такую настройку, Perinkpheral OS стирает секреты, не введённые заново, поэтому токен остаётся с тем сервером, для которого был введён.
+<code>url</code> and <code>link</code> settings are read-only for the application: <code>kv_set()</code> on their keys fails. Changing a destination whose previous stored or default value is nonempty first deletes all declared secrets, including supplied replacements. Destinations are then written before the other supplied values, including replacement secrets. A failed save can leave a supplied secret deleted.
+Настройки <code>url</code> и <code>link</code> доступны приложению только для чтения: <code>kv_set()</code> для их ключей завершается ошибкой. Изменение адреса с непустым прежним сохранённым значением или значением по умолчанию сначала удаляет все объявленные секреты, включая переданные замены. Затем записываются адреса, после них - остальные переданные значения, включая новые секреты. При ошибке сохранения переданный секрет может остаться удалённым.
 
 <code>title</code> is 1 to 31 characters. <code>help</code> is up to 95 characters.
 <code>title</code> - от 1 до 31 символа. <code>help</code> - до 95 символов.
@@ -1402,8 +1402,8 @@ Pictures and icons
 Perinkpheral OS provides 49 built-in icons: Perinkpheral OS's own, the weather, the things of a home and the sky. Each icon is on a grid of 11 x 11 cells, and many are also drawn on 22 and 44 cells. An application uses them instead of drawing its own.
 Perinkpheral OS предоставляет 49 встроенных иконок: системные, погодные, домашние и астрономические. Каждая нарисована на сетке 11 x 11 клеток, многие ещё и на 22 и 44 клетках. Приложение берёт их, а не рисует свои.
 
-<code>gfx_draw_icon()</code> draws an icon with a cell size of 1 to 16 pixels. <code>ui_draw_icon()</code> draws an icon at one of three standard sizes: 22, 44 or 99 px. Perinkpheral OS picks the finest drawing that fits at two pixels per cell or more, so lines keep the weight of the text and curves stay smooth at large sizes. <code>gfx_icon_ink()</code> gives the pixels an icon covers, to align it by what is visible.
-<code>gfx_draw_icon()</code> рисует иконку с клеткой от 1 до 16 пикселей. <code>ui_draw_icon()</code> рисует иконку одного из трёх стандартных размеров: 22, 44 или 99 px. Perinkpheral OS берёт самый подробный рисунок, который помещается при двух пикселях на клетку или больше: толщина линий соответствует толщине штрихов текста, а кривые на больших размерах остаются гладкими. <code>gfx_icon_ink()</code> сообщает, какие пиксели занимает иконка, для выравнивания по границам видимого рисунка.
+<code>gfx_draw_icon()</code> draws an icon with a cell size of 1 to 16 pixels. <code>ui_draw_icon()</code> draws an icon at one of three standard sizes: 22, 44 or 99 px. Perinkpheral OS picks the finest drawing that fits at two pixels per cell or more, so lines keep the weight of the text and curves stay smooth at large sizes. UPDATE (the project mark) always uses its original 11-cell drawing. <code>gfx_icon_ink()</code> gives the pixels an icon covers, to align it by what is visible.
+<code>gfx_draw_icon()</code> рисует иконку с клеткой от 1 до 16 пикселей. <code>ui_draw_icon()</code> рисует иконку одного из трёх стандартных размеров: 22, 44 или 99 px. Perinkpheral OS берёт самый подробный рисунок, который помещается при двух пикселях на клетку или больше: толщина линий соответствует толщине штрихов текста, а кривые на больших размерах остаются гладкими. <code>gfx_icon_ink()</code> сообщает, какие пиксели занимает иконка, для выравнивания по границам видимого рисунка. UPDATE (знак проекта) всегда использует исходный рисунок из 11 ячеек.
 
 Meaning
 Значение
@@ -1807,8 +1807,8 @@ Any number with a unit
 ui_draw_notice
 =
 
-Two large lines, one text line, a large icon, button labels
-Две крупные строки, строка текста, крупная иконка, подписи кнопок
+Two large lines, one or two detail lines, a large icon, button labels
+Две крупные строки, одна или две строки пояснения, крупный значок, подписи кнопок
 
 Questions, errors, empty states, work in progress
 Вопросы, ошибки, пустые состояния, выполнение работы
@@ -2221,8 +2221,8 @@ Perinkpheral OS отправляет <code>User-Agent: perinkpheral</code>. За
 A response to a request from code that was interrupted (section 3) is dropped: the request is not repeated. Ask again from <code>app_on_terminate()</code> or later if the response is still needed.
 Прерванный ответ на запрос из кода (раздел 3) отбрасывается: запрос не повторяется. Если ответ ещё нужен, запросите снова из <code>app_on_terminate()</code> или позже.
 
-Perinkpheral OS follows up to three redirects for a <code>GET</code>. A redirect to a host outside the list fails with <code>HOST_FAILED_NOT_ALLOWED</code>. A request of another method is sent once; its redirect response is delivered as the response.
-Для <code>GET</code> Perinkpheral OS выполняет до трёх перенаправлений. Перенаправление на адрес вне списка завершается ошибкой <code>HOST_FAILED_NOT_ALLOWED</code>. Запрос другим методом отправляется один раз; ответ с перенаправлением доставляется как ответ на запрос.
+Perinkpheral OS follows up to three redirects for a <code>GET</code>. Redirects to the same name with the same port, or with both ports in {80, 443}, bypass the allowlist check and retain request headers. Other destinations must be in the list or fail with <code>HOST_FAILED_NOT_ALLOWED</code>; request headers are dropped there. A request of another method is sent once; its redirect response is delivered as the response.
+Perinkpheral OS следует не более чем трём перенаправлениям для <code>GET</code>. Перенаправления на то же имя с тем же портом или с обоими портами из {80, 443} обходят проверку списка разрешённых адресов и сохраняют заголовки запроса. Остальные адреса должны быть в списке, иначе возникает <code>HOST_FAILED_NOT_ALLOWED</code>; заголовки запроса для них удаляются. Запрос другого метода отправляется один раз; ответ с перенаправлением передаётся как ответ.
 
 <code>poll_run(n)</code> requests poll <code>n</code> through the shared queue without waiting for a response; repeated pending requests are coalesced, for example when the user presses a refresh button. <code>poll_set_interval(n, seconds)</code> changes the interval of a poll from code, for example to honour a Retry-After header.
 <code>poll_run(n)</code> запрашивает опрос <code>n</code> через общую очередь без ожидания ответа; повторные ожидающие запросы объединяются, например при нажатии кнопки обновления. <code>poll_set_interval(n, seconds)</code> меняет интервал опроса из кода, например по заголовку Retry-After.
@@ -2698,8 +2698,8 @@ List only the hosts the application needs. Use a <code>url</code> setting for th
 Poll no more often than the data changes.
 Опрашивайте не чаще, чем меняются данные.
 
-Offer the interval as a setting with a reasonable default. On battery power Perinkpheral OS limits every poll to one per five minutes.
-Предлагайте интервал как настройку с разумным значением по умолчанию. При питании от батареи Perinkpheral OS ограничивает каждый опрос одним разом в пять минут.
+Offer the interval as a setting with a reasonable default. While power saving is active Perinkpheral OS limits every poll to one per five minutes.
+Предлагайте интервал как настройку с разумным значением по умолчанию. Пока включено энергосбережение, Perinkpheral OS ограничивает каждый опрос одним запросом в пять минут.
 
 14. Tools and debugging
 14. Инструменты и отладка
@@ -2779,8 +2779,8 @@ Prints the device log. <code>--app</code>: application lines only. <code>--follo
 tools/perinkpheral set &lt;app&gt; &lt;key&gt; &lt;value&gt;
 =
 
-Writes a value to an application's store, as the web page saves a setting: <code>app_on_settings()</code> is called and the polls are repeated. A list is its items with line breaks
-Записывает значение в хранилище приложения, как веб-страница сохраняет настройку: вызывается <code>app_on_settings()</code>, опросы повторяются. Список - это пункты через перевод строки
+Writes raw bytes to an application's store through the development route <code>/api/dev/kv</code>, without manifest-setting validation or destination-change secret clearing. An empty value deletes the key. Then <code>app_on_settings()</code> is called and polls are requested again. A list is its items with line breaks
+Записывает байты напрямую в хранилище приложения через маршрут разработки <code>/api/dev/kv</code>, без проверки настроек по манифесту и без удаления секретов при изменении адреса. Пустое значение удаляет ключ. Затем вызывается <code>app_on_settings()</code> и снова запрашиваются опросы. Список - его элементы с переводами строк
 
 tools/perinkpheral status
 =
@@ -2833,8 +2833,8 @@ Store, files
 A folder on the computer, with the device's limits. Kept between runs, as across an update on the device
 Папка на компьютере, с ограничениями устройства. Сохраняется между запусками, как при обновлении на устройстве
 
-The computer's. Redirects, hosts and headers follow the device's rules. Responses can be replaced by mocks
-Сеть компьютера. Перенаправления, хосты и заголовки подчиняются правилам устройства. Ответы можно подменить моками
+The computer's. Real network redirects, hosts and headers follow the device's rules. Responses can be replaced by mocks; mocked redirects are delivered as final responses and are not followed
+Сеть компьютера. Перенаправления реальной сети, адреса и заголовки следуют правилам устройства. Ответы можно заменять заглушками; перенаправления заглушек передаются как окончательные ответы и не выполняются
 
 The computer's. Moved forward on request
 Часы компьютера. Переводятся вперёд по запросу
@@ -3004,8 +3004,8 @@ The index lists the name, title, version and icon of each application, and its f
 Trust model: HTTPS to a source that the user selected, plus the sandbox. Packages are unsigned.
 Модель доверия: HTTPS до источника, выбранного пользователем, плюс песочница. Пакеты не подписываются.
 
-The official catalog is the <code>perinkpheral-apps</code> repository, with eighteen applications. It is the first source on every device. The user can add up to three HTTPS sources on the device's web page.
-Официальный каталог - репозиторий <code>perinkpheral-apps</code> с восемнадцатью приложениями. Это первый источник на каждом устройстве. Пользователь может добавить до трёх HTTPS-источников на странице устройства.
+The official catalog is the <code>perinkpheral-apps</code> repository. It is the first source on every device. The user can add up to three HTTPS sources on the device's web page.
+Официальный каталог - репозиторий <code>perinkpheral-apps</code>. Это первый источник на каждом устройстве. Пользователь может добавить до трёх источников HTTPS на странице устройства.
 
 The web page shows a summary of each installed application, taken from its manifest: the servers it connects to, the polling interval, what it stores, and whether it starts with the device.
 Веб-страница показывает сводку по каждому установленному приложению, взятую из манифеста: серверы, к которым оно подключается, интервал опроса, что оно хранит и запускается ли вместе с устройством.
@@ -3613,8 +3613,8 @@ Queues a manifest poll; repeated pending requests are coalesced. Does not wait f
 poll_set_interval(poll, seconds)
 =
 
-Sets a persistent code override of 10 - 86400 s; other nonzero values or an unknown poll give HOST_ERR_ARGUMENT. 0 forgets the override and resumes the manifest or interval setting. The code override takes precedence over that setting. A changed effective interval resets the deadline from now; the same interval does not. HOST_ERR_FAILED means the override could not be kept or forgotten
-Задаёт сохраняемый интервал из кода от 10 до 86400 с; другое ненулевое значение или неизвестный опрос дают HOST_ERR_ARGUMENT. 0 удаляет этот интервал и возвращает интервал манифеста или его настройки. Интервал из кода имеет приоритет над настройкой. Изменение действующего интервала отсчитывает срок заново от текущего момента; прежний интервал срок не меняет. HOST_ERR_FAILED означает, что интервал не удалось сохранить или удалить
+Sets a persistent code override of 10 - 86400 s; other nonzero values or an unknown poll give HOST_ERR_ARGUMENT. 0 forgets the override and resumes the manifest or interval setting. The code override takes precedence over that setting. A changed resolved interval, before the power-saving floor, resets the deadline from now; the same resolved interval does not. Changing 10 s to 20 s resets it even when both run at the 300 s floor. HOST_ERR_FAILED means the override could not be kept or forgotten
+Задаёт сохраняемый интервал из кода от 10 до 86400 с; другое ненулевое значение или неизвестный опрос дают HOST_ERR_ARGUMENT. 0 удаляет этот интервал и возвращает интервал манифеста или его настройки. Интервал из кода имеет приоритет над настройкой. Изменение выбранного интервала до применения минимума энергосбережения отсчитывает срок заново от текущего момента; прежний интервал срок не меняет. Изменение с 10 с на 20 с сбрасывает срок, даже если оба интервала увеличиваются до 300 с. HOST_ERR_FAILED означает, что интервал не удалось сохранить или удалить
 
 http_send(tag, method, url, url_length, headers, headers_length, body, body_length)
 =

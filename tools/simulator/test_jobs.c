@@ -116,6 +116,27 @@ int main(void)
     set_value("server", "http://first.example");
     set_value("token", "rotated");
 
+    s_mocks = json_parse("{\"http://first.example/data\":{\"status\":302,"
+                         "\"headers\":{\"Location\":\"http://second.example/final\"},"
+                         "\"body\":\"redirect\"},"
+                         "\"http://second.example/final\":{\"body\":\"followed\"}}");
+    assert(services_request("probe", &request) == HOST_OK);
+    job = s_jobs_pending;
+    s_jobs_pending = NULL;
+    prepare_job(job);
+    fetch(job);
+    assert(job->status == 302);
+    assert(strcmp(job->url, "http://first.example/data") == 0);
+    assert(job->answer_length == strlen("redirect"));
+    assert(memcmp(job->answer, "redirect", job->answer_length) == 0);
+    char location[64] = { 0 };
+    assert(answer_headers_get(&job->response_headers, "Location", strlen("Location"), 0,
+                              location, sizeof location) == strlen("http://second.example/final"));
+    assert(strcmp(location, "http://second.example/final") == 0);
+    free_job(job);
+    json_free(s_mocks);
+    s_mocks = NULL;
+
     /* Pipes hold a transmission open while the main loop reloads and replaces its manifest. */
     int requests[2], answers[2];
     assert(pipe(requests) == 0 && pipe(answers) == 0 && pipe(s_jobs_done) == 0);
