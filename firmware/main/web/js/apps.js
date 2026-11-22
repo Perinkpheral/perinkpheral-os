@@ -539,15 +539,18 @@ const updates = () => !catalogsRead ? [] : offered.filter(offer => !compatibilit
   installed.some(have => have.name === offer.app.name && appUpdateAvailable(have.version, offer.app.version)));
 
 /* The catalog: everything the sources have, the installed among it - Installed, or Update when
- * the source has another version. What was here before comes first: it returns with its settings. */
+ * the source has another version. What is not installed comes first, what was here before first
+ * among it: it returns with its settings; the installed come last. */
 function drawCatalog() {
   const kept = offer => removed.includes(offer.app.name);
+  const isInstalled = offer => installed.some(have => have.name === offer.app.name);
   const isFull = installed.length >= CATALOG_INSTALLED_MAX;
   const wanted = byId("catalog-search").value.trim().toLowerCase();
   const offers = offered;
   const found = offers.filter(offer => !wanted ||
     [offerSays(offer, "title"), offerSays(offer, "description"), offer.app.name].join(" ").toLowerCase().includes(wanted));
-  const rows = found.sort((a, b) => kept(b) - kept(a) || offerSays(a, "title").localeCompare(offerSays(b, "title"), pageLanguage))
+  const rows = found.sort((a, b) => isInstalled(a) - isInstalled(b) || kept(b) - kept(a) ||
+                                    offerSays(a, "title").localeCompare(offerSays(b, "title"), pageLanguage))
     .map(offer => {
       const row = make("div", { className: "offer" }), text = make("div");
       const needed = compatibilityProblem(offer.app);

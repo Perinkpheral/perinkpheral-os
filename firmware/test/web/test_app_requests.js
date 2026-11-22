@@ -257,6 +257,30 @@ function testUpdateAllVisibility() {
   assert.equal(byId("update-all").hidden, false, "two compatible installed updates show Update all");
 }
 
+function testCatalogOrder() {
+  const titles = [];
+  const view = { replaceChildren() {}, append() {} };
+  const offer = (name, title) => ({ source: 0, generation: 0, app: { name, title, version: "1" } });
+  const context = vm.createContext({
+    CATALOG_INSTALLED_MAX: 24, pageLanguage: "en", catalogsRead: true,
+    offered: [offer("bravo", "Bravo"), offer("alpha", "Alpha"), offer("delta", "Delta"), offer("charlie", "Charlie"),
+              offer("echo", "Echo")],
+    installed: [{ name: "alpha", version: "1" }, { name: "charlie", version: "1" }], removed: ["echo"],
+    byId: id => id === "catalog-search" ? { value: "" } : view,
+    t: text => text, compatibilityProblem: () => "", picture: () => ({}), markPendingInstall() {},
+    appUpdateAvailable: () => false, install() {}, appDescription: text => text, stateOf: () => "ready",
+    sameNote: () => null, offerSays: (item, field) => item.app[field] || "",
+    make: (tag, attributes = {}) => {
+      if (tag === "b") titles.push(attributes.textContent);
+      return { append() {}, addEventListener() {}, dataset: {} };
+    },
+  });
+  vm.runInContext(apps.slice(apps.indexOf("function drawCatalog()"), apps.indexOf('byId("catalog-search").addEventListener')), context);
+  context.drawCatalog();
+  assert.deepEqual(titles, ["Echo", "Bravo", "Delta", "Alpha", "Charlie"],
+    "not installed first, a returning application first among them, the installed last");
+}
+
 async function testAuthors() {
   const messages = [], rendered = [];
   const catalogs = [
@@ -312,6 +336,7 @@ async function testAuthors() {
   await testVersionOrdering();
   await testCachedCatalogOffers();
   testUpdateAllVisibility();
+  testCatalogOrder();
   await testAutoUpdateSetting();
   await testAuthors();
   const memory = [503, "Not enough memory."];
