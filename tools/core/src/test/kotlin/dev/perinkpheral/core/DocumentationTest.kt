@@ -41,8 +41,8 @@ object DocumentationTest {
         finding(7, wifi to "replacing any existing zone")
         finding(8, network to "before the power-saving floor", guide to "before the power-saving floor",
             network to "10 s to 20 s resets it", guide to "10 s to 20 s resets it")
-        finding(9, guide to "minimum 300 s while power saving is active",
-            guide to "While power saving is active Perinkpheral OS limits every poll")
+        finding(9, guide to "While power saving is active, scheduled poll intervals have a minimum of 300 seconds",
+            guide to "can request an earlier poll")
         finding(10, guide to "without manifest-setting validation or destination-change secret clearing",
             guide to "An empty value deletes the key", guide to "polls are requested again")
         finding(11, specification to "Recovery handles firmware uploads without this admission check")
