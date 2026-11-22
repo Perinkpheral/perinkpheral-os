@@ -14,6 +14,7 @@
 #include "ota.h"
 #include "settings.h"
 #include "screen.h"
+#include "wifi_search.h"
 #include "page.h"
 #include "driver/gpio.h"
 #include "esp_app_desc.h"
@@ -233,11 +234,82 @@ failed:
     return failure(request, ota_stream_error(&stream));
 }
 
+/* An access point that would not let the device in, handed from the event task to the main
+ * loop, which keeps the list and picks another point (as main's wifi.c does). */
+static uint8_t refused_bssid[WIFI_SEARCH_BSSID_BYTES];
+static atomic_bool refused_pending;
+static atomic_bool joined_since;
+static atomic_bool joined_point; /* the attempt under way got as far as joining its point */
+
 static void network_event(void *argument, esp_event_base_t base, int32_t event, void *data)
 {
-    (void)argument; (void)data;
-    if (base == IP_EVENT && event == IP_EVENT_STA_GOT_IP) { atomic_store(&online, true); }
-    if (base == WIFI_EVENT && event == WIFI_EVENT_STA_DISCONNECTED) { atomic_store(&online, false); }
+    (void)argument;
+    if (base == WIFI_EVENT && event == WIFI_EVENT_STA_CONNECTED) { atomic_store(&joined_point, true); }
+    if (base == IP_EVENT && event == IP_EVENT_STA_GOT_IP) {
+        atomic_store(&online, true);
+        atomic_store(&joined_since, true);
+    }
+    if (base == WIFI_EVENT && event == WIFI_EVENT_STA_DISCONNECTED) {
+        atomic_store(&online, false);
+        const wifi_event_sta_disconnected_t *lost = data;
+        if (lost != NULL && wifi_search_point_refused(atomic_exchange(&joined_point, false), lost->reason) &&
+            !atomic_load(&refused_pending)) {
+            memcpy(refused_bssid, lost->bssid, sizeof refused_bssid);
+            atomic_store(&refused_pending, true);
+        }
+    }
+}
+
+/* The station's configuration for the next attempt: every access point of the name, or the
+ * strongest one that has not refused the device, found by a scan of its own. */
+static void choose_point(wifi_avoided_t *avoided)
+{
+    if (atomic_exchange(&joined_since, false)) { wifi_avoided_clear(avoided); }
+    if (atomic_load(&refused_pending)) {
+        wifi_avoided_add(avoided, refused_bssid);
+        atomic_store(&refused_pending, false);
+    }
+    wifi_config_t sta = {0};
+    memcpy(sta.sta.ssid, settings.wifi_ssid, strlen(settings.wifi_ssid));
+    memcpy(sta.sta.password, settings.wifi_password, strlen(settings.wifi_password));
+    sta.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+    sta.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    sta.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    if (avoided->count > 0) {
+        wifi_scan_config_t scan = { .ssid = (uint8_t *)settings.wifi_ssid, .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+                                    .scan_time.active = { .min = 0, .max = 120 } };
+        wifi_point_t points[8];
+        int found = 0;
+        if (esp_wifi_scan_start(&scan, true) == ESP_OK) {
+            uint16_t count = 0;
+            esp_wifi_scan_get_ap_num(&count);
+            for (uint16_t i = 0; i < count; i++) {
+                wifi_ap_record_t record;
+                if (esp_wifi_scan_get_ap_record(&record) != ESP_OK) { break; }
+                if (found < 8) {
+                    memcpy(points[found].bssid, record.bssid, sizeof points[found].bssid);
+                    points[found].channel = record.primary;
+                    points[found].rssi = record.rssi;
+                    points[found].secured = record.authmode != WIFI_AUTH_OPEN;
+                    found++;
+                }
+            }
+            esp_wifi_clear_ap_list();
+        }
+        int pick = wifi_search_pick(points, found, avoided, settings.wifi_password[0] != '\0');
+        if (pick >= 0) {
+            sta.sta.bssid_set = true;
+            memcpy(sta.sta.bssid, points[pick].bssid, sizeof sta.sta.bssid);
+            sta.sta.channel = points[pick].channel;
+            sta.sta.scan_method = WIFI_FAST_SCAN;
+            ESP_LOGI("recovery", "trying another access point, channel %d, %d dBm", points[pick].channel, points[pick].rssi);
+        } else if (found > 0) {
+            wifi_avoided_clear(avoided);
+        }
+    }
+    if (esp_wifi_set_config(WIFI_IF_STA, &sta) != ESP_OK) {
+        ESP_LOGW("recovery", "station configuration refused");
+    }
 }
 
 static void start_network(void)
@@ -270,6 +342,8 @@ static void start_network(void)
         memcpy(sta.sta.ssid, settings.wifi_ssid, strlen(settings.wifi_ssid));
         memcpy(sta.sta.password, settings.wifi_password, strlen(settings.wifi_password));
         sta.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+        sta.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+        sta.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
         if (esp_wifi_set_config(WIFI_IF_STA, &sta) != ESP_OK) {
             /* Unusable stored credentials must not take down the rescue AP. */
             ESP_LOGW("recovery", "stored Wi-Fi credentials rejected; keeping recovery AP");
@@ -344,6 +418,7 @@ void app_main(void)
     bool shown_online = false;
     recovery_wait_t shown_waiting = RECOVERY_WAIT_NETWORK;
     uint32_t next_connection = 0;
+    static wifi_avoided_t avoided;
     for (;;) {
         unsigned ticket = atomic_load(&control.ticket);
         recovery_state_t current_state = ticket & RECOVERY_STATE_MASK;
@@ -364,7 +439,11 @@ void app_main(void)
             recovery_control_set(&control, recovery_ota_retry() ? RESTART : FAILED);
         }
         bool connected = atomic_load(&online);
-        if (station && !connected && now_seconds() >= next_connection) {
+        /* A station that has joined and waits for its address is not between attempts. */
+        if (station && !connected && !atomic_load(&joined_point) && now_seconds() >= next_connection) {
+            /* Only between attempts, so an attempt under way keeps its configuration. */
+            if (next_connection != 0) { choose_point(&avoided); }
+            atomic_store(&joined_point, false);
             esp_wifi_connect();
             next_connection = now_seconds() + NETWORK_RETRY_SECONDS;
         }

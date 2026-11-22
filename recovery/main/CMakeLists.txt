@@ -4,6 +4,7 @@ idf_component_register(SRCS "main.c" "ota.c" "settings.c" "screen.c" "fonts.c"
     "${REPOSITORY}/firmware/components/net/captive_dns.c"
     "${REPOSITORY}/firmware/components/net/captive_dns_task.c"
     "${REPOSITORY}/firmware/components/net/captive_portal.c"
+    "${REPOSITORY}/firmware/components/net/wifi_search.c"
     INCLUDE_DIRS "." "${REPOSITORY}/firmware/components/net/include"
     REQUIRES board appconf gfx ui words epd deadlines esp_wifi esp_netif esp_event esp_http_server
     app_update esp_timer nvs_flash esp_driver_gpio esp_system mdns bootloader_support lwip)

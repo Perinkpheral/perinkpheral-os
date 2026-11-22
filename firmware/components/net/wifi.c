@@ -7,6 +7,7 @@
 #include "wifi.h"
 #include "wifi_credentials.h"
 #include "wifi_events.h"
+#include "wifi_search.h"
 
 #include <string.h>
 #include <stdatomic.h>
@@ -101,6 +102,58 @@ static struct {
  * fails, that place is forgotten and the next one looks everywhere. */
 static bool s_is_looking_in_one_place;
 
+/* Access points that would not let the device in since it was last on the network, and
+ * whether the attempt under way got as far as joining its point. */
+static wifi_avoided_t s_avoided;
+static atomic_bool s_joined_point;
+
+static void on_station_joined(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)id;
+    (void)data;
+    atomic_store(&s_joined_point, true);
+}
+
+#define SEARCH_POINTS_MAX 8
+
+/* The access points carrying the network's name, by a scan in the plan's task, which holds
+ * the driver: the page's scan answers busy meanwhile. */
+static int scan_points(wifi_point_t *points, int capacity)
+{
+    wifi_scan_config_t config = {
+        .ssid = (uint8_t *)s_wifi.ssid,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time.active = { .min = 0, .max = SCAN_CHANNEL_MS },
+        .home_chan_dwell_time = SCAN_HOME_MS,
+    };
+    esp_err_t error = esp_wifi_scan_start(&config, true);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "cannot scan for the network's points: %s", esp_err_to_name(error));
+        return 0;
+    }
+    uint16_t found = 0;
+    int count = 0;
+    if (esp_wifi_scan_get_ap_num(&found) == ESP_OK) {
+        for (uint16_t index = 0; index < found; index++) {
+            wifi_ap_record_t record;
+            if (esp_wifi_scan_get_ap_record(&record) != ESP_OK) {
+                break;
+            }
+            if (count < capacity) {
+                memcpy(points[count].bssid, record.bssid, sizeof points[count].bssid);
+                points[count].channel = record.primary;
+                points[count].rssi = record.rssi;
+                points[count].secured = record.authmode != WIFI_AUTH_OPEN;
+                count++;
+            }
+        }
+    }
+    esp_wifi_clear_ap_list();
+    return count;
+}
+
 static void remember_where_found(void)
 {
     wifi_ap_record_t found;
@@ -126,6 +179,7 @@ static void on_got_address(void *arg, esp_event_base_t base, int32_t id, void *d
     esp_ip4addr_ntoa(&got->ip_info.ip, s_wifi.address, sizeof s_wifi.address);
     xSemaphoreGive(s_wifi.lock);
     remember_where_found();
+    wifi_avoided_clear(&s_avoided);
     s_is_looking_in_one_place = false;
     post(WIFI_EVENT_CONNECTED);
 }
@@ -145,6 +199,11 @@ static void on_station_disconnected(void *arg, esp_event_base_t base, int32_t id
                  s_wifi.ssid, lost->reason, lost->bssid[0], lost->bssid[1], lost->bssid[2],
                  lost->bssid[3], lost->bssid[4], lost->bssid[5], lost->rssi,
                  s_is_looking_in_one_place ? ", as last time" : "");
+    }
+    if (!atomic_load(&s_wifi.radio_stopped) &&
+        wifi_search_point_refused(atomic_exchange(&s_joined_point, false), lost->reason)) {
+        /* This point would not let the device in: the next attempt tries another. */
+        wifi_avoided_add(&s_avoided, lost->bssid);
     }
     if (s_is_looking_in_one_place) {
         /* Not there any more - another channel, another access point. */
@@ -247,6 +306,7 @@ static void connect(void)
     wifi_copy_field(config.sta.password, sizeof config.sta.password, s_wifi.password);
     config.sta.threshold.authmode =
         s_wifi.password[0] != '\0' ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+    config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
     s_is_looking_in_one_place =
         s_found_at.is_known && strcmp(s_found_at.ssid, s_wifi.ssid) == 0;
     if (s_is_looking_in_one_place) {
@@ -254,7 +314,33 @@ static void connect(void)
         memcpy(config.sta.bssid, s_found_at.access_point, sizeof config.sta.bssid);
         config.sta.channel = s_found_at.channel;
         config.sta.scan_method = WIFI_FAST_SCAN;
+    } else {
+        /* Every access point of the name, the strongest first - unless one would not let the
+         * device in: then the strongest of the others, found by a scan of their own. */
+        config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+        config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+        if (s_avoided.count > 0) {
+            wifi_point_t points[SEARCH_POINTS_MAX];
+            int found = scan_points(points, SEARCH_POINTS_MAX);
+            int pick = wifi_search_pick(points, found, &s_avoided, s_wifi.password[0] != '\0');
+            if (pick >= 0) {
+                config.sta.bssid_set = true;
+                memcpy(config.sta.bssid, points[pick].bssid, sizeof config.sta.bssid);
+                config.sta.channel = points[pick].channel;
+                config.sta.scan_method = WIFI_FAST_SCAN;
+                ESP_LOGI(TAG, "trying %02x:%02x:%02x:%02x:%02x:%02x, channel %d, %d dBm: %d of %d points would not take the device",
+                         points[pick].bssid[0], points[pick].bssid[1], points[pick].bssid[2],
+                         points[pick].bssid[3], points[pick].bssid[4], points[pick].bssid[5],
+                         points[pick].channel, points[pick].rssi, s_avoided.count, found);
+            } else if (found > 0) {
+                /* Every point found has refused once: they may take it now. */
+                ESP_LOGW(TAG, "every point of \"%s\" refused the device; trying them all again", s_wifi.ssid);
+                wifi_avoided_clear(&s_avoided);
+            }
+        }
     }
+    /* Before the attempt starts: its joining may be told before esp_wifi_connect() returns. */
+    atomic_store(&s_joined_point, false);
     esp_err_t err = esp_wifi_set_mode(s_wifi.access_point_up ? WIFI_MODE_APSTA : WIFI_MODE_STA);
     if (err == ESP_OK) {
         err = esp_wifi_set_config(WIFI_IF_STA, &config);
@@ -472,6 +558,8 @@ void wifi_start(const wifi_config_in_t *config)
         WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, on_station_disconnected, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         WIFI_EVENT, WIFI_EVENT_SCAN_DONE, on_scan_done, NULL, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, on_station_joined, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                         on_got_address, NULL, NULL));
     /* The settings are the host's to keep, not the Wi-Fi library's. */

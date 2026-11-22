@@ -51,7 +51,7 @@ TESTS   += test_recovery_screen
 TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_app_storage test_app_kv
-TESTS   += test_wifi_networks
+TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
 TESTS   += test_app_update_policy
 TESTS   += test_app_update_schedule
@@ -112,6 +112,9 @@ test_poller: test_poller.c tinytest.h $(MAIN)/poller.c $(MAIN)/poller_net.h $(AP
 
 test_wifi_credentials: test_wifi_credentials.c tinytest.h $(NET)/wifi_credentials.c $(NET)/include/wifi_credentials.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_credentials.c $(NET)/wifi_credentials.c
+
+test_wifi_search: test_wifi_search.c tinytest.h $(NET)/wifi_search.c $(NET)/include/wifi_search.h
+	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_search.c $(NET)/wifi_search.c
 
 test_wifi_networks: test_wifi_networks.c tinytest.h $(NET)/wifi_networks.c $(NET)/include/wifi_networks.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_networks.c $(NET)/wifi_networks.c
