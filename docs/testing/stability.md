@@ -228,7 +228,7 @@ the owner made an OTA update to 0.1.84 part of the run. 0.1.84 never joined the 
 on the owner's Keenetic mesh a node restriction makes the extender ignore the device, and
 every attempt of main went back to the extender (reason 2, authentication expired) until
 probation gave up and the device stayed in recovery. The same fault explains the earlier
-"Wi-Fi did not start after a USB session" cases. Fixed in 0.1.85 (`wifi_search.c`). During
+"Wi-Fi did not start after a USB session" cases. Fixed in 0.1.86 (`wifi_search.c`). During
 uploads through recovery, recovery once lost the access point's beacons (`bcn_timeout`) in the
 middle of writing and the upload failed; it did not happen again in the uploads that followed
 and is not explained yet. The owner restarts the run on the fixed release.

@@ -4,9 +4,13 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
-## 0.1.85
+## 0.1.86
 
 - Wi-Fi: an access point that would not let the device in - a mesh node with a node restriction, one that never answers - is passed over for another point of the same network; before, every attempt went back to it, the update's probation gave up after three minutes and the device stayed in recovery. Recovery chooses its point the same way; it reaches devices only through the web flasher's Keep data or USB.
+
+## 0.1.85
+
+- Testing: a plan for an unattended agent.
 
 ## 0.1.84
 
