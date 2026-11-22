@@ -1,8 +1,8 @@
 User manual
 Руководство пользователя
 
-A quiet screen for your desk.<br>Start here, then make it yours.
-Спокойный экран для вашего стола.<br>Начните здесь и настройте его под себя.
+Setup, applications, settings, buttons and updates.
+Первоначальная настройка, приложения, настройки, кнопки и обновления.
 
 Contents
 Содержание
@@ -43,14 +43,14 @@ Catalog: choose an application and click Install.
 Click <b>Install</b> and wait for completion. A newly installed application opens on the device and appears in its menu. If asked to install a system app, confirm with <code>OK</code> on the device.
 Нажмите <b>Установить</b> и дождитесь завершения. Новое приложение откроется на устройстве и появится в его меню. Если устройство спросит об установке системного приложения, подтвердите кнопкой <code>OK</code>.
 
-To remove an application, click <b>Remove</b> and confirm in the browser. Its settings are kept for a later installation; they may be cleared if the device needs space.
-Чтобы удалить приложение, нажмите <b>Удалить</b> и подтвердите в браузере. Настройки сохранятся для повторной установки, но могут быть очищены, если устройству понадобится место.
+To remove an application, click <b>Remove</b> and confirm in the browser. Removing an application also deletes its files. Its settings are kept for a later installation; they may be cleared if the device needs space.
+Чтобы удалить приложение, нажмите <b>Удалить</b> и подтвердите в браузере. При удалении приложения также удаляются его файлы. Настройки сохранятся для повторной установки, но могут быть очищены, если устройству понадобится место.
 
 Keeping applications current
 Обновление приложений
 
-<b>Auto-update</b> in Installed apps checks daily. It updates installed applications; it does not add new ones or grant new access. If an application needs newer firmware, update the firmware first (section 6).
-<b>Автообновление</b> в разделе «Мои приложения» проверяет обновления раз в день. Оно обновляет установленные приложения, но не добавляет новые и не предоставляет новый доступ. Если приложению нужна более новая прошивка, сначала обновите её (раздел 6).
+Turn on <b>Auto-update</b> in Installed apps to check daily, including while the device page is closed. It updates installed applications without adding new ones or granting new access. Updates requiring new access or changed certificate authorities need a manual update. If an application needs newer firmware, update the firmware first (section 6).
+Включите <b>Автообновление</b> в разделе «Мои приложения» для ежедневной проверки, в том числе при закрытой странице устройства. Оно обновляет установленные приложения, не добавляя новые и не предоставляя новый доступ. Обновления, которым нужен новый доступ или изменённые центры сертификации, устанавливаются вручную. Если приложению нужна более новая прошивка, сначала обновите её (раздел 6).
 
 3. Setting up applications
 3. Настройка приложений
@@ -76,8 +76,8 @@ When the screen says Not set up
 The application needs information you have not supplied yet, such as a place, a list or a service address. Open its settings on the device page, complete them and save. It is installed already; you do not need to install it again.
 Приложению не хватает данных: например, места, списка или адреса сервиса. Откройте его настройки на странице устройства, заполните их и сохраните. Приложение уже установлено, повторная установка не нужна.
 
-A saved password or token is not shown again. Leave its field unchanged to keep it. Use its <b>Remove</b> button only to clear it.
-Сохранённый пароль или токен повторно не показывается. Не меняйте поле, чтобы сохранить значение. Кнопка <b>Удалить</b> рядом с ним очищает его.
+A saved password or token is not shown again. Leave its field unchanged to keep it. Changing an existing service address clears the application's saved passwords and tokens, so enter the credentials for the new address before saving. Some address fields have a <b>Remove</b> button. Click it, then <b>Save</b>, to clear that address.
+Сохранённый пароль или токен повторно не показывается. Не меняйте поле, чтобы сохранить значение. Изменение существующего адреса сервиса очищает сохранённые пароли и токены приложения, поэтому перед сохранением введите данные доступа для нового адреса. У некоторых полей адреса есть кнопка <b>Удалить</b>. Нажмите её, затем <b>Сохранить</b>, чтобы очистить адрес.
 
 4. Device settings
 4. Настройки устройства
@@ -100,26 +100,26 @@ Remove an installed application.
 <b>Appearance</b>
 <b>Внешний вид</b>
 
-Font, clock in header, default app and idle timeout. The default app opens after restart and when you leave the menu idle.
-Шрифт, часы в заголовке, приложение по умолчанию и время ожидания. Приложение по умолчанию открывается после перезагрузки и если оставить меню без действий.
+Font, clock in header, default app and idle timeout. The default app opens after restart and when you leave the menu idle. With <b>Default app</b> set to <b>None</b>, a restart opens the last application if it is still available, otherwise the menu, unless Wi-Fi setup is required. The menu then stays open when idle.
+Шрифт, часы в заголовке, приложение по умолчанию и время ожидания. Приложение по умолчанию открывается после перезагрузки и если оставить меню без действий. Если для приложения по умолчанию выбрано <b>Нет</b>, после перезапуска открывается последнее приложение, если оно доступно, иначе меню, кроме случаев, когда требуется настройка Wi-Fi. В этом случае меню остаётся открытым при бездействии.
 
 <b>Display</b>
 <b>Экран</b>
 
-Refresh interval and full refresh. A full refresh clears faint traces of the previous picture.
-Интервал и полное обновление экрана. Полное обновление убирает бледные следы предыдущего изображения.
+<b>Refresh interval</b> limits automatic screen refreshes, not data downloads. <b>Full refresh</b> controls routine cleaning of faint traces. <b>Forced refresh</b> cleans the screen after the selected time without a refresh. <b>Fast refresh</b> shortens full refreshes. Changing applications can still cause a full refresh.
+<b>Интервал</b> ограничивает автоматическое обновление экрана, а не загрузку данных. <b>Полное обновл.</b> задаёт регулярную очистку бледных следов. <b>Принудит. обновл.</b> очищает экран после выбранного времени без обновления. <b>Быстрое обновл.</b> сокращает полное обновление. При переключении приложений полное обновление всё равно возможно.
 
 <b>Wi-Fi</b>
 <b>Wi-Fi</b>
 
-Network and address. Forget network turns Wi-Fi off. Connect to Wi-Fi starts setup again.
-Сеть и адрес. «Забыть сеть» выключает Wi-Fi. «Подключиться к Wi-Fi» снова запускает настройку.
+Network and address. <b>Forget network</b> asks for confirmation, deletes the saved network name and password, turns Wi-Fi off and restarts the device. <b>Connect to Wi-Fi</b> restarts it into Wi-Fi setup.
+Сеть и адрес. <b>Забыть сеть</b> запрашивает подтверждение, удаляет сохранённые название сети и пароль, выключает Wi-Fi и перезапускает устройство. <b>Подключиться к Wi-Fi</b> перезапускает устройство для настройки Wi-Fi.
 
 <b>Restart / Reset</b>
 <b>Перезапуск / Сброс</b>
 
-Restart keeps your settings. Reset erases device settings and application data, then starts Wi-Fi setup. Installed applications stay. Both ask for confirmation.
-Перезапуск сохраняет настройки. Сброс стирает настройки устройства и данные приложений, затем запускает настройку Wi-Fi. Установленные приложения остаются. Оба действия требуют подтверждения.
+Restart keeps your settings. Reset erases device settings, application settings and saved application values, then starts Wi-Fi setup. Installed applications and application-created files stay. Both ask for confirmation.
+Перезапуск сохраняет настройки. Сброс стирает настройки устройства, настройки приложений и сохранённые значения приложений, затем запускает настройку Wi-Fi. Установленные приложения и созданные ими файлы остаются. Оба действия требуют подтверждения.
 
 More on the device page
 Больше настроек на странице устройства
@@ -200,7 +200,7 @@ Recovery shows the address of its page.
 Восстановление показывает адрес страницы.
 
 To leave without uploading, press <code>BACK</code>, labelled <b>Exit recovery</b>. It tries the installed firmware. If it is damaged or the new firmware fails its checks, the device stays in or returns to recovery. Upload a working file there; the previous firmware is not restored automatically.
-Для выхода без загрузки нажмите <code>BACK</code> с подписью <b>Выйти из recovery</b>. Устройство попробует запустить установленную прошивку. Если она повреждена или новая прошивка не прошла проверку, устройство останется в режиме восстановления или вернётся туда. Загрузите рабочий файл; предыдущая прошивка автоматически не восстанавливается.
+Для выхода без загрузки нажмите <code>BACK</code> с подписью <b>Выйти</b>. Устройство попробует запустить установленную прошивку. Если она повреждена или новая прошивка не прошла проверку, устройство останется в режиме восстановления или вернётся туда. Загрузите рабочий файл; предыдущая прошивка автоматически не восстанавливается.
 
 perINKpheral: user manual
 perINKpheral: руководство пользователя
@@ -229,26 +229,26 @@ Eight applications are already installed: Weather, Clock, ISS, Calendar, Timer, 
 Open the device page from a phone or computer on the same Wi-Fi network. Choose <b>Catalog</b> and read the application's description.
 Откройте страницу устройства на телефоне или компьютере в той же сети Wi-Fi. Выберите <b>Каталог</b> и прочитайте описание приложения.
 
-Open <b>Installed apps</b> to manage your applications. The information icon on a tile shows its connections and access. Click <b>Update</b> when offered. <b>Update all</b> appears for several compatible updates. Updates keep settings and the current screen.
-Установленные приложения находятся в разделе <b>Мои приложения</b>. Значок сведений на карточке показывает подключения и доступ приложения. Нажмите <b>Обновить</b>, если доступна новая версия. Если подходящих обновлений несколько, появится <b>Обновить все</b>. Обновление сохраняет настройки и текущий экран.
+Open <b>Installed apps</b> to manage your applications. The information icon on a tile shows its connections and access. Click <b>Update</b> when offered. <b>Update all</b> appears when at least one compatible update is available. Updates keep settings and the current screen.
+Установленные приложения находятся в разделе <b>Мои приложения</b>. Значок сведений на карточке показывает подключения и доступ приложения. Нажмите <b>Обновить</b>, если доступна новая версия. Кнопка <b>Обновить все</b> появляется, если доступно хотя бы одно совместимое обновление. Обновление сохраняет настройки и текущий экран.
 
-The official catalog is already included. The gear at the upper right of Catalog opens <b>Sources</b>. Use it to add another publisher's catalog address.
-Официальный каталог уже подключён. Шестерёнка в правом верхнем углу каталога открывает <b>Источники</b>. Здесь можно добавить адрес каталога другого автора.
+The official catalog is already included. The gear at the upper right of Catalog opens <b>Sources</b>. Press <b>+</b>, enter the publisher's catalog address and click <b>Save</b>. The official source stays first. If several sources contain the same application, the first source containing it is used.
+Официальный каталог уже подключён. Шестерёнка в правом верхнем углу каталога открывает <b>Источники</b>. Нажмите <b>+</b>, введите адрес каталога автора и нажмите <b>Сохранить</b>. Официальный источник остаётся первым. Если приложение есть в нескольких источниках, используется первый источник, в котором оно найдено.
 
-For a place, start typing its name and choose the matching result from the list. Typing a name alone is not enough. For a list, press <b>+</b> to add a row and <b>-</b> to remove one. Save when finished.
-Для выбора места начните вводить название и выберите подходящий результат из списка. Просто ввести название недостаточно. В списке нажимайте <b>+</b>, чтобы добавить строку, и <b>-</b>, чтобы удалить её. В конце сохраните изменения.
+For a place, start typing its name and choose the matching result from the list. Typing a name alone is not enough. Place suggestions require internet access on your phone or computer. For a list, press <b>+</b> to add a row and <b>-</b> to remove one. Save when finished.
+Для выбора места начните вводить название и выберите подходящий результат из списка. Просто ввести название недостаточно. Для подсказок мест телефону или компьютеру нужен доступ к интернету. В списке нажимайте <b>+</b>, чтобы добавить строку, и <b>-</b>, чтобы удалить её. В конце сохраните изменения.
 
 Some applications offer <b>Set up</b> in their settings. It opens a separate page for choosing data or connecting a service. Allow the pop-up if your browser blocks it. Follow that page's steps, then return to the device page and click <b>Save</b> to save the received settings.
 У некоторых приложений в настройках есть кнопка <b>Настроить</b>. Она открывает отдельную страницу для выбора данных или подключения сервиса. Разрешите всплывающее окно, если браузер его блокирует. Выполните шаги на этой странице, затем вернитесь на страницу устройства и нажмите <b>Сохранить</b>, чтобы сохранить полученные настройки.
 
-Hold <code>BACK</code> for about a second and release it to open the menu. Select <b>Settings</b> with <code>UP</code> or <code>DOWN</code> and press <code>OK</code>. Select a row the same way. Change its value with UP/DOWN; <code>OK</code> saves it and <code>BACK</code> cancels.
-Удерживайте <code>BACK</code> примерно секунду и отпустите, чтобы открыть меню. Выберите <b>Настройки</b> кнопками <code>UP</code> или <code>DOWN</code> и нажмите <code>OK</code>. Так же выберите строку. Меняйте значение кнопками UP/DOWN; <code>OK</code> сохраняет его, а <code>BACK</code> отменяет изменение.
+Hold <code>BACK</code> for about a second and release it to open the menu. Select <b>Settings</b> with <code>UP</code> or <code>DOWN</code> and press <code>OK</code>. Select a section, then a setting, with <code>UP</code>/<code>DOWN</code> and <code>OK</code>. In a value picker, <code>UP</code>/<code>DOWN</code> changes the selection, <code>OK</code> saves and <code>BACK</code> cancels. <b>Automatic</b> switches immediately when you press <code>OK</code>. For a confirmation, <code>OK</code> proceeds and <code>BACK</code> cancels.
+Удерживайте <code>BACK</code> примерно секунду и отпустите, чтобы открыть меню. Выберите <b>Настройки</b> кнопками <code>UP</code> или <code>DOWN</code> и нажмите <code>OK</code>. Выберите раздел, затем настройку кнопками <code>UP</code>/<code>DOWN</code> и <code>OK</code>. При выборе значения <code>UP</code>/<code>DOWN</code> меняют выбор, <code>OK</code> сохраняет, а <code>BACK</code> отменяет. Настройка <b>Автоматически</b> переключается сразу при нажатии <code>OK</code>. В запросе подтверждения <code>OK</code> выполняет действие, а <code>BACK</code> отменяет.
 
 Date, time, time zone and power saving. With automatic time off, set the clock by hand: UP/DOWN change a field, OK moves to the next, BACK to the previous. OK on the last field saves; BACK on the first cancels.
 Дата, время, часовой пояс и экономия батареи. Если получение времени из сети отключено, часы можно установить вручную: UP/DOWN меняют поле, OK переходит к следующему, BACK - к предыдущему. OK на последнем поле сохраняет, BACK на первом отменяет.
 
-<b>Settings</b> also lets you change the device name, enter a Wi-Fi password, set the time server, choose a language and manage character packs in <b>Language</b>. Install <b>Cyrillic</b> for Russian letters; without it, the device spells words in Latin letters. <b>Settings > Log</b> controls logging preferences. The main <b>Log</b> section displays the entries. Use <b>Device</b> for status, restart, recovery and factory reset.
-В <b>Настройках</b> также можно изменить название устройства, ввести пароль Wi-Fi, указать сервер времени, выбрать язык и установить пакеты символов в разделе <b>Язык</b>. Установите пакет <b>«Кириллица»</b> для русских букв; без него устройство записывает слова латиницей. <b>Настройки > Журнал</b> задаёт параметры журналирования. Главный раздел <b>Журнал</b> показывает записи. В разделе <b>Устройство</b> находятся состояние, перезагрузка, восстановление и сброс настроек.
+<b>Settings</b> also lets you change the device name, enter a Wi-Fi password, set the time server, choose a language and manage character packs in <b>Language</b>. Install <b>Cyrillic</b> for Russian letters; without it, the device spells words in Latin letters. Installing character packs also requires internet access on your phone or computer. <b>Settings > Log</b> controls logging preferences. The main <b>Log</b> section displays the entries. Use <b>Device</b> for status, restart, recovery and factory reset. Factory reset requires confirmation in the browser and then <code>OK</code> on the device.
+В <b>Настройках</b> также можно изменить название устройства, ввести пароль Wi-Fi, указать сервер времени, выбрать язык и установить пакеты символов в разделе <b>Язык</b>. Установите пакет <b>«Кириллица»</b> для русских букв; без него устройство записывает слова латиницей. Для установки пакетов символов телефону или компьютеру также нужен доступ к интернету. <b>Настройки > Журнал</b> задаёт параметры журналирования. Главный раздел <b>Журнал</b> показывает записи. В разделе <b>Устройство</b> находятся состояние, перезагрузка, восстановление и сброс настроек. Сброс настроек требует подтверждения в браузере, затем кнопкой <code>OK</code> на устройстве.
 
 Rear view. Buttons 1-4: UP, OK, DOWN, BACK.
 Вид сзади. Кнопки 1-4: UP, OK, DOWN, BACK.
@@ -265,11 +265,11 @@ Rear view. Hold UP + BACK for ten seconds.
 Rear view. Keep BACK held through the restart.
 Вид сзади. Продолжайте держать BACK при перезапуске.
 
-While you have internet access, download <b>perinkpheral.bin</b> from the project's latest <a href="https://github.com/Perinkpheral/perinkpheral-os/releases/latest">release</a>. Then open the address on the device's screen. If needed, join <b>perink-recovery</b> and open <b>http://192.168.4.1</b>. Choose the file under <b>Firmware file</b>, click <b>Install firmware</b> and press <code>OK</code> on the device within one minute. Wait for installation and restart. The recovery page is in English.
-Пока есть доступ к интернету, скачайте <b>perinkpheral.bin</b> из последнего <a href="https://github.com/Perinkpheral/perinkpheral-os/releases/latest">релиза</a> проекта. Затем откройте адрес с экрана устройства. При необходимости подключитесь к сети <b>perink-recovery</b> и откройте <b>http://192.168.4.1</b>. Выберите файл в поле <b>Firmware file</b>, нажмите <b>Install firmware</b> и в течение минуты нажмите <code>OK</code> на устройстве. Дождитесь установки и перезагрузки. Страница восстановления на английском языке.
+While you have internet access, download <b>perinkpheral.bin</b> from the project's latest <a href="https://github.com/Perinkpheral/perinkpheral-os/releases/latest">release</a>. Then open the address on the device's screen. If needed, join <b>perink-recovery</b> and open <b>http://192.168.4.1</b>. Choose the file under <b>Firmware file</b>, click <b>Install firmware</b> and press <code>OK</code> on the device within one minute. Keep the page open during installation. After a successful restart into the usual firmware, <b>perink-recovery</b> disappears. Reconnect to the device's usual network and reopen its page. With no saved network, follow First start. If Wi-Fi was turned off, check the firmware version in <b>About</b> on the device. The recovery page is in English.
+Пока есть доступ к интернету, скачайте <b>perinkpheral.bin</b> из последнего <a href="https://github.com/Perinkpheral/perinkpheral-os/releases/latest">релиза</a> проекта. Затем откройте адрес с экрана устройства. При необходимости подключитесь к сети <b>perink-recovery</b> и откройте <b>http://192.168.4.1</b>. Выберите файл в поле <b>Firmware file</b>, нажмите <b>Install firmware</b> и в течение минуты нажмите <code>OK</code> на устройстве. Не закрывайте страницу во время установки. После успешного перезапуска в обычную прошивку сеть <b>perink-recovery</b> исчезнет. Подключитесь к обычной сети устройства и снова откройте его страницу. Если сеть не сохранена, следуйте разделу «Первое включение». Если Wi-Fi был выключен, проверьте версию прошивки в разделе <b>О системе</b> на устройстве. Страница восстановления на английском языке.
 
-Power saving: <b>Disabled</b> keeps Wi-Fi and the page available. <b>Always</b> saves power between data requests. <b>Auto</b> saves when no computer is connected by USB; a USB charger is treated like battery operation. While saving, data is fetched no more often than every five minutes.
-Экономия батареи: <b>Выкл</b> оставляет Wi-Fi и страницу доступными. <b>Всегда</b> экономит заряд между запросами данных. <b>Авто</b> экономит, когда по USB не подключён компьютер; с зарядным устройством режим тот же, что и с батареей. При экономии данные запрашиваются не чаще раза в пять минут.
+Power saving: <b>Disabled</b> keeps Wi-Fi and the page available. <b>Always</b> saves power between data requests. <b>Auto</b> saves when no computer is connected by USB; a USB charger is treated like battery operation. While saving, each scheduled data refresh has an interval of at least five minutes. Manual refreshes can run sooner.
+Экономия батареи: <b>Выкл</b> оставляет Wi-Fi и страницу доступными. <b>Всегда</b> экономит заряд между запросами данных. <b>Авто</b> экономит, когда по USB не подключён компьютер; с зарядным устройством режим тот же, что и с батареей. При экономии интервал каждого запланированного обновления данных составляет не менее пяти минут. Обновление по запросу может выполняться раньше.
 
 After choosing perinkpheral.bin, click Install firmware.
 Выбрав perinkpheral.bin, нажмите Install firmware.
@@ -303,3 +303,6 @@ What it does
 
 Button
 Кнопка
+
+When the page asks for confirmation on the device, press <code>OK</code> within one minute. <code>BACK</code> cancels. If the request expires, repeat the action on the page.
+Когда страница просит подтвердить действие на устройстве, нажмите <code>OK</code> в течение минуты. <code>BACK</code> отменяет действие. Если время истекло, повторите действие на странице.

@@ -7,6 +7,11 @@ The application guide and user manual use `docs/guide/source/print.css` and
 translation and uses the same numbered headings, linked contents and two-pass
 Chromium printing. The manual's own CSS only arranges its pictures and page breaks.
 
+Printing requires Java 21 or later, Chromium available on PATH or selected with
+`CHROME`, and `pdftotext` from Poppler. Picture review also requires `pdftoppm`
+from Poppler. Playwright's browser installation is separate from the browser
+selected by `CHROME`.
+
 From the repository root:
 
 ```sh
