@@ -4,6 +4,14 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.82
+
+- Update all appears on the device's page from two updates, as Install and Update show a single one.
+- The documentation is read against the code: the guide, the specification, the API, the manual and every README corrected.
+- Application builds refuse an empty data file, which the device would not install.
+- SDK: text helpers write nothing into a zero-sized buffer; an upward fixed-point rescale that does not fit returns 0.
+- The simulator accepts an empty stored value in a template, as the device does.
+
 ## 0.1.81
 
 - A new image whose probation record could not be read or written still goes through probation instead of running unconfirmed.
