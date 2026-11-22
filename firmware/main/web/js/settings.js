@@ -269,7 +269,7 @@ function showWifiNetworks(networks, selected = byId("ssid").value) {
 
 byId("wifi-networks").addEventListener("change", chooseWifiNetwork);
 byId("scan-networks").addEventListener("click", event => busy(event.target, async () => {
-  const result = await ask("/api/wifi/scan");
+  const result = await ask("/api/wifi/scan", post({}));
   showWifiNetworks(result.networks);
   if (!result.networks.length) toast("No networks found.");
 }));

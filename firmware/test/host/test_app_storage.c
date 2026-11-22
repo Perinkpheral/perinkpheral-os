@@ -163,6 +163,64 @@ static void write_bytes(const char *path, const char *content)
     }
 }
 
+static void check_application_data(const char *root, const char *content)
+{
+    char bytes[64] = { 0 };
+    long count = app_store_read_file(root, "clock", "app.wasm.part", 0, bytes, sizeof bytes);
+    CHECK(count == (long)strlen(content));
+    CHECK(memcmp(bytes, content, strlen(content)) == 0);
+}
+
+static void test_private_compaction_file(const char *root)
+{
+    char incoming[APP_STORE_PATH_MAX], private_part[APP_STORE_PATH_MAX];
+    const char *manifest = "{\"name\":\"clock\",\"title\":\"Clock\",\"abi\":3,\"writes_files\":true}";
+    CHECK(app_store_is_file_name("app.wasm.part"));
+    CHECK(!app_store_is_file_name(".app.wasm.part"));
+    CHECK(!app_store_begin_file(root, "clock", ".app.wasm.part", incoming));
+    CHECK(app_store_begin_file(root, "clock", APP_FILE_MANIFEST, incoming));
+    write_bytes(incoming, manifest);
+    CHECK(app_store_begin_file(root, "clock", APP_FILE_MODULE, incoming));
+    write_bytes(incoming, "new!");
+    CHECK(app_store_begin_file(root, "clock", "app.wasm.part", incoming));
+    write_bytes(incoming, "packaged data");
+    CHECK(app_store_commit_all(root, "clock"));
+
+    seed_code(1);
+    app_code_adopt(root);
+    check_application_data(root, "packaged data");
+    /* Both compaction and cleanup share a private name, including a failed rename. */
+    snprintf(private_part, sizeof private_part, "%s/clock/.app.wasm.part", root);
+    char module[APP_STORE_PATH_MAX];
+    snprintf(module, sizeof module, "%s/clock/app.wasm", root);
+    seed_code(1);
+    rename_failure = module;
+    pack(root);
+    rename_failure = NULL;
+    CHECK(access(private_part, F_OK) != 0);
+    check_application_data(root, "packaged data");
+    CHECK(header_at(1)->magic == SLOT_MAGIC);
+    pack(root);
+    CHECK(header_at(0)->magic == SLOT_MAGIC);
+    CHECK(access(private_part, F_OK) != 0);
+    CHECK(access(module, F_OK) != 0);
+    check_application_data(root, "packaged data");
+
+    CHECK(app_store_write_file(root, "clock", "app.wasm.part", 0, "runtime data!", 13) == APP_WRITE_OK);
+    CHECK(app_store_write_file(root, "clock", ".app.wasm.part", 0, "x", 1) == APP_WRITE_REFUSED);
+    write_bytes(private_part, "interrupted compaction");
+    app_code_start();
+    app_code_adopt(root);
+    CHECK(access(private_part, F_OK) != 0);
+    check_application_data(root, "runtime data!");
+    size_t size;
+    const uint8_t *code = app_code_find(root, "clock", &size);
+    CHECK(code != NULL && size == 4 && memcmp(code, "old!", 4) == 0);
+    app_code_adopt(root);
+    check_application_data(root, "runtime data!");
+    CHECK(app_store_remove(root, "clock"));
+}
+
 int main(void)
 {
     char root[] = "/tmp/perink-storage-XXXXXX";
@@ -365,6 +423,7 @@ int main(void)
     code = app_code_find(root, "c", &size);
     CHECK(code != NULL && size == 4 && memcmp(code, "cccc", 4) == 0);
     CHECK(rmdir(c) == 0);
+    test_private_compaction_file(root);
     CHECK(rmdir(root) == 0);
     REPORT();
 }

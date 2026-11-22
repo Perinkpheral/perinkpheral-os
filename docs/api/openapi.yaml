@@ -327,7 +327,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
 
   /api/wifi/scan:
-    get:
+    post:
       tags: [Settings]
       summary: Scan nearby Wi-Fi networks without changing the saved connection
       responses:
