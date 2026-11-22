@@ -67,6 +67,10 @@ async function run(statuses, { dropped = false, rejected = false, payload = imag
   result = await run([recovery(), recovery(8)]);
   assert.equal(result.reloads, 0);
   assert.ok(result.shown.some(([, text]) => text.includes("did not start")));
+  result = await run([recovery(), main(true), main(true), recovery(8)]);
+  assert.equal(result.reloads, 0, "reachable main with broken metadata must not report success");
+  assert.ok(result.shown.some(([, text]) => text.includes("did not start")));
+  assert.deepEqual(result.requests, ["/api/ota/recovery", "/api/ota"]);
   result = await run([recovery(), main(false, "34".repeat(32))]);
   assert.equal(result.reloads, 0);
   assert.ok(result.shown.some(([, text]) => text.includes("different firmware")));
@@ -125,6 +129,10 @@ async function runEmbedded(statuses, { dropped = false, rejected = false, payloa
   result = await runEmbedded([recovery(), recovery(8)]);
   assert.equal(result.reloads, 0);
   assert.match(result.message, /did not start/);
+  result = await runEmbedded([recovery(), main(true), main(true), recovery(8)]);
+  assert.equal(result.reloads, 0, "reachable main with broken metadata must not report success");
+  assert.match(result.message, /did not start/);
+  assert.equal(result.uploads, 1, "failed probation must not replay the upload");
   result = await runEmbedded([recovery(), main(false, "34".repeat(32))]);
   assert.equal(result.reloads, 0);
   assert.match(result.message, /different firmware/);

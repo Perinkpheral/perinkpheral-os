@@ -61,6 +61,9 @@ object FirmwareUpdateTest {
             .contains("confirmed"))
         check(requests == listOf("/api/ota/recovery", "/api/ota")) { "POST was retried" }
         fails("returned to recovery") { flow(listOf(recovery(), recovery(8))) }
+        // A reachable image with broken OTA metadata stays on probation until recovery restarts.
+        fails("returned to recovery") { flow(listOf(recovery(), main(true), main(true), recovery(8))) }
+        check(requests == listOf("/api/ota/recovery", "/api/ota")) { "failed probation replayed a POST" }
         fails("stopped in recovery") { flow(listOf(recovery(), recovery(state = "failed")), failPost = true) }
         fails("different firmware") { flow(listOf(recovery(), main(id = "00".repeat(32)))) }
         fails("not confirmed") { flow(listOf(recovery()), rejectPost = true) }

@@ -134,8 +134,9 @@ void ota_start(bool network_stored)
     s_network_stored = network_stored;
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
-    s_on_probation = running != NULL && esp_ota_get_state_partition(running, &state) == ESP_OK &&
-                     state == ESP_OTA_IMG_PENDING_VERIFY;
+    /* The bootloader can start main even if its NEW-to-PENDING_VERIFY write failed. */
+    s_on_probation = running == NULL || esp_ota_get_state_partition(running, &state) != ESP_OK ||
+                     state != ESP_OTA_IMG_VALID;
     ESP_LOGI(TAG, "running %s from %s%s", esp_app_get_description()->version,
              running != NULL ? running->label : "?", s_on_probation ? ", on probation" : "");
     if (s_on_probation) {

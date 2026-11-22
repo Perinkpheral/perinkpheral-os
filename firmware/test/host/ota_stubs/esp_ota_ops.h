@@ -3,8 +3,11 @@
 #include "../recovery_stubs/esp_ota_ops.h"
 
 typedef enum {
+    ESP_OTA_IMG_NEW,
     ESP_OTA_IMG_PENDING_VERIFY,
     ESP_OTA_IMG_VALID,
+    ESP_OTA_IMG_INVALID,
+    ESP_OTA_IMG_ABORTED,
     ESP_OTA_IMG_UNDEFINED,
 } esp_ota_img_states_t;
 
