@@ -57,6 +57,13 @@ TESTS   += test_app_update_policy
 TESTS   += test_app_update_schedule
 TESTS   += test_app_install test_system_settings
 TESTS   += test_wifi_events test_web_connections test_question_press test_launcher
+TESTS   += test_host_events
+
+# Unused hardware paths of host.c are discarded; the queue, buttons and frame path run here.
+comma := ,
+HOST_TEST_LDFLAGS := $(if $(filter Darwin,$(shell uname -s)),-Wl$(comma)-dead_strip,-Wl$(comma)--gc-sections)
+test_host_events: test_host_events.c tinytest.h $(MAIN)/host.c $(MAIN)/events.c $(MAIN)/question_press.c $(UI)/back_switch.c $(UI)/wm.c $(GFX_DEPS) $(wildcard $(MAIN)/*.h $(UI)/include/*.h event_stubs/*.h event_stubs/freertos/*.h persistence_stubs/*.h)
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -Ievent_stubs -Ipersistence_stubs $(MANIFEST_FLAGS) -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -I$(EPD)/include -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -o $@ test_host_events.c $(MAIN)/events.c $(MAIN)/question_press.c $(UI)/back_switch.c $(UI)/wm.c $(GFX_SRCS) $(HOST_TEST_LDFLAGS)
 
 test_question_press: test_question_press.c tinytest.h $(MAIN)/question_press.c $(MAIN)/question_press.h $(UI)/include/scene.h
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(UI)/include -I$(GFX)/include -o $@ test_question_press.c $(MAIN)/question_press.c

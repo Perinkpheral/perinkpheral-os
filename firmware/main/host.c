@@ -138,7 +138,7 @@ static const scene_button_t BUTTON_ROLE[] = {
     SCENE_BUTTON_UP, SCENE_BUTTON_OK, SCENE_BUTTON_DOWN, SCENE_BUTTON_BACK,
 };
 
-static void on_button(wm_t *wm, uint8_t index, event_press_t press, int64_t at_ms)
+static void on_button(wm_t *wm, uint8_t index, event_press_t press, int64_t at_ms, bool long_held)
 {
     static const scene_press_t SCENE_PRESS_OF[] = {
         [EVENT_PRESS_DOWN] = SCENE_PRESS_DOWN,
@@ -164,6 +164,11 @@ static void on_button(wm_t *wm, uint8_t index, event_press_t press, int64_t at_m
     /* BACK held with UP or DOWN: the neighbour in the menu's order. No scene sees such a press.
      * Not in the menu: it is the list itself, and its UP and DOWN choose a row. */
     static back_switch_state_t s_back_switch;
+    if (index == BUTTON_BACK_INDEX && press == EVENT_PRESS_UP && long_held) {
+        /* LONG can be refused when input is full; its meaning travels with the reserved UP. */
+        back_switch_press(&s_back_switch, SCENE_BUTTON_BACK, SCENE_PRESS_LONG,
+                           wm->current != wm->home);
+    }
     /* A hold ends with BACK's release, which the queue never drops (events_post_button). */
     back_switch_t chord = back_switch_press(&s_back_switch, BUTTON_ROLE[index], SCENE_PRESS_OF[press],
                                             wm->current != wm->home);
@@ -221,6 +226,7 @@ void host_open_from_menu(scene_t *scene)
 /* A wait shorter than this is the panel's own pace, not news. */
 #define TOLD_WAIT_FROM_MS 2000
 static bool s_wait_logged;
+static int64_t s_show_retry_at_ms;
 
 
 /* Puts the frame together and offers it to the display if anything
@@ -234,6 +240,10 @@ static uint32_t show_pending_frame(wm_t *wm, gfx_t *screen)
      * changed is shown when it is back. */
     if (change == WM_CLEAN || wm->suspended) {
         return NOTHING_TO_SHOW;
+    }
+    int64_t retry_wait_ms = s_show_retry_at_ms - esp_timer_get_time() / US_PER_MS;
+    if (retry_wait_ms > 0) {
+        return (uint32_t)retry_wait_ms;
     }
     refresh_reason_t reason = refresh_reason(change);
     /* Too soon for the panel: nothing is drawn for it to turn down, an
@@ -255,6 +265,7 @@ static uint32_t show_pending_frame(wm_t *wm, gfx_t *screen)
         return display_wait_ms(reason);
     case DISPLAY_FAILED:
         ESP_LOGW(TAG, "the panel did not take the frame");
+        s_show_retry_at_ms = esp_timer_get_time() / US_PER_MS + RETRY_FAILED_SHOW_MS;
         return RETRY_FAILED_SHOW_MS;
     case DISPLAY_SHOWN:
         s_frames_shown++;
@@ -262,6 +273,7 @@ static uint32_t show_pending_frame(wm_t *wm, gfx_t *screen)
     case DISPLAY_UNCHANGED:
         break;
     }
+    s_show_retry_at_ms = 0;
     question_press_shown(&s_question_press, wm->current, esp_timer_get_time() / US_PER_MS);
     wm_shown(wm);
     return NOTHING_TO_SHOW;
@@ -629,7 +641,8 @@ void host_run(void)
         const scene_t *scene_before = host_wm.current;
         switch (event.kind) {
         case EVENT_BUTTON:
-            on_button(&host_wm, event.button.index, event.button.press, event.button.at_ms);
+            on_button(&host_wm, event.button.index, event.button.press, event.button.at_ms,
+                       event.button.long_held);
             break;
         case EVENT_DEADLINES:
             answer_deadlines();

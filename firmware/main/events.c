@@ -31,6 +31,7 @@ static volatile uint32_t s_dropped;
 #define RELEASE_PLACES 4
 static SemaphoreHandle_t s_button_lock; /* one producer at a time between counting and posting */
 static bool              s_press_taken[RELEASE_PLACES];
+static bool              s_long_held[RELEASE_PLACES];
 _Static_assert(INPUT_QUEUE_LENGTH > RELEASE_PLACES, "the queue must leave room for presses");
 static uint32_t s_dropped_reported; /* by the host loop, which has the stack to say so */
 
@@ -79,17 +80,23 @@ void events_post_button(uint8_t index, event_press_t press)
     xSemaphoreTake(s_button_lock, portMAX_DELAY);
     UBaseType_t places = uxQueueSpacesAvailable(s_input);
     if (press == EVENT_PRESS_UP) {
+        event.button.long_held = index < RELEASE_PLACES && s_long_held[index];
         /* The release of a press the host loop never saw is not news to it either. */
         bool was_taken = index >= RELEASE_PLACES || s_press_taken[index];
         posted = was_taken && places > 0 && xQueueSend(s_input, &event, 0) == pdTRUE;
         if (index < RELEASE_PLACES) {
             s_press_taken[index] = false;
+            s_long_held[index] = false;
         }
     } else {
         posted = places > RELEASE_PLACES && xQueueSend(s_input, &event, 0) == pdTRUE;
         if (press == EVENT_PRESS_DOWN && index < RELEASE_PLACES && posted) {
             /* A press refused leaves one taken before it waiting for its release. */
             s_press_taken[index] = true;
+            s_long_held[index] = false;
+        }
+        if (press == EVENT_PRESS_LONG && index < RELEASE_PLACES && s_press_taken[index]) {
+            s_long_held[index] = true;
         }
     }
     xSemaphoreGive(s_button_lock);

@@ -38,6 +38,7 @@ typedef struct {
     union {
         struct {
             uint8_t       index; /* 0..3, as the buttons sit on the device */
+            bool          long_held; /* release after LONG, even if LONG did not fit the queue */
             event_press_t press;
             int64_t       at_ms; /* when it happened, by the clock of uptime */
         } button;            /* EVENT_BUTTON */
