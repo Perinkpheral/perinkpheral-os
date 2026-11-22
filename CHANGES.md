@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.87
+
+- An update through recovery no longer loses the network while the device asks for OK. Recovery stops reading the image until OK; with the unread image waiting, the device lost the access point about 25 seconds later and the update was lost. Received frames are now copied out of the Wi-Fi driver at once, in recovery and in the main firmware. Recovery reaches devices through the web flasher's Keep data or USB.
+
 ## 0.1.86
 
 - Wi-Fi: an access point that would not let the device in - a mesh node with a node restriction, one that never answers - is passed over for another point of the same network; before, every attempt went back to it, the update's probation gave up after three minutes and the device stayed in recovery. Recovery chooses its point the same way; it reaches devices only through the web flasher's Keep data or USB.

@@ -233,6 +233,15 @@ uploads through recovery, recovery once lost the access point's beacons (`bcn_ti
 middle of writing and the upload failed; it did not happen again in the uploads that followed
 and is not explained yet. The owner restarts the run on the fixed release.
 
+The upload failure was then isolated on the device (2026-11-23), without the user's OK and
+without writing flash, by an upload left waiting at the question: the whole image held unread
+lost the network in 6 of 6 trials, the image's header alone in 0 of 6, with or without other
+requests to the device; without power saving 3 of 3; with `CONFIG_LWIP_L2_TO_L3_COPY` 0 of 3,
+and 0 of 3 again with the release configuration of 0.1.87. Without the copy lwIP keeps received
+data in the Wi-Fi driver's eight receive buffers until it is read; that this starves beacon
+reception is inferred from these results, not measured. Main's memory with the copy, over ten
+minutes of normal work: about 101 KB free, at least 59 KB, a 71 KB largest block.
+
 ### 15 dBm Wi-Fi experiment
 
 The owner approved a 15 dBm transmit-power limit on 2026-11-18 for the next run.
