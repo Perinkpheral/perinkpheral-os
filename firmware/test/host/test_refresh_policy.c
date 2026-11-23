@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  */
+#include <limits.h>
+
 #include "refresh_policy.h"
 
 #include "tinytest.h"
@@ -96,9 +98,42 @@ static void test_keepalive(void)
     CHECK(go(&p, REFRESH_FOR_KEEPALIVE, day - 1) == REFRESH_NONE);
     CHECK(go(&p, REFRESH_FOR_KEEPALIVE, day) == REFRESH_FULL);
     CHECK(go(&p, REFRESH_FOR_KEEPALIVE, day + 1) == REFRESH_NONE);
-    /* any refresh in between postpones it */
-    go(&p, REFRESH_FOR_DATA, day + 1000 * 1000);
-    CHECK(go(&p, REFRESH_FOR_KEEPALIVE, 2 * day) == REFRESH_NONE);
+}
+
+/* The defaults: no count of partial refreshes ever asks for a full one, data once a minute. */
+static const refresh_policy_cfg_t DEFAULTS = {
+    .min_data_ms = 60 * 1000,
+    .min_button_ms = 0,
+    .full_every = INT_MAX,
+    .keepalive_ms = 24u * 3600u * 1000u,
+};
+
+static refresh_kind_t go_default(refresh_policy_t *p, refresh_reason_t why, int64_t now)
+{
+    refresh_kind_t k = refresh_policy_decide(p, &DEFAULTS, why, now);
+    refresh_policy_note(p, k, why, now);
+    return k;
+}
+
+static void test_cleaning_after_the_last_blink(void)
+{
+    refresh_policy_t p;
+    refresh_policy_init(&p);
+    int64_t day = 24LL * 3600 * 1000, minute = 60 * 1000;
+    CHECK(go_default(&p, REFRESH_FOR_SWITCH, 0) == REFRESH_FULL);
+    /* a clock changing every minute does not put the cleaning off */
+    for (int64_t at = minute; at < day; at += minute) {
+        CHECK(go_default(&p, REFRESH_FOR_DATA, at) == REFRESH_PARTIAL);
+    }
+    CHECK(refresh_policy_wait_ms(&p, &DEFAULTS, REFRESH_FOR_KEEPALIVE, day - 1000) == 1000);
+    CHECK(go_default(&p, REFRESH_FOR_KEEPALIVE, day - 1) == REFRESH_NONE);
+    CHECK(go_default(&p, REFRESH_FOR_KEEPALIVE, day) == REFRESH_FULL);
+    CHECK(go_default(&p, REFRESH_FOR_DATA, day + minute) == REFRESH_PARTIAL);
+    /* a full refresh of another reason - an application opened - is the blink it counts from */
+    CHECK(go_default(&p, REFRESH_FOR_SWITCH, day + 3600 * 1000) == REFRESH_FULL);
+    CHECK(go_default(&p, REFRESH_FOR_KEEPALIVE, 2 * day) == REFRESH_NONE);
+    CHECK(refresh_policy_wait_ms(&p, &DEFAULTS, REFRESH_FOR_KEEPALIVE, 2 * day) == 3600 * 1000);
+    CHECK(go_default(&p, REFRESH_FOR_KEEPALIVE, 2 * day + 3600 * 1000) == REFRESH_FULL);
 }
 
 static void test_wait(void)
@@ -175,6 +210,7 @@ int main(void)
     test_full_after_n_partials();
     test_switch_always_full();
     test_keepalive();
+    test_cleaning_after_the_last_blink();
     test_on_request();
     test_a_row_of_pictures();
     REPORT();

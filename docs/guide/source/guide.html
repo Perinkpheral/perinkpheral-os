@@ -78,7 +78,7 @@
   <tr><td>Depth</td><td class="n">1 bit</td><td>17 grey levels by fixed 4 x 4 dithering; for filled areas</td></tr>
   <tr><td>Partial refresh</td><td class="n">0.46 - 0.7 s</td><td>Sends the rectangle covering the current and preceding changed areas. 0.6 - 0.7 s when the panel has been idle for more than 1.5 s and is woken first</td></tr>
   <tr><td>Full refresh</td><td class="n">Fast: 2.2 s; standard: 2.7 s</td><td>The panel flashes during a full refresh. The refresh_fast setting selects the fast waveform</td></tr>
-  <tr><td>Full refresh interval</td><td class="n">disabled by default</td><td>Full refresh on screen changes, CLEAN requests and the 24-hour keep-alive. The user can enable a partial-refresh count</td></tr>
+  <tr><td>Full refresh interval</td><td class="n">disabled by default</td><td>Full refresh on screen changes, CLEAN requests and the cleaning 24 hours after the last full refresh. The user can enable a partial-refresh count</td></tr>
   <tr><td>Refresh after a button press</td><td class="n">immediate</td><td></td></tr>
   <tr><td>Refresh without a button press</td><td class="n">60 s normal data interval by default</td><td>Normal data refreshes may occur up to one second early. Button, SOON, CLEAN, NO_BLINK and urgent settings refreshes use their own policies. The panel manufacturer recommends 180 s for normal data refreshes</td></tr>
   <tr><td>Frame sequence rate</td><td class="n">about 1.5 frames/s</td><td><code>HOST_REDRAW_NO_BLINK</code>. Ghosting accumulates until the sequence ends</td></tr>

@@ -93,7 +93,7 @@ typedef struct {
     uint16_t refresh_min_data_s;    /* least seconds between refreshes nobody asked for */
     uint16_t refresh_min_button_ms; /* least pause before answering a press */
     uint8_t  refresh_full_every;    /* partial refreshes before a full one */
-    uint8_t  refresh_keepalive_h;   /* hours without a refresh before one is forced */
+    uint8_t  refresh_keepalive_h;   /* hours after a full refresh before a cleaning one is forced */
     uint8_t  refresh_fast;          /* 1: the shorter full refresh, with less of a blink */
     uint8_t  font;                  /* the typeface: 0 Departure Mono, 1 Jersey */
     uint8_t  dither;                /* 1: applications' greys are dithered; 0: black or white */

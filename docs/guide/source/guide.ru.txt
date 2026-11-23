@@ -205,8 +205,8 @@ Full refresh interval
 disabled by default
 по умолчанию отключено
 
-Full refresh on screen changes, CLEAN requests and the 24-hour keep-alive. The user can enable a partial-refresh count
-Полное обновление при смене экрана, запросе CLEAN и раз в 24 часа. Пользователь может включить счётчик частичных обновлений
+Full refresh on screen changes, CLEAN requests and the cleaning 24 hours after the last full refresh. The user can enable a partial-refresh count
+Полное обновление при смене экрана, запросе CLEAN и очистка через 24 часа после последнего полного обновления. Пользователь может включить счётчик частичных обновлений
 
 Refresh after a button press
 Обновление после нажатия кнопки

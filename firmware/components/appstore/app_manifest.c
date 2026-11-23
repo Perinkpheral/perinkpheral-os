@@ -651,6 +651,8 @@ typedef struct {
 } host_t;
 
 #define NO_PORT    0
+#define BAD_PORT   (-1) /* not a number from 1 to 65535: matches nothing */
+#define PORT_MOST  65535
 #define HTTP_PORT  80
 #define HTTPS_PORT 443
 
@@ -661,9 +663,14 @@ static host_t host_of(const char *text, size_t length)
     const char *colon = memchr(text, ':', length);
     if (colon != NULL) {
         host.name_length = (size_t)(colon - text);
-        for (const char *digit = colon + 1; digit < text + length; digit++) {
-            host.port = host.port * 10 + (*digit - '0');
+        /* Digits only, and never past 65535: a port is counted, not overflowed. */
+        int port = 0;
+        const char *digit = colon + 1;
+        for (; digit < text + length && *digit >= '0' && *digit <= '9' && port <= PORT_MOST; digit++) {
+            port = port * 10 + (*digit - '0');
         }
+        host.port = digit == text + length && digit > colon + 1 && port >= 1 && port <= PORT_MOST
+                        ? port : BAD_PORT;
     }
     return host;
 }
@@ -685,6 +692,9 @@ static bool host_in_url(const char *url, host_t *host)
         return false;
     }
     *host = host_of(text, length);
+    if (host->port == BAD_PORT) {
+        return false;
+    }
     if (host->port == NO_PORT) {
         host->port = is_https ? HTTPS_PORT : HTTP_PORT;
     }

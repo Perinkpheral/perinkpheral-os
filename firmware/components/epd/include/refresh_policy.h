@@ -14,7 +14,8 @@ extern "C" {
 /* Refresh policy, from the Waveshare rules for the 4.2" V2:
  *   - data-driven refreshes: at least min_data_ms apart;
  *   - a full refresh after full_every partial ones;
- *   - at least one refresh per keepalive_ms;
+ *   - a full refresh at most keepalive_ms after the last full one, however many partial ones
+ *     came between: the panel is cleaned the manufacturers' way at least that often;
  *   - a refresh after a button press: at least min_button_ms apart (default 0);
  *   - a change of the current scene: always a full refresh.
  * Pure, host-tested. */
@@ -25,7 +26,7 @@ typedef enum {
     REFRESH_FOR_BUTTON,    /* button press */
     REFRESH_FOR_CLEAN,     /* HOST_REDRAW_CLEAN: full */
     REFRESH_FOR_SWITCH,    /* change of the current scene: full */
-    REFRESH_FOR_KEEPALIVE, /* no refresh within keepalive_ms */
+    REFRESH_FOR_KEEPALIVE, /* no full refresh within keepalive_ms: a cleaning one, never fast */
 } refresh_reason_t;
 
 /* Minimum interval between refreshes for REFRESH_FOR_REQUEST. */
@@ -55,6 +56,7 @@ typedef struct {
     bool    data_shown;   /* a data-driven refresh was made since boot */
     int64_t last_data_ms; /* time of the last data-driven refresh */
     int     partials;
+    int64_t last_full_ms; /* time of the last full refresh */
 } refresh_policy_t;
 
 void refresh_policy_init(refresh_policy_t *p);

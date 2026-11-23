@@ -106,8 +106,8 @@ Font, clock in header, default app and idle timeout. The default app opens after
 <b>Display</b>
 <b>Экран</b>
 
-<b>Refresh interval</b> limits automatic screen refreshes, not data downloads. <b>Full refresh</b> controls routine cleaning of faint traces. <b>Forced refresh</b> cleans the screen after the selected time without a refresh. <b>Fast refresh</b> shortens full refreshes. Changing applications can still cause a full refresh.
-<b>Интервал</b> ограничивает автоматическое обновление экрана, а не загрузку данных. <b>Полное обновл.</b> задаёт регулярную очистку бледных следов. <b>Принудит. обновл.</b> очищает экран после выбранного времени без обновления. <b>Быстрое обновл.</b> сокращает полное обновление. При переключении приложений полное обновление всё равно возможно.
+<b>Refresh interval</b> limits automatic screen refreshes, not data downloads. <b>Full refresh</b> controls routine cleaning of faint traces. <b>Forced refresh</b> cleans the screen with a full refresh when the selected time has passed since the last one, however often the picture changed. <b>Fast refresh</b> shortens full refreshes. Changing applications can still cause a full refresh.
+<b>Интервал</b> ограничивает автоматическое обновление экрана, а не загрузку данных. <b>Полное обновл.</b> задаёт регулярную очистку бледных следов. <b>Принудит. обновл.</b> очищает экран полным обновлением, когда с последнего прошло выбранное время, как бы часто ни менялось изображение. <b>Быстрое обновл.</b> сокращает полное обновление. При переключении приложений полное обновление всё равно возможно.
 
 <b>Wi-Fi</b>
 <b>Wi-Fi</b>

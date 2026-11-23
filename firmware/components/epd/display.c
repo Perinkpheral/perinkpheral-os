@@ -72,11 +72,11 @@ static int64_t now_ms(void)
     return esp_timer_get_time() / US_PER_MS;
 }
 
-/* With the lock held: the refresh that is due when nothing else was,
- * counted from this one. */
+/* With the lock held: the cleaning refresh, due keepalive_ms after the last full one. */
 static void expect_keepalive(void)
 {
-    deadlines_set_in(DEADLINE_PANEL_KEEPALIVE, 0, 0, (int64_t)s_cfg.keepalive_ms);
+    deadlines_set_in(DEADLINE_PANEL_KEEPALIVE, 0, 0,
+                     refresh_policy_wait_ms(&s_policy, &s_cfg, REFRESH_FOR_KEEPALIVE, now_ms()));
 }
 
 /* Asks the policy and drives the panel. REFRESH_NONE: the policy said
@@ -93,7 +93,8 @@ static refresh_kind_t refresh_panel(const uint8_t *frame, refresh_reason_t why, 
                               : WHOLE_FRAME;
     frame_box_t window = WHOLE_FRAME;
     if (kind == REFRESH_FULL) {
-        *err = epd_show_full(frame, s_cfg.full_is_fast);
+        /* The cleaning one takes the normal waveform, which clears the panel better than the fast. */
+        *err = epd_show_full(frame, s_cfg.full_is_fast && why != REFRESH_FOR_KEEPALIVE);
         deadlines_cancel(DEADLINE_PANEL_SLEEP, 0, 0);
     } else {
         window = window_for(frame);
@@ -146,9 +147,7 @@ void display_keepalive(void)
         }
     } else {
         /* Came early - the setting was changed since: at its time, then. */
-        deadlines_set_in(DEADLINE_PANEL_KEEPALIVE, 0, 0,
-                         refresh_policy_wait_ms(&s_policy, &s_cfg, REFRESH_FOR_KEEPALIVE,
-                                                now_ms()));
+        expect_keepalive();
     }
     xSemaphoreGive(s_lock);
 }

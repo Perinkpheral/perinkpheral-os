@@ -4,6 +4,11 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.91
+
+- The panel is cleaned with a full refresh 24 hours (Forced refresh) after the last full refresh, however often the picture changed: before, every partial refresh put the cleaning off, so a screen with a clock in its header was never cleaned until another application was opened. The cleaning uses the normal waveform, which clears the panel better than the fast one.
+- A manifest host with a port that is not a number from 1 to 65535 is refused; before, a long port overflowed the parser (found by fuzzing).
+
 ## 0.1.90
 
 - The device page draws its own scroll bars, lists and date picker in ink on paper, where the browser showed its system's; on a touch screen a list keeps the phone's own chooser. The Network pane looks for networks as it opens.

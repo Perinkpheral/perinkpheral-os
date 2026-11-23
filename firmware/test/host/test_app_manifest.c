@@ -313,6 +313,14 @@ static void test_a_server_of_the_users_own(void)
                                   setting_value, NULL));
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:9000/api", setting_value, NULL));
     CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.11:8123/api", setting_value, NULL));
+    /* a port is a number from 1 to 65535 and nothing else: one that is not - however long,
+     * found by fuzzing to overflow the parser - reaches nothing */
+    CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:99999999999999999999/api", setting_value, NULL));
+    CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:8123x/api", setting_value, NULL));
+    CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:65536/api", setting_value, NULL));
+    CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:0/api", setting_value, NULL));
+    CHECK(!app_manifest_allows_url(manifest, "http://192.168.1.10:/api", setting_value, NULL));
+    CHECK(!app_manifest_accepts_setting(manifest, "server", "http://192.168.1.10:4294975419", NULL));
     server_setting = "http://example.com";
     CHECK(app_manifest_allows_url(manifest, "http://example.com/api", setting_value, NULL));
     CHECK(!app_manifest_allows_url(manifest, "https://example.com/api", setting_value, NULL));

@@ -11,6 +11,7 @@ void refresh_policy_init(refresh_policy_t *p)
     p->data_shown = false;
     p->last_data_ms = 0;
     p->partials = 0;
+    p->last_full_ms = 0;
 }
 
 /* When a refresh for this reason may come, the earliest; a moment that is
@@ -20,7 +21,9 @@ static int64_t allowed_at_ms(const refresh_policy_t *p, const refresh_policy_cfg
 {
     switch (why) {
     case REFRESH_FOR_KEEPALIVE:
-        return p->last_ms + (int64_t)cfg->keepalive_ms;
+        /* Counted from the last blink, not the last refresh: a clock that changes every minute
+         * would otherwise put it off for ever. */
+        return p->last_full_ms + (int64_t)cfg->keepalive_ms;
     case REFRESH_FOR_BUTTON:
         return p->last_ms + (int64_t)cfg->min_button_ms;
     case REFRESH_FOR_ROW:
@@ -89,4 +92,7 @@ void refresh_policy_note(refresh_policy_t *p, refresh_kind_t kind, refresh_reaso
         p->last_data_ms = now_ms;
     }
     p->partials = kind == REFRESH_FULL ? 0 : p->partials + 1;
+    if (kind == REFRESH_FULL) {
+        p->last_full_ms = now_ms;
+    }
 }
