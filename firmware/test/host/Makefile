@@ -41,11 +41,14 @@ QR_SRCS := $(QR)/qrcodegen/qrcodegen.c $(QR)/wifi_qr.c
 QR_INCS := -I$(QR)/include -I$(QR)/qrcodegen
 TESTS   := test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
 TESTS   += test_answer_headers test_web_settings_json test_web_app_settings
-TESTS   += test_map
+TESTS   += test_map test_map_land
 
 
 test_map: test_map.c tinytest.h $(MAP_DEPS) $(GFX_DEPS)
 	$(CC) $(CFLAGS) -I$(MAP)/include -I$(GFX)/include -I$(GFX)/fonts -o $@ test_map.c $(MAP_SRCS) $(GFX)/gfx.c $(GFX)/font_square.c -lm
+
+test_map_land: test_map_land.c tinytest.h $(MAP)/map_land.c $(wildcard $(MAP)/include/*.h)
+	$(CC) $(CFLAGS) -I$(MAP)/include -o $@ test_map_land.c $(MAP)/map_land.c
 
 # Not a test: how long the views take, and an estimate for the C6 (bench_map.c).
 bench_map: bench_map.c bench_map.h $(MAP_DEPS) $(GFX_DEPS)

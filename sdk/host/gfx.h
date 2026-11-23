@@ -247,15 +247,17 @@ HOST_IMPORT(gfx_draw_picture,
  *   HOST_MAP_WORLD  the whole Earth over the rectangle: 180 W at the left edge, 90 N at the
  *                   top, degrees evenly spaced. lat_e6, lon_e6 and m_per_px must be 0.
  *   HOST_MAP_AEQD   azimuthal equidistant round (lat_e6, lon_e6): distance and direction
- *                   from the centre are true, north is up the centre's meridian (on a pole,
- *                   the centre's longitude runs down from the centre). m_per_px is
- *                   500..25000 metres a pixel, and no corner may be more than 6000 km from
- *                   the centre: m_per_px * sqrt((w/2)^2 + (h/2)^2) <= 6000000. A 400 x 260
- *                   map can take 25000; a 400 x 300 one 24000.
+ *                   from the centre are true, north is up the centre's meridian (centred on
+ *                   the North Pole, the centre meridian runs down; at the South Pole, up).
+ *                   m_per_px is 500..25000 metres a pixel, and no corner may be more than
+ *                   6000 km from the centre: m_per_px * sqrt((w/2)^2 + (h/2)^2) <= 6000000.
+ *                   A 400 x 260 map can take 25000; a 400 x 300 one 24000.
  * land and sea are colours as gfx_set_color() takes them, 0..16: dithered greys, or with
  * dithering disabled 1..7 paper and 8..15 ink. HOST_MAP_COASTLINE in flags draws a solid
- * line of ink on the land side of every coast; other bits must be 0. A pixel shows what is at
- * its centre. An invalid map is refused with HOST_ERR_ARGUMENT. */
+ * line of ink on the land side of every coast; other bits must be 0. The land data is stored
+ * losslessly. Pixel centres are projected to within about 0.12 pixel, using interpolation
+ * on an eight-pixel grid. A centre near a source cell's edge may select a
+ * neighbouring cell. An invalid map is refused with HOST_ERR_ARGUMENT. */
 #define HOST_MAP_WORLD 0
 #define HOST_SINCE_HOST_MAP_WORLD "0.1.94"
 #define HOST_MAP_AEQD 1
@@ -276,9 +278,10 @@ typedef struct host_map_point {
 HOST_LAYOUT(host_map_point_t, 12);
 
 /* Draws the map: every pixel of its rectangle, clipped to the surface, land or sea. The colour
- * stays as it was. Up to about a quarter of a second on the device, about a second for a
- * large map near a pole. While it draws it takes 8 KB of the application's 64 KB working
- * area; HOST_ERR_NO_SPACE when that much is not free. Requires app_on_draw(). */
+ * stays as it was. Device drawing times estimated from host benchmarks: up to about a quarter
+ * of a second, about a second for a large map near a pole; not measured on the device.
+ * While it draws it takes 8 KB of the application's 64 KB working area; HOST_ERR_NO_SPACE
+ * when that much is not free. Requires app_on_draw(). */
 #define HOST_SINCE_gfx_draw_map "0.1.94"
 HOST_IMPORT(gfx_draw_map, int32_t gfx_draw_map(const host_map_t *map));
 

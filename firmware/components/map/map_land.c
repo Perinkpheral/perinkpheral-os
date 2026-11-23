@@ -28,12 +28,14 @@ void map_land_start(map_land_t *land, int block)
         land->is_broken = true;
         return;
     }
-    land->at = map_land_stream + map_land_block[block];
-    land->end = map_land_stream + map_land_block[block + 1];
-    if (land->end - land->at < 4) {
+    uint32_t begin = map_land_block[block];
+    uint32_t end = map_land_block[block + 1];
+    if (begin > end || end > MAP_LAND_STREAM_BYTES || end - begin < sizeof(land->state)) {
         land->is_broken = true;
         return;
     }
+    land->at = map_land_stream + begin;
+    land->end = map_land_stream + end;
     land->state = (uint32_t)land->at[0] | (uint32_t)land->at[1] << 8 | (uint32_t)land->at[2] << 16 |
                   (uint32_t)land->at[3] << 24;
     land->at += 4;
