@@ -171,7 +171,7 @@ class DeviceClient(val host: String) {
     /** The frame the panel shows, as rows of pixels (true: ink), its number, and whether a
      * newer one is waiting for the panel. */
     fun screen(): Screen {
-        val response = send("/api/dev/screen")
+        val response = send("/api/screen")
         val number = response.header("X-Frame")?.toIntOrNull()
             ?: throw IOException("the answer is not a frame: is the firmware built with APP_DEV_CONSOLE?")
         return Screen(Bmp.rows(response.body), number, response.header("X-Pending") == "1")

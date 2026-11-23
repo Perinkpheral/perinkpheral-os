@@ -278,7 +278,7 @@ class Layers(firmwareFolder: File) {
             "host_deliver", "app_kv_set", "host_redraw", "glyphs_install", "glyphs_remove",
             "app_store_commit_all", "app_store_commit_file", "settings_change", "settings_set",
             "settings_save_last_app", "settings_save_menu_order", "launcher_scene", "host_open_from_menu", "host_open_installed_app")
-        private val OTHER_TASKS = listOf("main/web_server.c", "main/web_apps.c", "main/devtools.c", "main/app_install.c",
+        private val OTHER_TASKS = listOf("main/web_server.c", "main/web_apps.c", "main/web_screen.c", "main/devtools.c", "main/app_install.c",
             "main/web_connections.c")
     }
 }

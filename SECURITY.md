@@ -108,10 +108,12 @@ Does not hold:
   are not transactional: a failed save can leave a supplied secret deleted.
   HA Companion's hidden fields are normally provisioned by its integration.
   A peer can also add a catalog and install an application.
+- **They see the screen.** `/api/screen` gives the frame the panel shows, whatever an
+  application puts there (events, Home Assistant values), in every build.
 - **The page is plain `http`.** A token typed into it crosses the network in the clear.
 - In a build with the development tools (`APP_DEV_CONSOLE`, on by default): `/api/dev/flash`
   refuses direct updates (recovery requires physical OK), `/api/dev/kv` writes any key of any
-  application, `/api/dev/screen` gives the screen, and `/api/dev/button` can answer
+  application, and `/api/dev/button` can answer
   main-firmware confirmation questions. Such a build is for a bench; releases omit it.
 
 ### Somebody near the device with a radio, not on the network

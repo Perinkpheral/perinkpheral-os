@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.89
+
+- The device page saves a screenshot: Device > Screenshot downloads what the screen shows as a PNG. The picture is `GET /api/screen` in every build, apart from the development tools, which no longer have `/api/dev/screen`; `tools/perinkpheral shot` and `serve` use the new route, so they also work with release builds.
+
 ## 0.1.88
 
 - The device calls its own system "Perinkpheral OS" where it said "firmware": the update question, the start and check screens of recovery, the message of an application that needs a newer system on the device and on its page, and the About row. The update question no longer fits the large font and is set in the regular one.

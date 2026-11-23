@@ -61,7 +61,7 @@ Blender or silently regenerate reviewed artwork.
   Raster dimensions and quality are preserved; SVGs embed the original PNG bytes.
   The base and USB-port PNG renders stay in the review folder as SVG inputs.
 - `screen_pictures.py` runs the real Settings and Weather applications through
-  `tools/perinkpheral sim`, captures `/api/dev/screen`, and uses
+  `tools/perinkpheral sim`, captures `/api/screen`, and uses
   `tools/perinkpheral press` for navigation. Weather answers are fictional,
   generated with seed 417. Other requests are refused by a catch-all mock.
   The response status is checked before taking each weather picture, so a loading

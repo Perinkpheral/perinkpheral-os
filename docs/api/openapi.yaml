@@ -299,6 +299,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Status" }
 
+  /api/screen:
+    get:
+      tags: [Device]
+      summary: The frame on the panel; the page saves it as a screenshot
+      description: |
+        503 text/plain body: `no memory` or `the host did not answer`
+      responses:
+        "200":
+          description: 1-bit BMP, 400 x 300
+          headers:
+            X-Frame: { schema: { type: integer }, description: How many frames the panel has shown since start }
+            X-Pending: { schema: { type: string, enum: ["0", "1"] }, description: "1: a newer frame is on its way to the panel" }
+          content:
+            image/bmp: {}
+
   /api/log:
     get:
       tags: [Device]
@@ -873,21 +888,6 @@ paths:
       responses:
         "409": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
-
-  /api/dev/screen:
-    get:
-      tags: [Development]
-      summary: The frame on the panel
-      description: |
-        503 text/plain body: `no memory` or `the host did not answer`
-      responses:
-        "200":
-          description: 1-bit BMP, 400 x 300
-          headers:
-            X-Frame: { schema: { type: integer }, description: How many frames the panel has shown since start }
-            X-Pending: { schema: { type: string, enum: ["0", "1"] }, description: "1: a newer frame is on its way to the panel" }
-          content:
-            image/bmp: {}
 
   /api/dev/button:
     post:

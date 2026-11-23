@@ -127,7 +127,8 @@ const WORDS = { Save: ["Saving", "Saved"], Install: ["Installing", "Installed"],
                 Connect: ["Connecting", "Connected"], Restart: ["Restarting", "Restarting"],
                 "Enter recovery": ["Entering recovery", "Entering recovery"],
                 "Factory reset": ["Resetting", "Reset"], Refresh: ["Loading", "Refresh"],
-                Set: ["Setting", "Set"], "Check for updates": ["Checking", "Check for updates"] };
+                Set: ["Setting", "Set"], "Check for updates": ["Checking", "Check for updates"],
+                Screenshot: ["Saving", "Saved"] };
 
 /* Runs the work with the button showing it: dots while it goes on, a tick
  * when it is done, and the button as it was a moment later. What went

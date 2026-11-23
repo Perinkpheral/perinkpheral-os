@@ -16,11 +16,8 @@ extern "C" {
 /* Development tools over the network, off in release builds
  * (APP_DEV_CONSOLE): what tools/perinkpheral talks to. With them the device is
  * looked at, driven and given a new build of an application without a
- * cable and without hands on it.
+ * cable and without hands on it. The screen itself is web_screen.h's, in every build.
  *
- *   GET  /api/dev/screen                    the frame the panel shows, a 1-bit BMP;
- *                                           X-Frame counts refreshes, X-Pending is 1
- *                                           while a newer frame waits for the panel
  *   POST /api/dev/button?button=1..4&press=short|long|down|up
  *   POST /api/dev/open?app=<name>           put an installed application on the screen
  *   POST /api/dev/app?name=<name>&file=manifest.json|app.wasm|<data file>

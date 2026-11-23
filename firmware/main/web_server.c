@@ -47,6 +47,7 @@
 #include "settings.h"
 #include "storage.h"
 #include "web_apps.h"
+#include "web_screen.h"
 #include "web_settings_json.h"
 #include "status.h"
 #include "wifi.h"
@@ -860,7 +861,7 @@ void web_server_start(void)
      * a browser lets one go. Seen on 2026-11-17: seven promised where five were
      * left. So it may hold what the others leave. */
     server_config.max_open_sockets = WEB_PAGE_SOCKETS;
-    server_config.max_uri_handlers = WEB_ROUTE_COUNT(ROUTES) + WEB_APPS_ROUTE_COUNT;
+    server_config.max_uri_handlers = WEB_ROUTE_COUNT(ROUTES) + WEB_APPS_ROUTE_COUNT + WEB_SCREEN_ROUTE_COUNT;
 #ifdef CONFIG_APP_DEV_CONSOLE
     server_config.max_uri_handlers += DEVTOOLS_ROUTE_COUNT;
 #endif
@@ -874,6 +875,7 @@ void web_server_start(void)
     memory_on_pressure(close_connections);
     register_routes(server, ROUTES, WEB_ROUTE_COUNT(ROUTES));
     register_routes(server, WEB_APPS_ROUTES, WEB_APPS_ROUTE_COUNT);
+    register_routes(server, WEB_SCREEN_ROUTES, WEB_SCREEN_ROUTE_COUNT);
 #ifdef CONFIG_APP_DEV_CONSOLE
     register_routes(server, DEVTOOLS_ROUTES, DEVTOOLS_ROUTE_COUNT);
     ESP_LOGW(TAG, "development tools are on at /api/dev");

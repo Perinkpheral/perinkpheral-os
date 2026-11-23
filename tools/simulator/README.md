@@ -25,7 +25,7 @@ no two of them, and no other program, can be given the same port.
 
 | Device | Simulator |
 |---|---|
-| Panel | a frame in memory, `/api/dev/screen`; its address in a browser shows the page of `perinkpheral serve` - the screen, the buttons, the log, and the requests below as buttons |
+| Panel | a frame in memory, `/api/screen`; its address in a browser shows the page of `perinkpheral serve` - the screen, the buttons, the log, and the requests below as buttons |
 | Buttons | `/api/dev/button` |
 | Store (NVS) | a folder, a file per key, the device's limits |
 | Files (LittleFS) | the built package copied to `<state>/apps/<name>`; files written by the application remain there between runs unless replaced by package files; `--state <directory>` selects the state folder |

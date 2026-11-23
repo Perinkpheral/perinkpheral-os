@@ -73,7 +73,7 @@ let frame = null;
 
 async function look() {
   try {
-    const answer = await fetch("/api/dev/screen");
+    const answer = await fetch("/api/screen");
     if (!answer.ok) throw new Error(await answer.text());
     const number = answer.headers.get("X-Frame");
     if (number !== frame) {

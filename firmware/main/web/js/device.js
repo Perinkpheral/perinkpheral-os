@@ -128,7 +128,7 @@ async function lookAtScreen() {
   clearTimeout(screenTimer);
   if (!status.dev_tools || currentSection() !== "control" || document.hidden) return;
   try {
-    const answer = await fetch("/api/dev/screen");
+    const answer = await fetch("/api/screen");
     if (answer.ok) {
       const number = answer.headers.get("X-Frame");
       if (number !== frame) {
@@ -347,6 +347,34 @@ let latestImage = null;
 byId("ota-update").addEventListener("click", () => {
   if (latestImage) updateFirmware(latestImage.url, latestImage.size);
 });
+
+/* ---- the screenshot ---- */
+
+/* What the panel shows, saved as a PNG at twice its size, its pixels kept square: a picture to
+ * send with a question about the device. */
+const SHOT_SCALE = 2;
+
+function shotName(when) {
+  const two = number => String(number).padStart(2, "0");
+  return "perinkpheral-" + when.getFullYear() + "-" + two(when.getMonth() + 1) + "-" + two(when.getDate()) +
+         "-" + two(when.getHours()) + two(when.getMinutes()) + two(when.getSeconds()) + ".png";
+}
+
+byId("screenshot").addEventListener("click", event => busy(event.currentTarget, async () => {
+  const answer = await fetch("/api/screen", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+  if (!answer.ok) throw Error(answer.status === 503 ? "Device busy." : "HTTP " + answer.status);
+  const frame = await createImageBitmap(await answer.blob());
+  const canvas = make("canvas", { width: frame.width * SHOT_SCALE, height: frame.height * SHOT_SCALE });
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = false;
+  context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+  frame.close();
+  const picture = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+  if (!picture) throw Error("Screenshot failed.");
+  const link = make("a", { href: URL.createObjectURL(picture), download: shotName(new Date()) });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}));
 
 /* ---- restart and reset ---- */
 

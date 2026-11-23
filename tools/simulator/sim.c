@@ -1787,7 +1787,7 @@ static void handle(int socket_fd, const request_t *request)
         answer_status(socket_fd);
     } else if (strcmp(path, "/api/log") == 0) {
         answer_log(socket_fd, request);
-    } else if (strcmp(path, "/api/dev/screen") == 0) {
+    } else if (strcmp(path, "/api/screen") == 0) {
         show();
         answer_screen(socket_fd);
     } else if (is_post && strcmp(path, "/api/dev/button") == 0) {

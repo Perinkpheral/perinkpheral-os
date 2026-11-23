@@ -76,7 +76,7 @@ object Generated {
 
     /** Route tables are the endpoint surface. Payloads remain documented by hand. */
     fun checkApi(root: File): String {
-        val routes = listOf("web_server.c", "web_apps.c", "devtools.c").flatMap { name ->
+        val routes = listOf("web_server.c", "web_apps.c", "web_screen.c", "devtools.c").flatMap { name ->
             Regex("\\{\\s*\"([^\"]+)\",\\s*HTTP_(GET|POST),")
                 .findAll(File(root, "firmware/main/$name").readText())
                 .map { "${it.groupValues[2]} ${it.groupValues[1]}" }.toList()

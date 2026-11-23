@@ -119,7 +119,7 @@ def capture_app(app, language, shots, values=None, expected_status=None):
                 if process.poll() is not None:
                     raise RuntimeError('Simulator exited; see ' + str(log.name))
                 try:
-                    urllib.request.urlopen(address + '/api/dev/screen', timeout=1).read()
+                    urllib.request.urlopen(address + '/api/screen', timeout=1).read()
                     break
                 except (urllib.error.URLError, TimeoutError):
                     if time.monotonic() > deadline:
@@ -141,7 +141,7 @@ def capture_app(app, language, shots, values=None, expected_status=None):
                         time.sleep(0.1)
                 # Let the queued draw reach the panel after the response callback.
                 time.sleep(1)
-                data = urllib.request.urlopen(address + '/api/dev/screen', timeout=10).read()
+                data = urllib.request.urlopen(address + '/api/screen', timeout=10).read()
                 (output / (name + '-' + language + '.bmp')).write_bytes(data)
                 bmp(data, output / (name + '-' + language + '.png'))
         finally:

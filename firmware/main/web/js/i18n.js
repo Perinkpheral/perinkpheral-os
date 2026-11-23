@@ -39,6 +39,7 @@ const RUSSIAN = {
   "Firmware download size does not match the release. Try again.": "Размер скачанной прошивки не совпадает с релизом. Повторите загрузку.",
   "Could not check the firmware download. Try again.": "Не удалось проверить доступность прошивки. Повторите попытку.",
   "Restart device?": "Перезагрузить устройство?",
+  "Screenshot": "Снимок экрана", "Screenshot failed.": "Не удалось сделать снимок.",
   "Logging enabled": "Журналирование включено",
   "Log level": "Уровень логирования",
   "Warnings": "Предупреждения", "Information": "Информация",

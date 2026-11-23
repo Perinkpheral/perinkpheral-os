@@ -78,7 +78,7 @@ class PageServer(private val client: DeviceClient, private val appDir: File?, pr
                     .use { String(it.readBytes(), Charsets.UTF_8) }.replace("{{app}}", appDir?.path.orEmpty())
                 answer(exchange, 200, page.toByteArray(), "text/html; charset=utf-8")
             }
-            exchange.requestMethod == "GET" && path == "/api/dev/screen" ->
+            exchange.requestMethod == "GET" && path == "/api/screen" ->
                 passOn(exchange, path, expose = listOf("X-Frame", "X-Pending"))
             exchange.requestMethod == "GET" && path == "/api/log" ->
                 passOn(exchange, path + (exchange.requestURI.rawQuery?.let { "?$it" } ?: ""), expose = listOf("X-Log-End", "X-Log-Boot"))
