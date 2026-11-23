@@ -242,6 +242,10 @@ data in the Wi-Fi driver's eight receive buffers until it is read; that this sta
 reception is inferred from these results, not measured. Main's memory with the copy, over ten
 minutes of normal work: about 101 KB free, at least 59 KB, a 71 KB largest block.
 
+Checked live on 2026-11-23 with the owner's OK: an update to 0.1.92 through recovery held the
+question on the screen for 42 s before OK, with no beacon loss and no disconnect; the image was
+written, started and confirmed.
+
 ### 15 dBm Wi-Fi experiment
 
 The owner approved a 15 dBm transmit-power limit on 2026-11-18 for the next run.
