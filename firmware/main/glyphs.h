@@ -21,6 +21,9 @@ extern "C" {
 
 #define GLYPHS_PACKS_MAX     8
 #define GLYPHS_PACK_MAX_BYTES (32 * 1024)
+#define GLYPHS_SECTOR_BYTES   4096
+/* Two sectors remain in memory while packs move past one another. */
+#define GLYPHS_COMPACTION_BYTES (2 * GLYPHS_SECTOR_BYTES)
 
 typedef struct {
     char   name[GFX_PACK_NAME_MAX + 1];

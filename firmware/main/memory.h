@@ -5,6 +5,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -28,6 +29,7 @@ typedef enum {
     MEMORY_FOR_A_PAGE,    /* an answer of the web server's put together in memory */
     MEMORY_FOR_AN_UPDATE, /* a firmware image taken in */
     MEMORY_FOR_A_PICTURE, /* a copy of the frame on the panel, 15 KB in one block */
+    MEMORY_FOR_A_GLYPH_PACK, /* sized by the upload, including compaction */
     MEMORY_NEEDS,
 } memory_need_t;
 
@@ -36,6 +38,10 @@ void memory_start(void);
 
 /* Whether there is room for it now. A refusal is counted. From any task. */
 bool memory_has(memory_need_t need);
+
+/* The declared upload size plus compaction and the page's spare heap.
+ * A refusal is counted. Invalid pack sizes are refused too. */
+bool memory_has_glyph_pack(size_t pack_bytes);
 
 /* `shed` is called, in the host loop, when the heap is critically short:
  * whoever can give memory back does. A few of them. */

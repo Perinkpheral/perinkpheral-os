@@ -36,6 +36,7 @@
 #include "host_api.h"
 #include "events.h"
 #include "gfx_icons.h"
+#include "glyphs.h"
 #include "host.h"
 #include "m3_area.h"
 #include "ota.h"
@@ -346,7 +347,14 @@ static void close_connections(void)
 
 bool web_server_has_memory(httpd_req_t *request, memory_need_t need)
 {
-    if (memory_has(need)) {
+    if (need == MEMORY_FOR_A_GLYPH_PACK &&
+        (request->content_len < 1 || request->content_len > GLYPHS_PACK_MAX_BYTES)) {
+        /* The handler rejects invalid sizes without allocating a pack. */
+        return true;
+    }
+    bool has = need == MEMORY_FOR_A_GLYPH_PACK ? memory_has_glyph_pack(request->content_len)
+                                              : memory_has(need);
+    if (has) {
         return true;
     }
     send_failure(request, STATUS_BUSY, "Not enough memory.");

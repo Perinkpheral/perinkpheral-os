@@ -6,6 +6,7 @@
 #include "deadlines.h"
 #include "host.h"
 #include "units.h"
+#include "glyphs.h"
 #include "tinytest.h"
 
 static uint32_t free_bytes = 100 * KB;
@@ -41,6 +42,35 @@ void host_stop_soon(host_stop_t why)
 }
 static void shed(void) { sheds++; }
 static void at_second(int64_t seconds) { now_us = seconds * US_PER_SECOND; }
+
+static void test_glyph_admission(void)
+{
+    memory_counts_t before, after;
+    memory_read(&before);
+    const size_t sizes[] = { 1, 4 * KB, GLYPHS_PACK_MAX_BYTES };
+    for (size_t index = 0; index < sizeof sizes / sizeof sizes[0]; index++) {
+        size_t pack_bytes = sizes[index];
+        free_bytes = pack_bytes + GLYPHS_COMPACTION_BYTES + 24 * KB;
+        block_bytes = pack_bytes + GLYPHS_COMPACTION_BYTES + 8 * KB;
+        CHECK(memory_has_glyph_pack(pack_bytes));
+        free_bytes--;
+        CHECK(!memory_has_glyph_pack(pack_bytes));
+        free_bytes++;
+        block_bytes--;
+        CHECK(!memory_has_glyph_pack(pack_bytes));
+    }
+    free_bytes = 24 * KB;
+    block_bytes = 8 * KB;
+    CHECK(!memory_has_glyph_pack(GLYPHS_PACK_MAX_BYTES));
+    free_bytes = 100 * KB;
+    block_bytes = 64 * KB;
+    CHECK(!memory_has_glyph_pack(0));
+    CHECK(!memory_has_glyph_pack(GLYPHS_PACK_MAX_BYTES + 1));
+    CHECK(!memory_has_glyph_pack(SIZE_MAX)); /* no overflow to a tiny requirement */
+    CHECK(memory_has(MEMORY_FOR_A_GLYPH_PACK));
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals + 10);
+}
 
 int main(void)
 {
@@ -107,5 +137,6 @@ int main(void)
     CHECK(restarts == 3);
     memory_read(&counts);
     CHECK(counts.failed_allocations == 1 && counts.sheds == 2 && counts.refusals == 4);
+    test_glyph_admission();
     REPORT();
 }

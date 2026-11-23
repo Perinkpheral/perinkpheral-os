@@ -135,7 +135,7 @@ test_wifi_search: test_wifi_search.c tinytest.h $(NET)/wifi_search.c $(NET)/incl
 test_wifi_networks: test_wifi_networks.c tinytest.h $(NET)/wifi_networks.c $(NET)/include/wifi_networks.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_networks.c $(NET)/wifi_networks.c
 
-test_memory: test_memory.c tinytest.h $(MAIN)/memory.c $(MAIN)/memory.h $(wildcard memory_stubs/*.h)
+test_memory: test_memory.c tinytest.h $(MAIN)/memory.c $(MAIN)/memory.h $(MAIN)/glyphs.h $(wildcard memory_stubs/*.h)
 	$(CC) $(CFLAGS) -Imemory_stubs -I$(MAIN) -I$(DEADLINES)/include -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(SDK_LIB) -o $@ test_memory.c $(MAIN)/memory.c
 
 # Running a real application needs wasi-sdk to build it.

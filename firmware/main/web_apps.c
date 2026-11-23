@@ -461,7 +461,7 @@ static esp_err_t handle_glyphs_install(httpd_req_t *request)
     }
     uint8_t *pack = malloc(request->content_len);
     if (pack == NULL) {
-        return httpd_resp_send_500(request);
+        return web_send_message(request, "503 Service Unavailable", "error", FETCH_NO_MEMORY);
     }
     size_t received = 0;
     while (received < request->content_len) {
@@ -708,7 +708,7 @@ const web_route_t WEB_APPS_ROUTES[] = {
     { "/api/apps/settings", HTTP_POST, handle_settings, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/apps/removed", HTTP_GET, handle_removed, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/glyphs", HTTP_GET, handle_glyphs, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
-    { "/api/glyphs", HTTP_POST, handle_glyphs_install, MEMORY_FOR_A_PAGE, WEB_OWN_PAGE, WEB_AT_ONCE },
+    { "/api/glyphs", HTTP_POST, handle_glyphs_install, MEMORY_FOR_A_GLYPH_PACK, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/glyphs/remove", HTTP_POST, handle_glyphs_remove, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/apps/remove", HTTP_POST, handle_remove, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
     { "/api/apps/install", HTTP_POST, handle_install, MEMORY_FOR_A_SESSION, WEB_OWN_PAGE, WEB_WAITS },

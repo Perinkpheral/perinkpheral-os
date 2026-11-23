@@ -407,5 +407,6 @@ async function testAuthors() {
   await require("./test_app_navigation.js")();
   await require("./test_control_screen.js")();
   await require("./test_load_states.js")();
+  await require("./test_glyph_memory.js")();
   console.log("App requests: retry, exhaustion, update all and refusal checks passed.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 
 #include "deadlines.h"
+#include "glyphs.h"
 #include "host.h"
 #include "units.h"
 
@@ -82,6 +83,9 @@ void memory_start(void)
 
 bool memory_has(memory_need_t need)
 {
+    if (need == MEMORY_FOR_A_GLYPH_PACK) {
+        return memory_has_glyph_pack(GLYPHS_PACK_MAX_BYTES);
+    }
     bool has = esp_get_free_heap_size() >= NEEDS[need].free_bytes &&
                heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >= NEEDS[need].one_block_bytes;
     if (!has) {
@@ -93,6 +97,21 @@ bool memory_has(memory_need_t need)
         } else if (s_session_refused_since_s == 0) {
             s_session_refused_since_s = uptime_s();
         }
+    }
+    return has;
+}
+
+bool memory_has_glyph_pack(size_t pack_bytes)
+{
+    /* Keep both compaction buffers in the same block as the upload, with
+     * the page's spare block left for allocator overhead and other work. */
+    size_t overhead = GLYPHS_COMPACTION_BYTES;
+    bool has = pack_bytes > 0 && pack_bytes <= GLYPHS_PACK_MAX_BYTES &&
+               esp_get_free_heap_size() >= pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].free_bytes &&
+               heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >=
+                   pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].one_block_bytes;
+    if (!has) {
+        s_refusals++;
     }
     return has;
 }

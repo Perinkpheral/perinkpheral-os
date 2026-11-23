@@ -105,8 +105,8 @@ object GlyphPacks {
         val partitionBytes = File(root, "firmware/partitions.csv").readLines()
             .map { line -> line.split(',').map { it.trim() } }
             .first { it[0] == "glyphs" }[4].let { Integer.decode(it) }
-        val sectorBytes = Regex("""^#define\s+SECTOR_BYTES\s+(\d+)""", RegexOption.MULTILINE)
-            .find(File(root, "firmware/main/glyphs.c").readText())!!.groupValues[1].toInt()
+        val sectorBytes = Regex("""^#define\s+GLYPHS_SECTOR_BYTES\s+(\d+)""", RegexOption.MULTILINE)
+            .find(File(root, "firmware/main/glyphs.h").readText())!!.groupValues[1].toInt()
         var occupiedBytes = 0
         for ((name, codePoints) in packs(root)) {
             require(name.length <= NAME_MAX) { "$name: a pack's name is $NAME_MAX letters at most" }

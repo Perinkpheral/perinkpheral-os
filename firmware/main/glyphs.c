@@ -14,7 +14,7 @@ static const char *TAG = "glyphs";
 
 #define PARTITION_LABEL   "glyphs"
 #define PARTITION_SUBTYPE 0x41
-#define SECTOR_BYTES      4096
+#define SECTOR_BYTES      GLYPHS_SECTOR_BYTES
 #define MAGIC_BYTES       4 /* written last: a pack cut short by a loss of power is no pack */
 
 static const esp_partition_t *s_partition;
