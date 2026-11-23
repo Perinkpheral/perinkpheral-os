@@ -103,7 +103,7 @@ Open each, wait for its data, press every button it uses.
 | 6.1 | Catalog: install an application not installed | Progress at once, then it is in the menu | |
 | 6.2 | Remove it | Gone from the menu and the capacity bar | |
 | 6.3 | Change a setting of an application, Save | The application redraws with it | |
-| 6.4 | A link setting with a default (Service status): clear one, Save, reload | It stays empty; the row is gone on the device | |
+| 6.4 | A list setting with a default (Stocks): clear it, Save, reload | It stays empty, not the default again; the device has nothing to show | |
 | 6.5 | Time: network time off, set a time, Save; then on again | The header follows both ways, each within seconds of Save and without a press | |
 | 6.6 | Logging controls, Wi-Fi scan, appearance | Each does what it says | |
 | 6.7 | The page on a phone | Usable without horizontal scrolling | |
