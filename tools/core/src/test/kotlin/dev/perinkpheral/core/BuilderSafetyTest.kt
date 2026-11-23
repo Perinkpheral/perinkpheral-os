@@ -6,6 +6,7 @@ import dev.perinkpheral.core.build.AppBuilder
 import dev.perinkpheral.core.build.ManifestCheck
 import dev.perinkpheral.core.build.Pictures
 import dev.perinkpheral.core.build.Sdk
+import dev.perinkpheral.core.build.Wasm
 import dev.perinkpheral.core.catalog.Catalog
 import java.io.File
 import java.nio.file.Files
@@ -145,6 +146,24 @@ object BuilderSafetyTest {
             check(Pictures.show(listOf(pbm)) == "raster:\n....#.#.\n\n")
 
             System.getenv("WASI_SDK_PATH")?.let { wasi ->
+                // Real modules on either side of the new warning budget still build.
+                val arenaSource = File(scratch, "arena/sizing").apply { mkdirs() }
+                File(arenaSource, "manifest.json").writeText("""{"name":"sizing","title":"Sizing","abi":3}""")
+                val arenaOutput = File(scratch, "arena-built")
+                for (codeNops in listOf(16_000, 18_000)) {
+                    File(arenaSource, "main.c").writeText(
+                        "/* SPDX-License-Identifier: MIT */\n#include \"host_api.h\"\n" +
+                        "void app_on_load(void) { __asm__ volatile(\"" + "nop\\n".repeat(codeNops) + "\"); }\n")
+                    val messages = ArrayList<String>()
+                    AppBuilder(Sdk(root), File(wasi), messages::add).build(arenaSource, arenaOutput)
+                    val estimate = 11 * 1024 + 4 * Wasm(File(arenaOutput, "app.wasm")).codeBytes
+                    check(estimate > 64 * 1024)
+                    val overBudget = codeNops == 18_000
+                    check((estimate > 80 * 1024) == overBudget)
+                    check(messages.any { "interpreter's 80.0 KB" in it })
+                    check(messages.any { "warning: this much code" in it } == overBudget)
+                    check(File(arenaOutput, "app.wasm").isFile)
+                }
                 val realBuilder = AppBuilder(Sdk(root), File(wasi)) {}
                 val built = File(scratch, "built")
                 val sourceFiles = File(source, "files").apply { mkdirs() }

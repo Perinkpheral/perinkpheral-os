@@ -395,7 +395,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         // for any application, and about four bytes for every byte of the code section.
         private const val INTERPRETER_BASE_BYTES = 11L * 1024
         private const val INTERPRETER_BYTES_PER_CODE_BYTE = 4L
-        private const val INTERPRETER_ROOM_BYTES = 64L * 1024
+        private const val INTERPRETER_ROOM_BYTES = 80L * 1024
         /** MAP_SCRATCH_BYTES of firmware/components/map/include/map.h. */
         const val MAP_WORKING_BYTES = 8128L
 

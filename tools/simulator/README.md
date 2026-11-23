@@ -54,7 +54,7 @@ Not simulated: the menu of several applications, the system API except
 `sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,
 `sys_draw_logo`, `sys_logo_width` and `sys_logo_height`, e-paper
 refresh timing, sleep, the battery or firmware/recovery updates. The device's
-128 KB application area (64 KB Wasm memory and 64 KB interpreter space) is not
+144 KB application area (64 KB Wasm memory and 80 KB interpreter space) is not
 enforced as a combined arena; the module's 64 KB linear-memory limit still applies.
 Use the build's memory report and a real device to check interpreter headroom.
 

@@ -17,14 +17,11 @@ extern "C" {
  * is on the screen, and an application that needs more than there is
  * fails to start, every time, instead of now and then. */
 #define M3_AREA_PAGE_BYTES    (64 * 1024)
-/* Measured, over the page: the sample 12 KB, the weather 26 KB, Settings -
- * the heaviest there is, 11 KB of code - 35 KB. The interpreter has about
- * 11 KB of its own and turns the code it runs into a form of its own,
- * about two bytes for a byte, so this, and not the size of a module's
- * file, is what an application has to fit. 48 KB until 2026-11-13, when
- * the calendar - 12 KB of code, most of it a reader of calendars - was
- * measured at 53 KB with all of it run; the owner gave applications 64. */
-#define M3_AREA_WORKING_BYTES (64 * 1024)
+/* The owner enlarged interpreter space from 64 KB to 80 KB on 2026-11-24.
+ * This includes allocator overhead, compiled code, interpreter records and
+ * contract scratch memory. Code-size estimates guide builds with warnings;
+ * actual allocation peaks depend on the paths an application runs. */
+#define M3_AREA_WORKING_BYTES (80 * 1024)
 #define M3_AREA_BYTES         (M3_AREA_PAGE_BYTES + M3_AREA_WORKING_BYTES)
 
 /* Takes the area from the heap, once, for as long as the device runs.
