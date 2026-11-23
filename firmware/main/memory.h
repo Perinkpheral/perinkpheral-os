@@ -27,6 +27,7 @@ typedef enum {
     MEMORY_FOR_A_SESSION, /* a request over the network, TLS included */
     MEMORY_FOR_A_PAGE,    /* an answer of the web server's put together in memory */
     MEMORY_FOR_AN_UPDATE, /* a firmware image taken in */
+    MEMORY_FOR_A_PICTURE, /* a copy of the frame on the panel, 15 KB in one block */
     MEMORY_NEEDS,
 } memory_need_t;
 

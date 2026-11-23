@@ -12,6 +12,7 @@
 #include "display.h"
 #include "events.h"
 #include "host.h"
+#include "memory.h"
 #include "units.h"
 
 #define FRAME_BYTES     (DISPLAY_WIDTH / 8 * DISPLAY_HEIGHT)
@@ -112,6 +113,6 @@ static esp_err_t handle_screen(httpd_req_t *http)
 }
 
 const web_route_t WEB_SCREEN_ROUTES[] = {
-    { "/api/screen", HTTP_GET, handle_screen, WEB_NO_MEMORY_NEED, WEB_OWN_PAGE, WEB_AT_ONCE },
+    { "/api/screen", HTTP_GET, handle_screen, MEMORY_FOR_A_PICTURE, WEB_OWN_PAGE, WEB_AT_ONCE },
 };
 const size_t WEB_SCREEN_ROUTE_COUNT = WEB_ROUTE_COUNT(WEB_SCREEN_ROUTES);

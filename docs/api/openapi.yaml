@@ -304,6 +304,7 @@ paths:
       tags: [Device]
       summary: The frame on the panel; the page saves it as a screenshot
       description: |
+        503 JSON error: Not enough memory. (less than 40 KB free or no 16 KB block);
         503 text/plain body: `no memory` or `the host did not answer`
       responses:
         "200":

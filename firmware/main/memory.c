@@ -29,6 +29,8 @@ static const struct {
     [MEMORY_FOR_A_SESSION] = { 60 * KB, 17 * KB },
     [MEMORY_FOR_A_PAGE] = { 24 * KB, 8 * KB },
     [MEMORY_FOR_AN_UPDATE] = { 32 * KB, 8 * KB },
+    /* The frame in one block, and as much left over as a page needs. */
+    [MEMORY_FOR_A_PICTURE] = { 40 * KB, 16 * KB },
 };
 
 /* Below this the host is one allocation from falling over. */
