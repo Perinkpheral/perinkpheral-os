@@ -76,7 +76,10 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * \u escapes. Other escape letters and raw control bytes in strings are
  * not rejected. Member/value separators and a single root value are not
  * enforced: empty input and other malformed documents may be accepted.
- * Failed checks give HOST_FAILED_NO_ANSWER even when an HTTP response arrived.
+ * A success (2xx) whose body fails these checks gives HOST_FAILED_NO_ANSWER; any
+ * other HTTP status - 401 with a login page, 404, 503 - is handed over as it is,
+ * with values only when its body is a whole JSON document (an error message),
+ * and none when it is not.
  *
  * request:     poll number in the manifest.
  * http_status: HTTP status, or a HOST_FAILED_* code.

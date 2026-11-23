@@ -166,11 +166,13 @@ static void count_data(int32_t request, const uint8_t *data, int32_t length, int
     last_status = http_status;
 }
 
-static int32_t last_picked;
+static int32_t last_picked, last_value_length;
+static char last_value[16];
 static void picked_status(int32_t request, int32_t http_status)
 {
     (void)request;
     last_picked = http_status;
+    last_value_length = answer_value(0, last_value, (int32_t)sizeof last_value);
 }
 
 static void test_answers(void)
@@ -243,12 +245,19 @@ static void test_answers(void)
     assert(standin()->store_writes == 1);
     standin_picked(0, -1, HOST_FAILED_NO_NETWORK, NULL, 0);
     assert(strcmp(value, "21") == 0);
-    /* As poller_net.c hands it over: an answer the picker cannot read is no answer, whatever its
-     * status; an empty one is a document of no values and keeps its status. */
+    /* As poller_net.c hands it over: a success the picker cannot read is no answer; a refusal keeps
+     * its status whatever its page, with values only from a whole JSON one; an empty answer is a
+     * document of no values and keeps its status. */
     standin_handlers.on_picked = picked_status;
     standin_picked(0, -1, 503, "Service Unavailable", 19);
-    assert(last_picked == HOST_FAILED_NO_ANSWER);
+    assert(last_picked == 503 && last_value_length < 0);
+    standin_picked(0, -1, 401, "<html><body>Login</body></html>", 31);
+    assert(last_picked == 401);
+    standin_picked(0, -1, 404, "{\"value\": \"gone\"}", 17);
+    assert(last_picked == 404 && last_value_length == 4 && memcmp(last_value, "gone", 4) == 0);
     standin_picked(0, -1, 200, "{\"value\": ", 10);
+    assert(last_picked == HOST_FAILED_NO_ANSWER);
+    standin_picked(0, -1, 200, "<html>", 6);
     assert(last_picked == HOST_FAILED_NO_ANSWER);
     standin_picked(0, -1, 503, "", 0);
     assert(last_picked == 503);

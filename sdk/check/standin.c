@@ -2728,15 +2728,19 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
     if (status >= 0) {
         json_pick_init(&picked, asked->picks, asked->pick_count);
         json_pick_lists(&picked, picked_lists, sizeof picked_lists);
-        /* As poller_net.c reads it: an answer the picker cannot read whole is no answer, whatever
-         * its status; an empty one is a whole document of no values, and keeps its status. What
-         * was picked before it broke off is handed over all the same (app_values()), for the
+        /* As poller_net.c reads it: a success the picker cannot read whole is no answer; a
+         * refusal (any other HTTP status) keeps its status, and a page that is not whole JSON gives
+         * no values;
+         * an empty answer is a whole document of no values, and keeps its status. What was picked
+         * before a success broke off is handed over all the same (app_values()), for the
          * application to leave alone. */
         bool is_whole = json_pick_feed(&picked, body != NULL ? body : "", (size_t)length);
         is_whole = json_pick_finish(&picked) && is_whole;
         has_picked = true;
-        if (!is_whole) {
+        if (!is_whole && status >= 200 && status <= 299) {
             status = HOST_FAILED_NO_ANSWER;
+        } else if (!is_whole) {
+            json_pick_init(&picked, asked->picks, asked->pick_count);
         }
     }
     host->is_delivering = true;

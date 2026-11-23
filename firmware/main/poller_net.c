@@ -468,7 +468,12 @@ static void fetch_values(request_t *request, esp_http_client_handle_t client,
     }
     cut_forget();
     esp_http_client_close(client);
-    if (length < 0 || !is_whole) {
+    bool is_ok = http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
+    if ((length < 0 || !is_whole) && !is_ok) {
+        /* A refusal - 401 with a login page, 404, 503 - is told as it is: its status is the
+         * answer, and a page that is not whole JSON gives no values. */
+        json_pick_init(&request->pick, request->paths, path_count);
+    } else if (length < 0 || !is_whole) {
         /* Broke off, too long, or not JSON: what was read so far is not
          * an answer, and half of one must not pass for a whole one. */
         http_status = total > ANSWER_MAX_BYTES  ? HOST_FAILED_TOO_LARGE

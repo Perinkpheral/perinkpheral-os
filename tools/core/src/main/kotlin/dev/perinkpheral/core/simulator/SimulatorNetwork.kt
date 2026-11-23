@@ -143,6 +143,7 @@ object SimulatorNetwork {
         val headers = (asked["headers"] as? Map<*, *>).orEmpty()
         val most = (asked["max"] as? Long) ?: (256L * 1024)
         val timeout = Duration.ofSeconds((asked["timeout"] as? Long) ?: 15L)
+        val wantsValues = asked["values"] == true
         val trust = (asked["trust"] as? List<*>).orEmpty().map { it as String }
         try {
             val request = HttpRequest.newBuilder(url).timeout(timeout)
@@ -178,16 +179,22 @@ object SimulatorNetwork {
             deadline.schedule(object : java.util.TimerTask() {
                 override fun run() { isCut.set(true); runCatching { stream.close() } }
             }, timeout.toMillis())
-            val content = try {
+            // A refusal (not 2xx) whose values are picked keeps its status however its page arrives,
+            // as the device does: its body then gives nothing. Pieces fail as before.
+            val isRefusal = wantsValues && response.statusCode() !in 200..299
+            var content = try {
                 stream.use { it.readNBytes((most + 1).toInt()) }
             } catch (error: IOException) {
-                if (isCut.get()) return mapOf("status" to TIMEOUT)
-                throw error
+                if (!isRefusal && isCut.get()) return mapOf("status" to TIMEOUT)
+                if (!isRefusal) throw error
+                ByteArray(0)
             } finally {
                 deadline.cancel()
             }
-            if (isCut.get()) return mapOf("status" to TIMEOUT)
-            if (content.size > most) return mapOf("status" to TOO_LARGE)
+            if (isCut.get() || content.size > most) {
+                if (!isRefusal) return mapOf("status" to if (isCut.get()) TIMEOUT else TOO_LARGE)
+                content = ByteArray(0)
+            }
             val kept = LinkedHashMap<String, Any?>()
             var headerBytes = 0
             var headersOverflow = false

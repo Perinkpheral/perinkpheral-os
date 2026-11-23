@@ -621,6 +621,8 @@ static void exchange(job_t *job, char *next, size_t next_size)
     json_add_string(asked, "body", body);
     free(body);
     json_add_number(asked, "max", job->wants_values ? HOST_ANSWER_MAX : HOST_ANSWER_PIECES_MAX);
+    /* Values are picked: a refusal keeps its status however its page arrives, as on the device. */
+    json_add_bool(asked, "values", job->wants_values);
     /* The application's own certificate authorities, as files: trusted for its requests beside
      * the computer's, as on the device. */
     char files[MANIFEST_CERTIFICATES_MAX][MANIFEST_FILE_NAME_MAX + 1];
@@ -923,9 +925,14 @@ static void hand_over(job_t *job)
             say('W', "sim", "%s/%s %d: list elements beyond %d bytes were dropped", s_options.app,
                 kind, job->number, HOST_LIST_BYTES);
         }
+        bool is_ok = job->status >= 200 && job->status <= 299;
+        if (!is_json && !is_ok) {
+            /* as the device: a refusal keeps its status and gives no values */
+            json_pick_init(&pick, paths, job->pick_count);
+        }
         app_delivery_t delivery = {
             .kind = APP_DELIVERY_VALUES, .request = job->number,
-            .http_status = is_json ? job->status : HOST_FAILED_NO_ANSWER,
+            .http_status = is_json || !is_ok ? job->status : HOST_FAILED_NO_ANSWER,
             .response = &job->response, .headers = &job->response_headers, .picked = &pick,
             .has_item = job->item >= 0, .item = job->item,
         };
