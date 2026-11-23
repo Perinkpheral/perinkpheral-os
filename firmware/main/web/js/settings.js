@@ -253,8 +253,10 @@ function chooseWifiNetwork() {
 
 function showWifiNetworks(networks, selected = byId("ssid").value) {
   const select = byId("wifi-networks");
+  /* A name being typed stays typed: networks found meanwhile do not take its place. */
+  const typing = select.value === "manual";
   const names = [...new Set(networks.map(network => network.ssid).filter(Boolean))];
-  if (selected && !names.includes(selected)) names.unshift(selected);
+  if (selected && !typing && !names.includes(selected)) names.unshift(selected);
   const options = names.map((ssid, index) => {
     const option = make("option", { value: String(index), textContent: ssid, translate: false });
     option.dataset.ssid = ssid;
@@ -262,8 +264,8 @@ function showWifiNetworks(networks, selected = byId("ssid").value) {
   });
   select.replaceChildren(make("option", { value: "", textContent: t("Choose a network") }),
                          ...options, make("option", { value: "manual", textContent: t("Enter network name") }));
-  select.value = selected ? String(names.indexOf(selected)) : "";
-  chooseWifiNetwork();
+  select.value = typing ? "manual" : selected ? String(names.indexOf(selected)) : "";
+  if (!typing) chooseWifiNetwork();
 }
 
 byId("wifi-networks").addEventListener("change", chooseWifiNetwork);
@@ -285,6 +287,24 @@ byId("wifi").addEventListener("submit", async event => {
   toast(CONFIRM_ON_DEVICE);
   if (await send(event.submitter, "/api/wifi", post(network))) afterRestart();
 });
+
+/* The networks are looked for as the Network pane opens, as other systems do; once per opening,
+ * and the button looks again. */
+let scanAsked = false;
+
+function wantScan() {
+  const open = currentSection() === "settings" && byId("network").classList.contains("current");
+  if (!open) {
+    scanAsked = false;
+    return;
+  }
+  /* Not before the settings are read: reading them redraws the list. */
+  if (scanAsked || stateOf("status") !== "ready" || stateOf("settings") !== "ready") return;
+  scanAsked = true;
+  byId("scan-networks").click();
+}
+
+sectionShown.push(wantScan);
 
 /* ---- letters beyond ASCII: glyph packs ----
  * The device's fonts are ASCII; an alphabet is a pack the user adds. The official

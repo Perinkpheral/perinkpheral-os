@@ -90,6 +90,40 @@ dd { margin: 0; text-align: right; overflow-wrap: break-word; white-space: pre-l
 /* What an application is: its addresses whole, one a line. */
 #info-dialog { width: min(42rem, calc(100vw - 2rem)); }
 
+/* ---- scroll bars: ink on paper, square, never the system's grey ---- */
+html { scrollbar-color: var(--ink) var(--paper); }
+* { scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--ink); border: 3px solid var(--paper); }
+::-webkit-scrollbar-corner { background: var(--paper); }
+
+/* ---- choosers: what opens from a list or a date, a box above the page (pickers.js) ---- */
+.chooser { position: fixed; z-index: 30; margin: 0; overflow: auto; color: var(--ink); background: var(--paper);
+           border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); outline: none; }
+.listbox { max-width: calc(100vw - 16px); padding: .25rem 0; }
+.listbox .option { padding: .4rem .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.listbox .option.active { background: var(--line); }
+.listbox .option[aria-selected=true] { background: var(--ink); color: var(--paper); }
+.listbox .option[aria-disabled=true] { color: var(--dim); cursor: default; }
+.listbox .group { padding: .5rem .7rem .2rem; color: var(--dim); font-size: .85rem; }
+.calendar { width: 19.5rem; padding: .75rem; }
+.calendar .month { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+.calendar .step, .calendar .day { margin: 0; height: 2.2rem; padding: 0; color: var(--ink); background: transparent;
+                                  border: 1px solid transparent; transition: none; }
+.calendar .step { width: 2.2rem; font-size: 1.2rem; }
+.calendar .step:hover:not(:disabled), .calendar .day:hover:not(:disabled) { transform: none; box-shadow: none;
+                                                                             border-color: var(--ink); }
+.calendar .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.calendar .weekday { text-align: center; color: var(--dim); font-size: .8rem; padding: .2rem 0; }
+.calendar .day.today { text-decoration: underline; text-underline-offset: .2em; }
+.calendar .day[aria-pressed=true] { background: var(--ink); color: var(--paper); }
+.calendar button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.calendar .time { display: flex; align-items: center; gap: .4rem; margin-top: .75rem; padding-top: .75rem;
+                  border-top: 1px solid var(--line); }
+.calendar .time > span:first-child { color: var(--dim); margin-right: auto; }
+.calendar .part { width: 2.8rem; height: 2.2rem; padding: 0; text-align: center; }
+.calendar .time .quiet { margin: 0 0 0 .5rem; padding: 0 .8rem; height: 2.2rem; }
+
 /* ---- forms ---- */
 label { display: block; margin: 1rem 0 .3rem; color: var(--dim); }
 input, select, textarea { width: 100%; padding: .5rem .7rem; font: inherit; color: var(--ink);
@@ -103,6 +137,19 @@ button:focus-visible, a:focus-visible, label.file input:focus-visible + .button 
 select { appearance: none; padding-right: 2.4rem; cursor: pointer;
          background: no-repeat right .8rem center / .7rem .45rem
          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%23141413' stroke-width='2'/%3E%3C/svg%3E"); }
+/* A date and time open the page's own calendar (pickers.js): the browser's button gives way to a
+ * calendar of the page's pixels. */
+input[type=datetime-local] { padding-right: 2.4rem; cursor: pointer;
+  background: no-repeat right .75rem center / .85rem .85rem
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath d='M0 2h12v10H0zM1 5v6h10V5zM2 0h2v3H2zM8 0h2v3H8z' fill='%23141413' fill-rule='evenodd'/%3E%3C/svg%3E"); }
+input[type=datetime-local]:disabled { background-image: none; cursor: default; }
+input[type=datetime-local]::-webkit-calendar-picker-indicator { display: none; }
+input[type=datetime-local]::-webkit-datetime-edit-year-field:focus,
+input[type=datetime-local]::-webkit-datetime-edit-month-field:focus,
+input[type=datetime-local]::-webkit-datetime-edit-day-field:focus,
+input[type=datetime-local]::-webkit-datetime-edit-hour-field:focus,
+input[type=datetime-local]::-webkit-datetime-edit-minute-field:focus,
+input[type=datetime-local]::-webkit-datetime-edit-ampm-field:focus { background: var(--ink); color: var(--paper); }
 /* A number is typed, not stepped with the browser's arrows. */
 input[type=number] { -moz-appearance: textfield; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

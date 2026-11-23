@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.90
+
+- The device page draws its own scroll bars, lists and date picker in ink on paper, where the browser showed its system's; on a touch screen a list keeps the phone's own chooser. The Network pane looks for networks as it opens.
+
 ## 0.1.89
 
 - The device page saves a screenshot: Device > Screenshot downloads what the screen shows as a PNG. The picture is `GET /api/screen` in every build, apart from the development tools, which no longer have `/api/dev/screen`; `tools/perinkpheral shot` and `serve` use the new route, so they also work with release builds.

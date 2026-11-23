@@ -58,7 +58,29 @@ async function test() {
   assert.deepEqual(messages.at(-1), { text: "Wi-Fi is busy. Try again shortly.", kind: "error" });
   assert.equal(button.disabled, false, "a refused scan can be tried again");
   assert.equal(requests.length, 3);
-  console.log("Wi-Fi scan: POST-only route, Scan button, empty results and retry after refusal passed.");
+
+  /* Opening the Network pane looks for networks once per opening, as other systems do. */
+  failure = false;
+  let section = "settings", paneOpen = true, clicks = 0;
+  Object.assign(context, { sectionShown: [], currentSection: () => section });
+  const status = state => vm.runInContext(`loadState.status = ${JSON.stringify(state)}`, context);
+  const settingsRead = state => vm.runInContext(`loadState.settings = ${JSON.stringify(state)}`, context);
+  byId("network").classList = { contains: name => name === "current" && paneOpen };
+  button.click = () => { clicks++; };
+  vm.runInContext(settings.slice(settings.indexOf("let scanAsked"),
+    settings.indexOf("sectionShown.push(wantScan);") + "sectionShown.push(wantScan);".length), context);
+  const shown = () => context.sectionShown.forEach(run => run());
+  status("loading"); shown();
+  assert.equal(clicks, 0, "not before the device has answered");
+  status("ready"); shown();
+  assert.equal(clicks, 0, "not before the settings are read: reading them redraws the list");
+  settingsRead("ready"); shown(); shown();
+  assert.equal(clicks, 1, "once per opening");
+  paneOpen = false; shown(); paneOpen = true; shown();
+  assert.equal(clicks, 2, "again after the pane was left");
+  section = "device"; shown(); section = "settings"; shown();
+  assert.equal(clicks, 3, "again after the section was left");
+  console.log("Wi-Fi scan: POST-only route, Scan button, empty results, retry after refusal and a scan as the pane opens passed.");
 }
 
 module.exports = test;

@@ -20,6 +20,7 @@ async function loadAll() {
   }
   if (!catalogsRead) delete loadState.catalog;
   wantGlyphs();
+  wantScan();
   /* Control is for a firmware with the development tools: the status says so. */
   byId("nav-control").hidden = !status.dev_tools;
   if (!status.dev_tools && currentSection() === "control") location.hash = "#device";
