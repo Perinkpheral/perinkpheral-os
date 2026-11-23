@@ -15,11 +15,12 @@ SDK      := $(ROOT)/sdk
 APPSYS   := $(COMP)/appsys
 UI       := $(COMP)/ui
 GFX      := $(COMP)/gfx
+MAP      := $(COMP)/map
 QR       := $(COMP)/qr
 WASM3    := $(COMP)/wasm3/wasm3
 BUILD    := build
 
-INCLUDES := -I$(BUILD) -I$(APPSYS)/include -I$(COMP)/appstore/include -I$(UI)/include -I$(GFX)/include -I$(COMP)/words/include -I$(GFX)/fonts \
+INCLUDES := -I$(BUILD) -I$(APPSYS)/include -I$(COMP)/appstore/include -I$(UI)/include -I$(GFX)/include -I$(COMP)/words/include -I$(GFX)/fonts -I$(MAP)/include \
             -I$(QR)/include -I$(QR)/qrcodegen -I$(WASM3) -I$(SDK) -I$(SDK)/lib \
             -I$(COMP)/board/include -I$(COMP)/appconf/include -I$(COMP)/deadlines/include -I$(FW)/main
 OPT      ?= -O2 -g
@@ -32,13 +33,14 @@ WASM3_FLAGS := -std=c11 -O2 -w -Dd_m3MaxLinearMemoryPages=1 -Dd_m3VerboseErrorMe
 LDLIBS   := -lpthread -lm
 
 SOURCES := sim.c \
-           $(APPSYS)/answer_headers.c $(APPSYS)/app.c $(APPSYS)/app_api_draw.c $(APPSYS)/app_api_ui.c $(APPSYS)/app_api_data.c \
+           $(APPSYS)/answer_headers.c $(APPSYS)/app.c $(APPSYS)/app_api_draw.c $(APPSYS)/app_api_map.c $(APPSYS)/app_api_ui.c $(APPSYS)/app_api_data.c \
            $(APPSYS)/app_api_time.c $(APPSYS)/app_api_sys.c \
            $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c $(COMP)/appstore/app_store.c \
            $(COMP)/appstore/app_manifest.c $(COMP)/appstore/poll_schedule.c $(COMP)/appstore/json_tree.c $(COMP)/appstore/text_template.c \
            $(SDK)/lib/json_pick.c \
            $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c \
            $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(COMP)/words/words.c $(GFX)/font_square.c \
+           $(MAP)/map_geo.c $(MAP)/map_land.c $(MAP)/map_land_data.c $(MAP)/map_draw.c \
            $(FW)/main/screens.c $(COMP)/appconf/appconf.c $(FW)/main/header.c $(FW)/main/scene_menu.c $(COMP)/deadlines/deadline_table.c $(QR)/qrcodegen/qrcodegen.c
 WASM3_SOURCES := $(filter-out $(WASM3)/m3_compile.c,$(wildcard $(WASM3)/*.c)) $(COMP)/wasm3/m3_budget_compile.c
 

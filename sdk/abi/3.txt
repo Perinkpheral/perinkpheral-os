@@ -163,6 +163,9 @@ constant HOST_LOG_ERROR	1
 constant HOST_LOG_INFO	3
 constant HOST_LOG_TEXT_MAX	200
 constant HOST_LOG_WARN	2
+constant HOST_MAP_AEQD	1
+constant HOST_MAP_COASTLINE	1
+constant HOST_MAP_WORLD	0
 constant HOST_OK	0
 constant HOST_PAPER	0
 constant HOST_QR_TEXT_MAX	200
@@ -179,10 +182,16 @@ constant HOST_SESSION_MAX	1024
 constant HOST_SINCE_HOST_ICON_CUBE	"0.1.84"
 constant HOST_SINCE_HOST_ICON_LAYERS	"0.1.84"
 constant HOST_SINCE_HOST_ICON_PROGRESS	"0.1.84"
+constant HOST_SINCE_HOST_MAP_AEQD	"0.1.94"
+constant HOST_SINCE_HOST_MAP_COASTLINE	"0.1.94"
+constant HOST_SINCE_HOST_MAP_WORLD	"0.1.94"
 constant HOST_SINCE_POLL_METHOD	"0.1.80"
 constant HOST_SINCE_SYS_DO_WIFI_SETUP	"0.1.66"
 constant HOST_SINCE_SYS_WIFI_OFF	"0.1.66"
 constant HOST_SINCE_answer_header	"0.1.51"
+constant HOST_SINCE_gfx_draw_map	"0.1.94"
+constant HOST_SINCE_gfx_draw_map_radius	"0.1.94"
+constant HOST_SINCE_gfx_map_point	"0.1.94"
 constant HOST_SINCE_screen_set_inverted	"0.1.54"
 constant HOST_STATUS_TEXT_MAX	31
 constant HOST_TEXT_ARGUMENTS_MAX	4
@@ -449,6 +458,48 @@ field host_local_time_t.weekday type	int32_t
 field host_local_time_t.year offset	0
 field host_local_time_t.year size	4
 field host_local_time_t.year type	int32_t
+field host_map_point_t.visible offset	8
+field host_map_point_t.visible size	4
+field host_map_point_t.visible type	int32_t
+field host_map_point_t.x offset	0
+field host_map_point_t.x size	4
+field host_map_point_t.x type	int32_t
+field host_map_point_t.y offset	4
+field host_map_point_t.y size	4
+field host_map_point_t.y type	int32_t
+field host_map_t.flags offset	40
+field host_map_t.flags size	4
+field host_map_t.flags type	int32_t
+field host_map_t.h offset	12
+field host_map_t.h size	4
+field host_map_t.h type	int32_t
+field host_map_t.land offset	32
+field host_map_t.land size	4
+field host_map_t.land type	int32_t
+field host_map_t.lat_e6 offset	16
+field host_map_t.lat_e6 size	4
+field host_map_t.lat_e6 type	int32_t
+field host_map_t.lon_e6 offset	20
+field host_map_t.lon_e6 size	4
+field host_map_t.lon_e6 type	int32_t
+field host_map_t.m_per_px offset	24
+field host_map_t.m_per_px size	4
+field host_map_t.m_per_px type	int32_t
+field host_map_t.projection offset	28
+field host_map_t.projection size	4
+field host_map_t.projection type	int32_t
+field host_map_t.sea offset	36
+field host_map_t.sea size	4
+field host_map_t.sea type	int32_t
+field host_map_t.w offset	8
+field host_map_t.w size	4
+field host_map_t.w type	int32_t
+field host_map_t.x offset	0
+field host_map_t.x size	4
+field host_map_t.x type	int32_t
+field host_map_t.y offset	4
+field host_map_t.y size	4
+field host_map_t.y type	int32_t
 field host_notice_t.back offset	256
 field host_notice_t.back size	32
 field host_notice_t.back type	char[32]
@@ -525,6 +576,8 @@ import gfx_draw_bitmap	i(iiiii) grant=none
 import gfx_draw_bitmap_file	i(iiiiiii) grant=none
 import gfx_draw_icon	i(iiii) grant=none
 import gfx_draw_line	i(iiii) grant=none
+import gfx_draw_map	i(i) grant=none
+import gfx_draw_map_radius	i(iiii) grant=none
 import gfx_draw_picture	i(iiii) grant=none
 import gfx_draw_qr	i(iiiii) grant=none
 import gfx_draw_rect	i(iiiii) grant=none
@@ -535,6 +588,7 @@ import gfx_font_cap_height	i(i) grant=none
 import gfx_font_height	i(i) grant=none
 import gfx_height	i() grant=none
 import gfx_icon_ink	i(iii) grant=none
+import gfx_map_point	i(iiii) grant=none
 import gfx_set_color	i(i) grant=none
 import gfx_text_ink	i(iiii) grant=none
 import gfx_text_width	i(iii) grant=none
@@ -604,6 +658,9 @@ macro BTN_ACTION_OF	(event) ((event) & 3)
 macro BTN_EVENT	(button, action) ((button) << 2 | (action))
 macro BTN_OF	(event) ((event) >> 2)
 since answer_header	0.1.51
+since gfx_draw_map	0.1.94
+since gfx_draw_map_radius	0.1.94
+since gfx_map_point	0.1.94
 since screen_set_inverted	0.1.54
 struct host_answer_info_t align	4
 struct host_answer_info_t size	476
@@ -619,6 +676,10 @@ struct host_list_t align	4
 struct host_list_t size	20
 struct host_local_time_t align	4
 struct host_local_time_t size	28
+struct host_map_point_t align	4
+struct host_map_point_t size	12
+struct host_map_t align	4
+struct host_map_t size	44
 struct host_notice_t align	4
 struct host_notice_t size	296
 struct host_picker_t align	1

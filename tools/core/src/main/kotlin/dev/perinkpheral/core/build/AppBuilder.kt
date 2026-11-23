@@ -346,10 +346,13 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             .toPlainString() + " KB"
         val moduleBytes = wasm.length()
         val code = module.codeBytes
-        val running = INTERPRETER_BASE_BYTES + INTERPRETER_BYTES_PER_CODE_BYTE * code
+        // gfx_draw_map() takes its working memory from the same area while it draws.
+        val drawsMaps = module.imports.any { it.second == "gfx_draw_map" }
+        val running = INTERPRETER_BASE_BYTES + INTERPRETER_BYTES_PER_CODE_BYTE * code + if (drawsMaps) MAP_WORKING_BYTES else 0
         say("${wasm.path}: $moduleBytes bytes, ${module.imports.size} Perinkpheral OS calls")
         say("  module  ${kb(moduleBytes)} of ${kb(moduleMax)}")
-        say("  code    ${kb(code)}; running it takes about ${kb(running)} of the interpreter's ${kb(INTERPRETER_ROOM_BYTES)}")
+        say("  code    ${kb(code)}; running it takes about ${kb(running)} of the interpreter's ${kb(INTERPRETER_ROOM_BYTES)}" +
+            if (drawsMaps) ", ${kb(MAP_WORKING_BYTES)} of it while gfx_draw_map() draws" else "")
         if (memoryEnd > 0) {
             say("  memory  ${kb(memoryEnd)} of ${kb(BuildFlags.WASM_PAGE.toLong())}: " +
                 "${kb(BuildFlags.APP_STACK.toLong())} of stack, ${kb(memoryEnd - BuildFlags.APP_STACK)} of data; " +
@@ -393,6 +396,8 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         private const val INTERPRETER_BASE_BYTES = 11L * 1024
         private const val INTERPRETER_BYTES_PER_CODE_BYTE = 4L
         private const val INTERPRETER_ROOM_BYTES = 64L * 1024
+        /** MAP_SCRATCH_BYTES of firmware/components/map/include/map.h. */
+        const val MAP_WORKING_BYTES = 8128L
 
         /** A call that asks for something to come later, and the handler it comes to. */
         private val ANSWERED_BY = mapOf(

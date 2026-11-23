@@ -18,6 +18,7 @@
 
 #include "json_pick.h"
 #include "manifest_limits.h"
+#include "map_geo.h"
 
 standin_handlers_t standin_handlers;
 
@@ -1982,6 +1983,60 @@ int32_t gfx_draw_picture(int32_t x, int32_t y, const uint8_t *picture, int32_t c
     int32_t numbers[] = { x, y, cell };
     mix(numbers, sizeof numbers);
     mix(picture, picture_bytes(picture));
+    return HOST_OK;
+}
+
+/* ---- Maps: the firmware's own geometry (components/map/map_geo.c); the land is not drawn ---- */
+
+/* A map as app_api_map.c takes one: copied, and held to what a map may be. */
+static bool is_map(const host_map_t *map, map_view_t *view)
+{
+    if (map == NULL) {
+        return false;
+    }
+    *view = (map_view_t){ map->x, map->y, map->w, map->h, map->lat_e6, map->lon_e6, map->m_per_px,
+                          map->projection, map->land, map->sea, map->flags };
+    return map_view_is_valid(view);
+}
+
+int32_t gfx_draw_map(const host_map_t *map)
+{
+    if (!is_frame("gfx_draw_map")) {
+        return HOST_ERR_NOT_DRAWING;
+    }
+    map_view_t view;
+    if (!is_map(map, &view)) {
+        return refused_draw("gfx_draw_map");
+    }
+    mix(&view, sizeof view);
+    return HOST_OK;
+}
+
+int32_t gfx_map_point(const host_map_t *map, int32_t lat_e6, int32_t lon_e6, host_map_point_t *point)
+{
+    map_view_t view;
+    if (point == NULL || !is_map(map, &view) || !map_place_is_valid(lat_e6, lon_e6)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    int32_t x, y;
+    bool is_visible = map_point(&view, lat_e6, lon_e6, &x, &y);
+    *point = (host_map_point_t){ x, y, is_visible };
+    return HOST_OK;
+}
+
+int32_t gfx_draw_map_radius(const host_map_t *map, int32_t lat_e6, int32_t lon_e6, int32_t radius_m)
+{
+    if (!is_frame("gfx_draw_map_radius")) {
+        return HOST_ERR_NOT_DRAWING;
+    }
+    map_view_t view;
+    if (!is_map(map, &view) || !map_place_is_valid(lat_e6, lon_e6) || radius_m < MAP_RADIUS_MIN ||
+        radius_m > MAP_RADIUS_MAX) {
+        return refused_draw("gfx_draw_map_radius");
+    }
+    int32_t numbers[] = { lat_e6, lon_e6, radius_m };
+    mix(&view, sizeof view);
+    mix(numbers, sizeof numbers);
     return HOST_OK;
 }
 

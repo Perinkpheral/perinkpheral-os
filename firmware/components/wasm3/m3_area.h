@@ -39,6 +39,13 @@ void m3_area_reset(void);
  * it; 0 without an area. */
 size_t m3_area_most_used(void);
 
+/* Memory of the area lent to one call of the contract for as long as the
+ * call lasts - the map's working memory - so that it is counted against the
+ * application, as the interpreter's own memory is, and not taken from the
+ * host's heap. NULL when the area has no room. */
+void *m3_area_take(size_t size);
+void  m3_area_give(void *memory);
+
 #ifdef __cplusplus
 }
 #endif

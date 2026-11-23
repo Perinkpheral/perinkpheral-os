@@ -60,3 +60,13 @@ void *m3_Area_Realloc(void *memory, size_t size)
 {
     return s_heap != NULL ? multi_heap_realloc(s_heap, memory, size) : NULL;
 }
+
+void *m3_area_take(size_t size)
+{
+    return s_heap != NULL ? multi_heap_malloc(s_heap, size) : NULL;
+}
+
+void m3_area_give(void *memory)
+{
+    m3_Area_Free(memory);
+}

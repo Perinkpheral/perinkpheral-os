@@ -191,6 +191,10 @@ object AppCheckTest {
             val theirs = defines(File(root, file))[there] ?: error("$file no longer defines $there")
             check(here[ours] == theirs) { "standin.c's $ours is ${here[ours]}, $file's $there is $theirs" }
         }
+        val scratch = defines(File(root, "firmware/components/map/include/map.h"))["MAP_SCRATCH_BYTES"]
+        check(scratch == dev.perinkpheral.core.build.AppBuilder.MAP_WORKING_BYTES.toString()) {
+            "AppBuilder's MAP_WORKING_BYTES is not map.h's MAP_SCRATCH_BYTES $scratch"
+        }
         val ascent = Regex("""departure_11_ascent = (\d+)""").find(File(root, "firmware/components/gfx/fonts/departure_11.h").readText())
         check(ascent != null && here["DEPARTURE_ASCENT"] == ascent.groupValues[1]) { "the font's ascent is not standin.c's" }
         val record = here["REQUEST_RECORD_BYTES"] ?: error("standin.c has no REQUEST_RECORD_BYTES")

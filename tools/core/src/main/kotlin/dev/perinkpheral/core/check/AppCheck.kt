@@ -46,6 +46,9 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
     }
 
     private val checkDir = File(sdk.sdk, "check")
+    /** The map's geometry, which the stand-in host answers gfx_map_point() with: the firmware's
+     * own source, so the numbers are the device's. */
+    private val mapDir = File(sdk.root, "firmware/components/map")
     private val compiler = System.getenv("CC")?.takeIf { it.isNotBlank() } ?: "cc"
 
     /**
@@ -99,11 +102,13 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             .filter { it.isFile && it.name.endsWith(".c") && it.name !in DEVICE_ONLY }.sortedBy { it.path }
         fun compiled(source: File): File {
             val made = File(into, source.nameWithoutExtension + ".o")
-            val (code, said) = execute(listOf(compiler) + FLAGS + includes() + listOf("-c", source.path, "-o", made.path), into)
+            val (code, said) = execute(listOf(compiler) + FLAGS + includes(File(mapDir, "include")) +
+                listOf("-c", source.path, "-o", made.path), into)
             if (code != 0) throw BuildError("${source.path} did not compile for this computer:\n$said")
             return made
         }
-        return Host(library.map(::compiled), compiled(File(checkDir, "standin.c")), compiled(File(checkDir, "checks.c")))
+        return Host(library.map(::compiled) + compiled(File(mapDir, "map_geo.c")), compiled(File(checkDir, "standin.c")),
+            compiled(File(checkDir, "checks.c")))
     }
 
     private fun includes(vararg more: File): List<String> =

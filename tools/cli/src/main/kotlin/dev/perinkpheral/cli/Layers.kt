@@ -221,13 +221,14 @@ class Layers(firmwareFolder: File) {
         private val ALLOWED = mapOf(
             "board" to listOf(), "appconf" to listOf(), "words" to listOf(), "qr" to listOf(),
             "wasm3" to listOf(), "gfx" to listOf(),
+            "map" to listOf("gfx"),
             "deadlines" to listOf("board"), "input" to listOf("board"),
             "epd" to listOf("board", "deadlines"),
             // The network clock uses the supported time range of Perinkpheral OS contract.
             "net" to listOf("board", "deadlines", "sdk"),
             "ui" to listOf("gfx", "words"),
             "appstore" to listOf("board", "sdk"),
-            "appsys" to listOf("appstore", "board", "gfx", "ui", "words", "qr", "wasm3", "sdk"),
+            "appsys" to listOf("appstore", "board", "gfx", "map", "ui", "words", "qr", "wasm3", "sdk"),
         )
 
         /** Pure: built and tested on this computer, with nothing of ESP-IDF. */
@@ -235,6 +236,7 @@ class Layers(firmwareFolder: File) {
             "../recovery/main/screen.c", "../recovery/main/control.h",
             "components/appconf/appconf.c", "components/words/words.c",
             "components/gfx/gfx.c", "components/gfx/gfx_icons.c", "components/gfx/font_square.c",
+            "components/map/map_geo.c", "components/map/map_land.c", "components/map/map_draw.c",
             "components/ui/wm.c", "components/ui/kit.c", "components/ui/list.c", "components/ui/notice.c",
             "components/ui/notice_queue.c", "components/ui/scrollbar.c",
             "components/epd/refresh_policy.c", "components/epd/frame_box.c",
@@ -243,7 +245,7 @@ class Layers(firmwareFolder: File) {
             "components/net/include/wifi_events.h",
             "components/net/ota_stream.c", "components/net/ota_health.c", "components/net/captive_portal.c",
             "components/qr/wifi_qr.c",
-            "components/appsys/answer_headers.c", "components/appsys/app.c", "components/appsys/app_api_data.c", "components/appsys/app_api_draw.c",
+            "components/appsys/answer_headers.c", "components/appsys/app.c", "components/appsys/app_api_data.c", "components/appsys/app_api_draw.c", "components/appsys/app_api_map.c",
             "components/appsys/app_api_sys.c", "components/appsys/app_api_time.c", "components/appsys/app_api_ui.c",
             "components/appsys/app_delivery.c", "components/appsys/app_scene.c",
             "components/appstore/app_manifest.c", "components/appstore/app_store.c", "components/appstore/app_room.c",

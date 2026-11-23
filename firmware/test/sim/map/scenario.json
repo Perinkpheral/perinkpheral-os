@@ -1,0 +1,7 @@
+{
+  "app": "firmware/test/host/apps/map",
+  "at": 1794832230,
+  "tz": "Europe/Moscow",
+  "steps": ["shot world", "press 3", "shot tokyo", "press 3", "shot istanbul", "press 3", "shot moscow",
+            "press 3", "shot limassol"]
+}

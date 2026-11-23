@@ -3,7 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  *
  * Graphics: the surface, text and fonts, shapes,
- * bitmaps, QR codes, Perinkpheral OS's icons and the application's pictures.
+ * bitmaps, QR codes, Perinkpheral OS's icons, the application's pictures and maps.
  */
 #pragma once
 
@@ -12,7 +12,7 @@
 /* ---- Drawing and measurement ----
  *
  * Drawing calls require app_on_draw(). Text measurements, font metrics,
- * gfx_fit_text() and gfx_icon_ink() work in any handler. gfx_draw_qr()
+ * gfx_fit_text(), gfx_icon_ink() and gfx_map_point() work in any handler. gfx_draw_qr()
  * works in any handler when cell is 0. gfx_width() and gfx_height()
  * require app_on_draw(). */
 
@@ -233,3 +233,68 @@ HOST_IMPORT(gfx_icon_ink, int32_t gfx_icon_ink(int32_t icon, int32_t cell, host_
  * application. */
 HOST_IMPORT(gfx_draw_picture,
             int32_t gfx_draw_picture(int32_t x, int32_t y, const uint8_t *picture, int32_t cell));
+
+/* ---- Maps ----
+ *
+ * Land and sea of the whole Earth, drawn by Perinkpheral OS from Natural Earth's 1:10m land
+ * (public domain) kept at one arc-minute: a cell is about 1.85 km north to south. Land, sea
+ * and the coastline only: no borders, no countries, no cities, no names; the one lake is the
+ * Caspian. Places are microdegrees: latitude -90000000..90000000, north positive; longitude
+ * -180000000..180000000, east positive. Distances are along a sphere of radius 6371009 m.
+ *
+ * A map is a rectangle of the surface - x, y as other drawing (-4096..4096), w 1..400,
+ * h 1..300 - and a projection:
+ *   HOST_MAP_WORLD  the whole Earth over the rectangle: 180 W at the left edge, 90 N at the
+ *                   top, degrees evenly spaced. lat_e6, lon_e6 and m_per_px must be 0.
+ *   HOST_MAP_AEQD   azimuthal equidistant round (lat_e6, lon_e6): distance and direction
+ *                   from the centre are true, north is up the centre's meridian (on a pole,
+ *                   the centre's longitude runs down from the centre). m_per_px is
+ *                   500..25000 metres a pixel, and no corner may be more than 6000 km from
+ *                   the centre: m_per_px * sqrt((w/2)^2 + (h/2)^2) <= 6000000. A 400 x 260
+ *                   map can take 25000; a 400 x 300 one 24000.
+ * land and sea are colours as gfx_set_color() takes them, 0..16: dithered greys, or with
+ * dithering disabled 1..7 paper and 8..15 ink. HOST_MAP_COASTLINE in flags draws a solid
+ * line of ink on the land side of every coast; other bits must be 0. A pixel shows what is at
+ * its centre. An invalid map is refused with HOST_ERR_ARGUMENT. */
+#define HOST_MAP_WORLD 0
+#define HOST_SINCE_HOST_MAP_WORLD "0.1.94"
+#define HOST_MAP_AEQD 1
+#define HOST_SINCE_HOST_MAP_AEQD "0.1.94"
+#define HOST_MAP_COASTLINE 1
+#define HOST_SINCE_HOST_MAP_COASTLINE "0.1.94"
+
+typedef struct host_map {
+    int32_t x, y, w, h;
+    int32_t lat_e6, lon_e6, m_per_px;
+    int32_t projection, land, sea, flags;
+} host_map_t;
+HOST_LAYOUT(host_map_t, 44);
+
+typedef struct host_map_point {
+    int32_t x, y, visible;
+} host_map_point_t;
+HOST_LAYOUT(host_map_point_t, 12);
+
+/* Draws the map: every pixel of its rectangle, clipped to the surface, land or sea. The colour
+ * stays as it was. Up to about a quarter of a second on the device, about a second for a
+ * large map near a pole. While it draws it takes 8 KB of the application's 64 KB working
+ * area; HOST_ERR_NO_SPACE when that much is not free. Requires app_on_draw(). */
+#define HOST_SINCE_gfx_draw_map "0.1.94"
+HOST_IMPORT(gfx_draw_map, int32_t gfx_draw_map(const host_map_t *map));
+
+/* Where a place falls on the map: visible 1 and x, y of the pixel that holds it in surface
+ * coordinates, ready for gfx_draw_*(); or visible 0 and x = y = 0 when that pixel is outside
+ * the rectangle or the place is on the far side of an azimuthal map. A world map's edges
+ * clamp: 180 E is its last column and 90 S its last row. Works in any handler. Returns
+ * HOST_ERR_ARGUMENT, leaving point untouched, for an invalid map or place. */
+#define HOST_SINCE_gfx_map_point "0.1.94"
+HOST_IMPORT(gfx_map_point, int32_t gfx_map_point(const host_map_t *map, int32_t lat_e6,
+                                                 int32_t lon_e6, host_map_point_t *point));
+
+/* Draws the ring of places radius_m (100000..2000000) from a place, in the current colour,
+ * clipped to the map's rectangle: 256 straight pieces, true distance on any projection. On an
+ * azimuthal map centred on the place it is a circle of radius_m / m_per_px pixels; on a world
+ * map a ring cut by the left or right edge goes on from the other. Requires app_on_draw(). */
+#define HOST_SINCE_gfx_draw_map_radius "0.1.94"
+HOST_IMPORT(gfx_draw_map_radius, int32_t gfx_draw_map_radius(const host_map_t *map, int32_t lat_e6,
+                                                             int32_t lon_e6, int32_t radius_m));

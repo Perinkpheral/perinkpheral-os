@@ -4,7 +4,7 @@
  *
  * Inside the application runtime: what app.c (loading, the handlers, the
  * import table) and the calls of the contract by area - app_api_draw.c,
- * app_api_ui.c, app_api_data.c, app_api_time.c, app_api_sys.c - share. Not
+ * app_api_map.c, app_api_ui.c, app_api_data.c, app_api_time.c, app_api_sys.c - share. Not
  * for anybody outside components/appsys.
  */
 #pragma once
