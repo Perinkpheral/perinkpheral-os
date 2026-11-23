@@ -76,7 +76,7 @@ async function ask(url, options) {
   return json;
 }
 
-/* Repeat catalog reads and installs only after an explicit refusal. A lost
+/* Repeat catalog reads, app installs and glyph uploads after an explicit refusal. A lost
  * response may mean the installation was committed, so it must not be replayed. */
 async function askForApp(url, options) {
   const delays = [2000, 4000, 8000];

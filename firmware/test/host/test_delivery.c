@@ -16,8 +16,20 @@
 #include "host_api.h"
 #include "wm.h"
 #include "question_press.h"
+#include "m3_area.h"
+#include "notice.h"
+#include "words.h"
+#include "gfx_icons.h"
 
 #include "tinytest.h"
+
+/* Keep the host interpreter on its native allocator, while exercising the
+ * firmware's area-availability guard and map scratch path. */
+static bool area_available = true;
+bool m3_area_available(void) { return area_available; }
+void m3_area_reset(void) {}
+void *m3_area_take(size_t size) { return malloc(size); }
+void m3_area_give(void *memory) { free(memory); }
 
 static bool refuse_module_memory;
 static void *module_malloc(size_t size)
@@ -208,6 +220,47 @@ static void deliver_piece(size_t length, int flags, int64_t now_ms)
     app_delivery_t delivery = { .kind = APP_DELIVERY_PIECE, .request = 1, .http_status = 200,
                                 .data = bytes, .length = length, .flags = flags };
     app_deliver(&state, &wm, probe, &delivery, now_ms);
+}
+
+static void test_missing_application_area(void)
+{
+    start_on(&menu.scene);
+    size_t module_size;
+    uint8_t *module = app_store_read_module(root, "probe", &module_size);
+    CHECK(module != NULL);
+    area_available = false;
+    app_t *loaded = NULL;
+    CHECK(app_load("probe", 3, module, module_size, 0, &SERVICES, &loaded) == APP_ERR_NO_AREA);
+    CHECK(loaded == NULL);
+    free(module);
+
+    const char *languages[] = { "en", "ru" };
+    for (size_t index = 0; index < sizeof languages / sizeof languages[0]; index++) {
+        words_use(languages[index]);
+        start_on(probe);
+        CHECK(app_scene_app(probe) == NULL);
+        uint8_t actual[400 * 260 / 8], expected[sizeof actual];
+        gfx_t surface;
+        gfx_init(&surface, actual, 400, 260);
+        gfx_clear(&surface, false);
+        probe->ops->draw(probe, &surface);
+        gfx_init(&surface, expected, 400, 260);
+        gfx_clear(&surface, false);
+        const notice_t notice = {
+            .first = "Probe",
+            .second = word(WORD_CANNOT_START),
+            .detail = word(WORD_APP_MEMORY_UNAVAILABLE),
+            .icon = GFX_ICON_WARNING,
+            .back = word(WORD_CLOSE),
+        };
+        notice_draw(&surface, &notice);
+        CHECK(memcmp(actual, expected, sizeof actual) == 0);
+    }
+    words_use("en");
+    start_on(&menu.scene);
+    area_available = true;
+    start_on(probe);
+    CHECK(app_scene_app(probe) != NULL);
 }
 
 static void test_on_the_screen(void)
@@ -965,6 +1018,7 @@ static void test_question_survives_background_delivery(void)
 int main(void)
 {
     install_probe();
+    test_missing_application_area();
     test_frozen_settings_translation();
     test_notification_consumption();
     test_on_the_screen();

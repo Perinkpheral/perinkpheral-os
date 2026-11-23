@@ -354,7 +354,7 @@ async function loadGlyphs() {
         await ask("/api/glyphs/remove?name=" + offer.name, { method: "POST" });
       } else {
         const pack = await (await fetch(sources[0] + "/glyphs/" + offer.file)).arrayBuffer();
-        await ask("/api/glyphs", { method: "POST", body: pack });
+        await askForApp("/api/glyphs", { method: "POST", body: pack });
       }
       await loadGlyphs();
     }));

@@ -1,0 +1,70 @@
+/* SPDX-License-Identifier: MIT */
+#pragma once
+
+/* GCC's sanitizers retain the complete route tables, including handlers the
+ * test never calls. Leave their unrelated hardware dependencies unresolved;
+ * accidentally reaching one fails, without fake successful service calls. */
+#pragma weak index_html_end
+#pragma weak index_html_start
+#pragma weak app_install_begin
+#pragma weak app_install_end
+#pragma weak app_install_files_are_valid
+#pragma weak app_install_run
+#pragma weak app_kv_orphaned
+#pragma weak app_manifest_accepts_setting
+#pragma weak app_manifest_is_valid_name
+#pragma weak app_store_file_size
+#pragma weak app_store_is_file_name
+#pragma weak app_store_read_file
+#pragma weak app_store_read_manifest
+#pragma weak app_store_read_translation
+#pragma weak app_system_time_set
+#pragma weak appconf_fields
+#pragma weak appconf_follow_network
+#pragma weak appconf_put
+#pragma weak captive_portal_redirect
+#pragma weak catalog_source_at
+#pragma weak catalog_source_count
+#pragma weak catalog_sources_are_valid
+#pragma weak catalog_url
+#pragma weak esp_random
+#pragma weak glyphs_free_bytes
+#pragma weak glyphs_list
+#pragma weak host_close_app
+#pragma weak host_confirm_on_device
+#pragma weak host_deliver
+#pragma weak host_reload_apps
+#pragma weak httpd_query_key_value
+#pragma weak httpd_req_get_url_query_str
+#pragma weak httpd_resp_send
+#pragma weak httpd_resp_send_500
+#pragma weak httpd_resp_send_chunk
+#pragma weak httpd_resp_sendstr_chunk
+#pragma weak httpd_resp_set_hdr
+#pragma weak httpd_resp_set_type
+#pragma weak launcher_installed
+#pragma weak launcher_read_installed
+#pragma weak launcher_remove
+#pragma weak log_capture_read
+#pragma weak mbedtls_x509_crt_free
+#pragma weak mbedtls_x509_crt_init
+#pragma weak mbedtls_x509_crt_parse
+#pragma weak mbedtls_x509_dn_gets
+#pragma weak ota_enter_recovery
+#pragma weak poller_fetch
+#pragma weak poller_hurry
+#pragma weak power_hold_radio
+#pragma weak power_release_radio
+#pragma weak settings_change
+#pragma weak settings_load_menu_order
+#pragma weak settings_load_sources
+#pragma weak settings_save_sources
+#pragma weak web_app_settings_save
+#pragma weak web_app_settings_value
+#pragma weak web_query_value
+#pragma weak web_read_body
+#pragma weak web_read_body_alloc
+#pragma weak web_settings_json
+#pragma weak web_sources_json
+#pragma weak wifi_phase_has_access_point
+#pragma weak wifi_scan_networks

@@ -66,7 +66,7 @@ test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c
 TESTS   += test_recovery_screen
 TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
-TESTS   += test_m3_area
+TESTS   += test_m3_area test_web_memory
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
@@ -318,9 +318,9 @@ test_polls: test_polls.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c
 		$(APPSTORE)/poll_schedule.c -lm
 
 # mkdtemp and friends are POSIX, not C11.
-test_delivery: test_delivery.c tinytest.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
+test_delivery: test_delivery.c tinytest.h $(COMP)/wasm3/m3_area.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) \
-		-Dd_m3MaxLinearMemoryPages=1 $(QR_INCS) -o $@ test_delivery.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
+		-Dd_m3MaxLinearMemoryPages=1 -Dd_m3ApplicationArea -I$(COMP)/wasm3 $(QR_INCS) -o $@ test_delivery.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
 		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
 
 test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
@@ -351,3 +351,8 @@ build/wrongimport/app.wasm: apps/wrongimport/wrongimport.c $(TOOLS)
 
 test_catalog_stream: test_catalog_stream.c tinytest.h $(APPSTORE)/catalog_stream.c $(APPSTORE)/include/catalog_stream.h
 	$(CC) $(CFLAGS) -I$(SDK)/lib -o $@ test_catalog_stream.c $(APPSTORE)/catalog_stream.c
+
+# Compile the real route tables, dispatcher, status and glyph handler. Discard
+# unrelated hardware paths, as test_host_events does for host.c.
+test_web_memory: test_web_memory.c tinytest.h $(MAIN)/web_server.c $(MAIN)/web_apps.c $(MAIN)/memory.c $(APPSTORE)/json_tree.c $(WORDS)/words.c $(COMP)/wasm3/m3_area.h $(wildcard $(MAIN)/*.h route_stubs/*.h route_stubs/*/*.h memory_stubs/*.h install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h)
+	$(CC) $(CFLAGS) -O2 -Dasm=__asm__ -ffunction-sections -fdata-sections -DCONFIG_LWIP_MAX_SOCKETS=12 $(MANIFEST_FLAGS) -Iroute_stubs -Imemory_stubs -Iinstall_stubs -Ipersistence_stubs -I$(COMP)/wasm3 -I$(APPCONF)/include -I$(DEADLINES)/include -I$(NET)/include -I$(UI)/include -I$(GFX)/include -I$(MAIN) -o $@ test_web_memory.c $(MAIN)/memory.c $(APPSTORE)/json_tree.c $(WORDS)/words.c $(HOST_TEST_LDFLAGS)
