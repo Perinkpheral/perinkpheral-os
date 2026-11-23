@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.93
+
+- Applications with several screens switch them with held UP and DOWN, round; short UP and DOWN belong to the screen. The SDK's `sdk/lib/app_nav.h` does it - screens, views opened over them and closed with BACK, and the screen's title with a "2/4" count on its baseline that an application may hide - as a recommendation: an application may handle its buttons its own way. The guide has a Screens section. About switches its two screens with held UP and DOWN too.
+
 ## 0.1.92
 
 - An application's poll that the server refuses keeps its HTTP status: 401 with a login page, 404 or 503 reach `app_on_picked()` and `answer_info()` as they are, with values only when the body is whole JSON. Before, any body that was not JSON became HOST_FAILED_NO_ANSWER, so an application could not tell an expired login from a lost network (the Keenetic application never logged in again). A success (2xx) whose body is not JSON is still HOST_FAILED_NO_ANSWER. The simulator and the SDK's stand-in host do the same.

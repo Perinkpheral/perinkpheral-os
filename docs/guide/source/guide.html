@@ -640,6 +640,26 @@ gfx_draw_picture(x, y, PICTURE_DROP, 2);    /* 22 px: cell size 2 */</pre>
 <p>A short press of BACK goes to <code>app_on_back()</code>, or closes the application if it has no such export. A long press of BACK opens Perinkpheral OS's menu. <code>app_on_button()</code> receives the other events, except that question mode consumes OK KEYDOWN. Later OK events are delivered only if the press began after the question reached the panel.</p>
 <p><code>screen_leave()</code> removes the application from the top of the stack. Normally the user returns to the previous screen, including after <code>screen_request()</code>. After BACK+UP/DOWN sibling switching, leaving any application in that row clears the entire stack and its sessions and returns to the menu.</p>
 
+<h2 id="buttons-screens">Screens</h2>
+<p>An application with several screens - peers, like Keenetic's Overview, System, Network and Devices - switches them with held UP and DOWN, round. Short UP and DOWN belong to the screen: a list's rows, a month on a chart. A view opened from a screen, such as an event's page over a list, closes with BACK. An application of one screen keeps its held presses for itself. An application whose short presses have nothing else to do may switch screens with them too.</p>
+<p>The screens need no names. A screen draws its title at the top left; the count, <code>2/4</code>, small at the right on the title's baseline, shows that there are others. The count is the application's to show or hide, per screen: HA Companion's screens hide it. <code>sdk/lib/app_nav.h</code> does all of this; it is a recommendation, and an application may handle its buttons and draw its screens its own way.</p>
+<pre>#include "app_nav.h"
+
+static app_nav_t nav = { .screens = 4 };
+
+void app_on_button(int32_t event)
+{
+    if (app_nav_button(&amp;nav, event) != APP_NAV_IGNORED) {
+        screen_redraw(HOST_REDRAW_SOON);
+        return;
+    }
+}
+
+void app_on_draw(void)
+{
+    int32_t top = app_nav_draw_title(&amp;nav, app_string(STR_TITLE), true);
+}</pre>
+
 <h2 id="buttons-kit">Lists, pickers, dates</h2>
 <pre>#include "app_ui.h"
 

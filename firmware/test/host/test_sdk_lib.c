@@ -115,6 +115,26 @@ int32_t ui_draw_cell(const host_cell_t *cell, const uint8_t *picture, int32_t ic
     }
     return HOST_OK;
 }
+/* What app_nav_draw_title() drew, as text at x of a style. */
+static char drawn[4][16];
+static int32_t drawn_x[4], drawn_y[4], drawn_style[4], drawn_count;
+int32_t ui_draw_text(int32_t x, int32_t y, int32_t style, const char *text, int32_t length, int32_t max_width)
+{
+    (void)max_width;
+    if (drawn_count < 4) {
+        int32_t at = 0;
+        for (; at < length && at < 15; at++) { drawn[drawn_count][at] = text[at]; }
+        drawn[drawn_count][at] = '\0';
+        drawn_x[drawn_count] = x;
+        drawn_y[drawn_count] = y;
+        drawn_style[drawn_count++] = style;
+    }
+    return 10 * length;
+}
+int32_t ui_text_width(int32_t style, const char *text, int32_t length) { (void)style; (void)text; return 10 * length; }
+int32_t ui_text_height(int32_t style) { return style == HOST_UI_CAPTION ? 14 : 24; }
+int32_t gfx_font_ascent(int32_t font) { return font == HOST_FONT_SMALL ? 11 : 19; }
+int32_t gfx_width(void) { return 400; }
 int32_t answer_value(int32_t index, char *text, int32_t capacity) { (void)index; (void)text; (void)capacity; return -1; }
 int32_t answer_count(int32_t index) { (void)index; return -1; }
 int32_t answer_element(int32_t index, int32_t element, char *text, int32_t capacity)
@@ -128,6 +148,7 @@ int32_t answer_element(int32_t index, int32_t element, char *text, int32_t capac
 #include "../../../sdk/lib/app_state.c"
 #include "../../../sdk/lib/app_days.c"
 #include "../../../sdk/lib/app_draw.c"
+#include "../../../sdk/lib/app_nav.c"
 
 static void test_text(void)
 {
@@ -328,8 +349,85 @@ static void test_centring(void)
     ink_answers = 1;
 }
 
+static void test_screens(void)
+{
+    /* long UP and DOWN go round the screens, on a screen itself only */
+    app_nav_t nav = { .screens = 4 };
+    CHECK(app_nav_button(&nav, BTN_DOWN_LONG_PRESSED) == APP_NAV_SCREEN && nav.screen == 1);
+    CHECK(app_nav_button(&nav, BTN_UP_LONG_PRESSED) == APP_NAV_SCREEN && nav.screen == 0);
+    CHECK(app_nav_button(&nav, BTN_UP_LONG_PRESSED) == APP_NAV_SCREEN && nav.screen == 3);
+    CHECK(app_nav_button(&nav, BTN_DOWN_LONG_PRESSED) == APP_NAV_SCREEN && nav.screen == 0);
+    /* short presses and OK are the application's */
+    CHECK(app_nav_button(&nav, BTN_DOWN_PRESSED) == APP_NAV_IGNORED && nav.screen == 0);
+    CHECK(app_nav_button(&nav, BTN_OK_PRESSED) == APP_NAV_IGNORED);
+    CHECK(app_nav_button(&nav, BTN_OK_LONG_PRESSED) == APP_NAV_IGNORED);
+    /* a view over the screen keeps its long presses; BACK closes it, then BACK is the application's */
+    CHECK(app_nav_open(&nav, 7) && app_nav_view(&nav) == 7);
+    CHECK(app_nav_button(&nav, BTN_DOWN_LONG_PRESSED) == APP_NAV_IGNORED && nav.screen == 0);
+    CHECK(app_nav_open(&nav, 8) && app_nav_view(&nav) == 8);
+    CHECK(app_nav_button(&nav, BTN_BACK_PRESSED) == APP_NAV_CLOSED && app_nav_view(&nav) == 7);
+    CHECK(app_nav_button(&nav, BTN_BACK_PRESSED) == APP_NAV_CLOSED && app_nav_view(&nav) == APP_NAV_ON_SCREEN);
+    CHECK(app_nav_button(&nav, BTN_BACK_PRESSED) == APP_NAV_IGNORED);
+    for (int32_t view = 0; view < APP_NAV_VIEWS_MAX; view++) { CHECK(app_nav_open(&nav, view)); }
+    CHECK(!app_nav_open(&nav, 99) && app_nav_view(&nav) == APP_NAV_VIEWS_MAX - 1);
+    /* going to a screen closes the views; a short-press application steps itself */
+    app_nav_go(&nav, 2);
+    CHECK(nav.screen == 2 && nav.depth == 0);
+    CHECK(app_nav_step(&nav, 1) == APP_NAV_SCREEN && nav.screen == 3);
+    CHECK(app_nav_step(&nav, 1) == APP_NAV_SCREEN && nav.screen == 0);
+    /* one screen: long presses are the application's */
+    app_nav_t one = { .screens = 1 };
+    CHECK(app_nav_button(&one, BTN_DOWN_LONG_PRESSED) == APP_NAV_IGNORED && app_nav_step(&one, 1) == APP_NAV_IGNORED);
+    app_nav_t none = { 0 };
+    CHECK(app_nav_button(&none, BTN_UP_LONG_PRESSED) == APP_NAV_IGNORED);
+    /* a session of another shape or an app whose screens shrank is made sound */
+    app_nav_t loaded = { .screens = 9, .screen = 8, .depth = 12 };
+    app_nav_check(&loaded, 3);
+    CHECK(loaded.screens == 3 && loaded.screen == 0 && loaded.depth == 0);
+    loaded.screen = 2; app_nav_check(&loaded, 3);
+    CHECK(loaded.screen == 2);
+    /* views over a screen that is gone go with it; over a screen that stays they stay */
+    app_nav_t gone = { .screens = 4, .screen = 3, .depth = 1, .views = { 7 } };
+    app_nav_check(&gone, 2);
+    CHECK(gone.screen == 0 && gone.depth == 0 && app_nav_view(&gone) == APP_NAV_ON_SCREEN);
+    app_nav_t stays = { .screens = 4, .screen = 1, .depth = 1, .views = { 7 } };
+    app_nav_check(&stays, 2);
+    CHECK(stays.screen == 1 && app_nav_view(&stays) == 7);
+}
+
+static void test_screen_title(void)
+{
+    app_nav_t nav = { .screens = 4, .screen = 1 };
+    drawn_count = 0;
+    CHECK(app_nav_draw_title(&nav, "Network", true) == HOST_UI_MARGIN + 24);
+    CHECK(drawn_count == 2 && !strcmp(drawn[0], "Network") && drawn_x[0] == HOST_UI_MARGIN);
+    CHECK(!strcmp(drawn[1], "2/4") && drawn_style[1] == HOST_UI_CAPTION && drawn_x[1] == 400 - HOST_UI_MARGIN - 30);
+    /* the count stands on the title's baseline */
+    CHECK(drawn_y[0] == HOST_UI_MARGIN && drawn_y[1] == HOST_UI_MARGIN + 19 - 11);
+    /* hidden: no count; neither title nor count: nothing, and no room taken */
+    drawn_count = 0;
+    CHECK(app_nav_draw_title(&nav, "Network", false) == HOST_UI_MARGIN + 24 && drawn_count == 1);
+    drawn_count = 0;
+    CHECK(app_nav_draw_title(&nav, NULL, false) == 0 && drawn_count == 0);
+    drawn_count = 0;
+    CHECK(app_nav_draw_title(&nav, "", true) > 0 && drawn_count == 1 && !strcmp(drawn[0], "2/4"));
+    app_nav_t one = { .screens = 1 };
+    drawn_count = 0;
+    CHECK(app_nav_draw_title(&one, NULL, true) == 0 && drawn_count == 0);
+    app_nav_t many = { .screens = 12, .screen = 9 };
+    drawn_count = 0;
+    app_nav_draw_title(&many, "", true);
+    CHECK(!strcmp(drawn[0], "10/12"));
+    app_nav_t most = { .screens = 500, .screen = 98 };
+    drawn_count = 0;
+    app_nav_draw_title(&most, "", true);
+    CHECK(!strcmp(drawn[0], "99/99"));
+}
+
 int main(void)
 {
+    test_screens();
+    test_screen_title();
     test_text();
     test_paces();
     test_fixed_numbers_at_the_edges();

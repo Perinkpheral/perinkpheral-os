@@ -86,7 +86,8 @@ static bool is_text(const char *text, const char *expected)
 
 void app_on_button(int32_t event)
 {
-    if (event == BTN_OK_PRESSED) {
+    /* Two screens: OK, as before, or held UP/DOWN, as every application with screens. */
+    if (event == BTN_OK_PRESSED || event == BTN_UP_LONG_PRESSED || event == BTN_DOWN_LONG_PRESSED) {
         /* Round and round; memory and uptime are read anew each time. */
         is_state_page = !is_state_page;
         screen_redraw(HOST_REDRAW_NORMAL);

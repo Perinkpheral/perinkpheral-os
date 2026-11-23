@@ -2026,6 +2026,15 @@ A short press of BACK goes to <code>app_on_back()</code>, or closes the applicat
 <code>screen_leave()</code> removes the application from the top of the stack. Normally the user returns to the previous screen, including after <code>screen_request()</code>. After BACK+UP/DOWN sibling switching, leaving any application in that row clears the entire stack and its sessions and returns to the menu.
 <code>screen_leave()</code> снимает приложение с вершины стека. Обычно пользователь возвращается на предыдущий экран, в том числе после <code>screen_request()</code>. После переключения между соседними приложениями через BACK+UP/DOWN выход из любого приложения этого ряда очищает весь стек и его сессии и возвращает в меню.
 
+Screens
+Экраны
+
+An application with several screens - peers, like Keenetic's Overview, System, Network and Devices - switches them with held UP and DOWN, round. Short UP and DOWN belong to the screen: a list's rows, a month on a chart. A view opened from a screen, such as an event's page over a list, closes with BACK. An application of one screen keeps its held presses for itself. An application whose short presses have nothing else to do may switch screens with them too.
+Приложение с несколькими экранами - равноправными, как «Обзор», «Система», «Сеть» и «Устройства» у Keenetic - переключает их удержанием UP и DOWN, по кругу. Короткие UP и DOWN принадлежат экрану: строки списка, месяц на графике. Вид, открытый с экрана, например страница события поверх списка, закрывается кнопкой BACK. Приложение из одного экрана оставляет удержание себе. Приложение, которому короткие нажатия больше не для чего, может переключать экраны и ими.
+
+The screens need no names. A screen draws its title at the top left; the count, <code>2/4</code>, small at the right on the title's baseline, shows that there are others. The count is the application's to show or hide, per screen: HA Companion's screens hide it. <code>sdk/lib/app_nav.h</code> does all of this; it is a recommendation, and an application may handle its buttons and draw its screens its own way.
+Экранам не нужны имена. Экран рисует свой заголовок слева вверху; счётчик <code>2/4</code> мелко справа на линии заголовка показывает, что есть и другие. Показывать счётчик или скрыть - решает приложение, для каждого экрана: на экранах HA Companion он скрыт. Всё это делает <code>sdk/lib/app_nav.h</code>; это рекомендация, и приложение может обрабатывать кнопки и рисовать экраны по-своему.
+
 Lists, pickers, dates
 Списки, выбор значения, даты
 
