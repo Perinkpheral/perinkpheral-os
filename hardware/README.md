@@ -49,8 +49,8 @@ Temperature: `0x18` after reset = `0x48` (external sensor, which the module does
 - Do not bend the flex cable toward the front side or perpendicularly; secure it for the duration of development.
 
 ## Power
-- On battery the 5V pin is empty; 3V3 up to ~700 mA. Battery voltage is not routed to the ADC.
-- XIAO ESP32-C6 deep sleep per Seeed data ~15 µA at 3.8 V; light sleep 3.1 mA; modem sleep 30 mA. Deep-sleep button wake uses ext1 on GPIO0-7 (there is no ext0 on the C6); buttons 1-3 are suitable and button 4 on GPIO21 is not. Main firmware uses light sleep, with all four buttons configured as GPIO wake sources.
+- The device can run on its battery; battery life is not specified in version 1. On battery the 5V pin is empty; 3V3 up to ~700 mA. Battery voltage is not routed to the ADC.
+- XIAO ESP32-C6 deep sleep per Seeed data ~15 µA at 3.8 V; light sleep 3.1 mA; modem sleep 30 mA. These are vendor figures; device current has not been measured. Deep-sleep button wake uses ext1 on GPIO0-7 (there is no ext0 on the C6); buttons 1-3 are suitable and button 4 on GPIO21 is not. Main firmware uses light sleep, with all four buttons configured as GPIO wake sources.
 
 ## Open questions
 - The cause of the BUSY hang with block CS is not established. Per-byte CS remains a driver constraint (pitfall 1).

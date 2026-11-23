@@ -22,8 +22,8 @@ Connect power to USB-C.
 The QR code joins the device's Wi-Fi.
 QR-код подключает телефон к сети устройства.
 
-Connect a USB-C cable to a USB power supply or a computer. The device starts and charges its battery. It can run without the cable when charged.
-Подключите кабель USB-C к зарядному устройству или компьютеру. Устройство включится и начнёт заряжать батарею. После зарядки оно может работать без кабеля.
+Connect a USB-C cable to a USB power supply or a computer. The device starts and charges its battery. It can run on its battery; battery life is not specified in version 1.
+Подключите кабель USB-C к зарядному устройству или компьютеру. Устройство включится и начнёт заряжать батарею. Оно может работать от батареи; время работы в версии 1 не указано.
 
 On your phone, scan the QR code on the screen and join <b>Perinkpheral-XXXX</b>. You can also choose that network in the phone's Wi-Fi settings. Stay connected even if the phone says there is no internet.
 Отсканируйте телефоном QR-код на экране и подключитесь к сети <b>Perinkpheral-XXXX</b>. Её также можно выбрать в настройках Wi-Fi телефона. Оставайтесь в этой сети, даже если телефон сообщает, что интернета нет.
