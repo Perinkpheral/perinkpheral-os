@@ -108,6 +108,7 @@ typedef enum {
                            signature: built for another host version */
     APP_ERR_BAD_MODULE, /* not wasm, more than one page of memory, or an import
                            outside the host API */
+    APP_ERR_NO_AREA, /* the application area's boot reservation failed */
 } app_load_result_t;
 
 /* What a manifest asked for beyond the host API, as app_load() takes it. */

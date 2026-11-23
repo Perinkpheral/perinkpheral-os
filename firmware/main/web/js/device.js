@@ -75,7 +75,8 @@ function statusFacts() {
     ["Memory", [
       ["Free", has(status.free_memory) && kb(status.free_memory)],
       ["Errors", faults.join(", ")],
-      ["App area", status.app_area && t("{0} of {1}", kb(status.app_area_used), kb(status.app_area))],
+      ["App area", status.app_area_available === false ? "Unavailable"
+        : status.app_area && t("{0} of {1}", kb(status.app_area_used), kb(status.app_area))],
       ["Storage", status.storage_ok === false ? "Error"
         : status.storage_total && t("{0} of {1}", kb(status.storage_used), kb(status.storage_total))],
     ]],

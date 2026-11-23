@@ -321,6 +321,7 @@ static esp_err_t handle_status(httpd_req_t *request)
     /* Of the application area, the most the application loaded now has had. */
     json_add_number(json, "app_area_used", (int64_t)m3_area_most_used());
     json_add_number(json, "app_area", M3_AREA_BYTES);
+    json_add_bool(json, "app_area_available", m3_area_available());
     json_add_bool(json, "storage_ok", storage_is_mounted());
     size_t storage_used = 0, storage_total = 0;
     storage_usage(&storage_used, &storage_total);

@@ -49,5 +49,10 @@ module.exports = async function () {
   assert.equal(button.textContent, "Install");
   assert.equal(requests.filter(request => request.options?.method === "POST").length, 1);
 
-  console.log("Glyph memory refusal: ok");
+  const device = read("device.js");
+  vm.runInContext(device.slice(0, device.indexOf("/* Facts as a list")), context);
+  vm.runInContext("settings = {}; status = { app_area: 147456, app_area_available: false };", context);
+  const facts = context.statusFacts().flatMap(([, rows]) => rows);
+  assert.equal(facts.find(([label]) => label === "App area")[1], "Unavailable");
+  console.log("Glyph memory refusal and application-area status: ok");
 };

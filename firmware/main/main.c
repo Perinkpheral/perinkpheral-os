@@ -190,7 +190,10 @@ void app_main(void)
     }
     reset_early_init();
     /* First of all: the heap will not be this whole again. */
-    m3_area_start();
+    if (!m3_area_start()) {
+        ESP_LOGE(TAG, "cannot reserve %u bytes for the application area; applications cannot start",
+                 (unsigned)M3_AREA_BYTES);
+    }
 
     settings_nvs_init();
     app_kv_start();

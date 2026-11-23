@@ -5,6 +5,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,8 +26,11 @@ extern "C" {
 #define M3_AREA_BYTES         (M3_AREA_PAGE_BYTES + M3_AREA_WORKING_BYTES)
 
 /* Takes the area from the heap, once, for as long as the device runs.
- * Call it first of all, while the heap is whole. */
-void m3_area_start(void);
+ * Call it first of all, while the heap is whole. False if unavailable. */
+bool m3_area_start(void);
+
+/* Whether the boot reservation is usable, not merely configured. */
+bool m3_area_available(void);
 
 /* Makes the area whole again: every instance starts in an area nobody has
  * been in. Only with no application loaded. */

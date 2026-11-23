@@ -532,6 +532,11 @@ app_load_result_t app_load(const char *name, uint32_t abi, const uint8_t *wasm, 
     if (!app_abi_supported(abi)) {
         return APP_ERR_OTHER_API;
     }
+#ifdef d_m3ApplicationArea
+    if (!m3_area_available()) {
+        return APP_ERR_NO_AREA;
+    }
+#endif
     if (s_loaded != NULL) {
         /* The host's mistake, not the application's: said so, since the
          * screen can only say there is no room. */

@@ -14,12 +14,22 @@
 static void               *s_block;
 static multi_heap_handle_t s_heap;
 
-void m3_area_start(void)
+bool m3_area_start(void)
 {
     if (s_block == NULL) {
         s_block = malloc(M3_AREA_BYTES);
         m3_area_reset();
+        if (s_heap == NULL) {
+            free(s_block);
+            s_block = NULL;
+        }
     }
+    return m3_area_available();
+}
+
+bool m3_area_available(void)
+{
+    return s_heap != NULL;
 }
 
 void m3_area_reset(void)

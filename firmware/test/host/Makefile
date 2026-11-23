@@ -66,6 +66,7 @@ test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c
 TESTS   += test_recovery_screen
 TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
+TESTS   += test_m3_area
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
@@ -137,6 +138,9 @@ test_wifi_networks: test_wifi_networks.c tinytest.h $(NET)/wifi_networks.c $(NET
 
 test_memory: test_memory.c tinytest.h $(MAIN)/memory.c $(MAIN)/memory.h $(MAIN)/glyphs.h $(wildcard memory_stubs/*.h)
 	$(CC) $(CFLAGS) -Imemory_stubs -I$(MAIN) -I$(DEADLINES)/include -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(SDK_LIB) -o $@ test_memory.c $(MAIN)/memory.c
+
+test_m3_area: test_m3_area.c tinytest.h $(COMP)/wasm3/m3_area.c $(COMP)/wasm3/m3_area.h area_stubs/multi_heap.h
+	$(CC) $(CFLAGS) -Iarea_stubs -I$(COMP)/wasm3 -o $@ test_m3_area.c
 
 # Running a real application needs wasi-sdk to build it.
 ifdef WASI_SDK_PATH

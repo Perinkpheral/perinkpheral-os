@@ -109,6 +109,9 @@ static bool load(app_scene_t *self)
         self->needs_memory = true;
         self->load_error = word(WORD_OUT_OF_MEMORY);
         break;
+    case APP_ERR_NO_AREA:
+        self->load_error = word(WORD_APP_MEMORY_UNAVAILABLE);
+        break;
     case APP_ERR_OTHER_API:
         /* Made for a host that is not this one: after a firmware update,
          * most likely. The catalog has the one that is. */

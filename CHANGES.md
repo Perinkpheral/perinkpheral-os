@@ -7,7 +7,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.
-
+- A failed application-area reservation at boot is logged and reported by `/api/status` as `app_area_available: false`. Applications show "App memory unavailable." instead of failing without a specific reason; Device shows the area as unavailable.
 - Applications have 80 KB for interpreter allocations, up from 64 KB. The application area reserved at startup is now 144 KB, leaving 16 KB less heap for Perinkpheral OS and TLS. The wasm page stays fixed at 64 KB and ABI 3 is unchanged. The build report warns above the new interpreter estimate budget; it does not refuse the application.
 
 ## 0.1.94

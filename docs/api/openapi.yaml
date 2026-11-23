@@ -106,8 +106,9 @@ components:
         least_free_memory: { type: integer, description: "Bytes, since start" }
         reset_reason: { type: integer, description: "esp_reset_reason(): 3 restart, 4 fault, 5 interrupt watchdog" }
         last_panic: { type: string, description: "Record of the last fault, if any" }
-        app_area_used: { type: integer }
-        app_area: { type: integer }
+        app_area_used: { type: integer, description: "Peak bytes used since the last application unload; 0 when unavailable" }
+        app_area: { type: integer, description: "Configured application area size in bytes; see app_area_available for reservation state" }
+        app_area_available: { type: boolean, description: "Whether the configured application area was reserved at boot; false means applications cannot start" }
         storage_ok: { type: boolean }
         storage_used: { type: integer, description: Bytes }
         storage_total: { type: integer, description: Bytes }
