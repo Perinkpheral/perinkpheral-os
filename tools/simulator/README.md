@@ -43,7 +43,10 @@ Beyond the device's API:
 | `POST /api/sim/forward?seconds=N` | the clock and every deadline move on |
 
 Mocks: a JSON object of address to answer. An address ending in `*` matches
-every address that begins with the rest.
+every address that begins with the rest. With `--mocks`, all requests stay offline:
+an unmatched request is logged and delivered as `HOST_FAILED_NO_ANSWER`. An unreadable
+or invalid mocks file stops the simulator with a non-zero exit status. Omit `--mocks`
+to use the computer's network.
 
     {
       "https://api.open-meteo.com/*": { "status": 200, "file": "forecast.json" },
