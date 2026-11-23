@@ -26,6 +26,12 @@ static void set_value(const char *key, const char *value)
     assert(kv_store(s_options.app, key, value, (int32_t)strlen(value), true) == HOST_OK);
 }
 
+static void *fetch_on_worker(void *context)
+{
+    fetch(context);
+    return NULL;
+}
+
 static void test_mocks(const char *state)
 {
     char path[PATH_BYTES];
@@ -62,12 +68,22 @@ static void test_mocks(const char *state)
         assert(fputs(sets[index], file) >= 0);
         assert(fclose(file) == 0);
         assert(load_mocks());
-        job_t job = { .method = HOST_HTTP_GET };
+        job_t job = { .method = HOST_HTTP_GET, .is_poll = true, .item = -1 };
         snprintf(job.url, sizeof job.url, "http://example.test/data");
-        char next[APP_URL_MAX + 1];
-        exchange(&job, next, sizeof next);
-        assert(job.status == HOST_FAILED_NO_ANSWER && next[0] == '\0');
+        /* The worker must not touch the main thread's log, even when nearly full. */
+        memset(s_log, 'x', LOG_KEPT_BYTES - 1);
+        s_log[LOG_KEPT_BYTES - 1] = '\0';
+        s_log_length = LOG_KEPT_BYTES - 1;
+        uint64_t written_before = s_log_written;
+        pthread_t worker;
+        assert(pthread_create(&worker, NULL, fetch_on_worker, &job) == 0);
+        assert(pthread_join(worker, NULL) == 0);
+        assert(s_log_written == written_before);
+        assert(s_log_length == LOG_KEPT_BYTES - 1);
+        assert(strspn(s_log, "x") == s_log_length);
+        assert(job.status == HOST_FAILED_NO_ANSWER && job.response.length == -1);
         assert(ftell(s_fetcher_in) == 0);
+        hand_over(&job);
         assert(strstr(s_log, "no mock matches GET http://example.test/data; network disabled by --mocks") != NULL);
         json_free(s_mocks);
         s_mocks = NULL;

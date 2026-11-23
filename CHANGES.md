@@ -7,6 +7,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 ## 0.1.95
 
 - The simulator stops when a supplied mocks file cannot be read or parsed. With mocks supplied, unmatched requests fail with a clear log message and never reach the network.
+- Missing-mock diagnostics are logged during main-thread delivery, avoiding concurrent access to the simulator's log.
 
 ## 0.1.94
 

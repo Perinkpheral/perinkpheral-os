@@ -130,7 +130,7 @@ static int64_t unix_now(void)
     return now + s_forward_ms / MS_PER_SECOND;
 }
 
-/* ---- the log: what /api/log gives, and the console ---- */
+/* ---- the log: main-thread only, what /api/log gives, and the console ---- */
 
 static char    *s_log;
 static size_t   s_log_length;
@@ -389,6 +389,7 @@ typedef struct job {
     int         item; /* of the list a poll with "each" goes over; -1: none */
     /* the answer */
     int             status; /* HTTP, or a HOST_FAILED_* */
+    bool            missing_mock; /* diagnostic delivered on the main thread */
     uint8_t        *answer;
     size_t          answer_length;
     host_answer_info_t response;
@@ -610,7 +611,7 @@ static void exchange(job_t *job, char *next, size_t next_size)
         return;
     }
     if (s_options.mocks != NULL) {
-        say('E', "sim", "no mock matches %s %s; network disabled by --mocks", METHODS[job->method], job->url);
+        job->missing_mock = true;
         job->status = HOST_FAILED_NO_ANSWER;
         return;
     }
@@ -885,6 +886,9 @@ static bool accepts_job(const job_t *job)
  * picked, or the answer in pieces of HOST_DATA_CHUNK_MAX. */
 static void hand_over(job_t *job)
 {
+    if (job->missing_mock) {
+        say('E', "sim", "no mock matches %s %s; network disabled by --mocks", METHODS[job->method], job->url);
+    }
     if (job->status == HOST_FAILED_NOT_ALLOWED) {
         say('W', "sim", "%s: a request to a host its manifest does not list", s_options.app);
     }
