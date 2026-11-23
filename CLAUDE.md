@@ -62,7 +62,7 @@ Battery → XIAO
 
 Free: D9 (GPIO20, MISO - the display does not need it).
 ```
-The wiring is fixed and done - do not change it. Battery voltage and USB supply voltage are **not measured** - decided, do not propose dividers or ADC. The power profile is a Perinkpheral OS setting. Auto uses the existing USB Serial/JTAG connection to a USB host; this does not detect a charger or tell which source powers the board.
+The wiring is fixed and done - do not change it. Battery voltage and USB supply voltage are **not measured** in version 1 - decided, do not propose dividers or ADC for it. Version 1 promises no battery life: autonomy is conditional and undocumented (the owner, 2026-11-24). A battery ADC and its driver may come in version 2. The power profile is a Perinkpheral OS setting. Auto uses the existing USB Serial/JTAG connection to a USB host; this does not detect a charger or tell which source powers the board.
 
 ### Board specifics worth knowing
 - Not on the header and not to be touched: GPIO9 (BOOT, strapping), GPIO15 (user LED), GPIO12/13 (USB D-/D+), GPIO3 and GPIO14 (the antenna switch - driven only by `firmware/components/board`).
