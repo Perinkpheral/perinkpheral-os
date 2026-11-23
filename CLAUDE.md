@@ -88,7 +88,7 @@ The wiring is fixed and done - do not change it. Battery voltage and USB supply 
 
 ## Memory budget (the hard limit of the C6)
 - SRAM 512 KB, shared by Perinkpheral OS, the application area, Wi-Fi and TLS. There is no PSRAM and there will be none.
-- Flash 4 MB: `appkv` 56 KB, a factory recovery image of `0xE0000` (896 KiB) and one `ota_0` slot of `0x200000` (2 MiB), `appcode` 320 KB, LittleFS `apps` 640 KB and `glyphs` 64 KB (`firmware/partitions.csv`). Main must fit `ota_0`; recovery must fit `factory`. Builds check both independently. Both firmware builds use `-Os`; the release has no development tools (`sdkconfig.release`). The web page is gzip-compressed. CI reports image and RAM sizes against the preceding successful build of `main`. The partition table cannot change over the air.
+- Flash 4 MB: `appkv` 56 KB, a factory recovery image of `0xE0000` (896 KiB) and one `ota_0` slot of `0x200000` (2 MiB), `appcode` 320 KB, LittleFS `apps` 640 KB and `glyphs` 64 KB (`firmware/partitions.csv`). Main must fit `ota_0`; recovery must fit `factory`. Builds check both independently. The map service's land and code take 233 KB of main (the release image went from 1,366,304 to 1,599,760 bytes on 2026-11-23, 497,392 bytes of the slot free); recovery does not carry it. Both firmware builds use `-Os`; the release has no development tools (`sdkconfig.release`). The web page is gzip-compressed. CI reports image and RAM sizes against the preceding successful build of `main`. The partition table cannot change over the air.
 - A wasm application's arena is **exactly 64 KB** (one wasm page, there is nothing smaller), fixed for everyone. Build: `-Wl,--initial-memory=65536 -Wl,--max-memory=65536 -Wl,-z,stack-size=8192` (`tools/perinkpheral build` does it); the interpreter is built with a limit of one page, so a module that asks for more does not load and none can grow.
 - **One** wasm instance is loaded at a time. Background delivery unloads the scene, loads the owner and delivers the answer, then restores the scene unless the owner takes the screen. Its session survives this swap.
 - **Sockets are counted** (`web_server.c`): lwIP has 12; the web server keeps three of its own, the setup access point's name server one, the poller one for the request it makes; the page's connections are the seven left, the oldest closed for the next. Promised more than are left, a connection finds no socket while the server still has room, nothing is closed and the page is dead (seen 2026-11-17, "error in accept (23)").
@@ -105,7 +105,7 @@ access. One WebAssembly instance runs at a time; background responses load their
 owning application and then restore the scene.
 
 ### Application
-**Feature freeze until the public release** (the owner, 2026-11-20): bugs, UI/UX and the polish of applications only; no new call, application or mechanism. The order to the release: manual acceptance (`docs/testing/acceptance.md`), fixes, the endurance run (`docs/testing/stability.md`), fixes, load testing (`docs/testing/load.md`), the release - at which ABI 3 is frozen in fact. The owner admitted manifest poll methods and bodies under the freeze on 2026-11-21: "polls are GET only - extend the host API; an important change, taken in under the freeze". ABI 3 stays 3.
+**Feature freeze until the public release** (the owner, 2026-11-20): bugs, UI/UX and the polish of applications only; no new call, application or mechanism. The order to the release: manual acceptance (`docs/testing/acceptance.md`), fixes, the endurance run (`docs/testing/stability.md`), fixes, load testing (`docs/testing/load.md`), the release - at which ABI 3 is frozen in fact. The owner admitted manifest poll methods and bodies under the freeze on 2026-11-21: "polls are GET only - extend the host API; an important change, taken in under the freeze". The map service (`gfx_draw_map`, `gfx_map_point`, `gfx_draw_map_radius`, 0.1.94) was ordered by the owner on 2026-11-23 as an addition under the freeze, for ISS and Earthquakes. ABI 3 stays 3.
 
 **ABI 3 is the application contract; its first firmware is 0.1.30.** The supported set is explicitly `{3}`; ABI 2 is refused with "Update the app.", with no adapters. The manifest's ABI is retained through parsing into `app_load()`, which selects the supported contract before running code. Firmware releases and ABI generations are independent. An existing name, signature, privilege, binary layout, constant, accepted input or observable meaning cannot change within ABI 3, except that `HOST_ICON_COUNT` may increase when contiguous icon IDs are appended. A changed signature or meaning requires a new ABI while Perinkpheral OS retains the frozen generations it supports; additions after the 0.1.30 ABI floor carry permanent `HOST_SINCE_<name>` introduction stamps. New flags, exports or manifest behaviour that cannot be inferred from imports require an explicit firmware minimum. A new fixed struct layout needs a new call/type; `answer_info` alone permits extension after its unchanged prefix.
 
@@ -197,6 +197,7 @@ Perinkpheral OS is organized in layers. Each layer knows only the ones below it:
 | Drivers | `firmware/components/epd` (`epd.c`), `firmware/components/input`, `firmware/components/board` | the panel, the buttons, the antenna switch |
 | Display service | `firmware/components/epd` (`display.c`, `refresh_policy.c`) | keeps a copy of the frame the panel shows; given a new frame it leaves the panel alone if nothing changed, refreshes it, or says "too soon" |
 | Graphics | `firmware/components/gfx` | draws on a surface: the whole frame or a viewport into it with its own origin and clipping |
+| Maps | `firmware/components/map` | the land of the Earth and its projections, drawn on a gfx surface; main firmware only |
 | Window manager | `firmware/components/ui` (`wm.c`) | which scene has the screen, how the user moves between scenes, how a frame is put together from the header and the scene's picture |
 | Scenes | `firmware/main/scene_*.c`, `firmware/components/appsys/app_scene.c` | tie a model to a view and decide what the buttons do, all behind one interface (`scene.h`): enter, leave, button, draw |
 | Views | `firmware/main/screens.c` | a struct in, pixels out; no hardware, rendered by `tools/preview` |
@@ -295,6 +296,11 @@ gfx_draw_bitmap_file(x, y, w, h, name, name_len, offset)  // the same picture re
 gfx_draw_picture(x, y, picture_ptr, cell)   // a picture of the application's own: a byte of width, a byte of height, a bit a cell;
                                        // a cell of the specified pixel size. The build generates pictures from PNGs and rows of '#' and '.'
 gfx_draw_icon(x, y, icon, cell)             // one of Perinkpheral OS's icons, 11 cells square, a cell so many pixels; in the current colour
+gfx_draw_map(map_ptr)                  // land and sea in a rectangle: the world, or azimuthal equidistant round a place
+                                       // (500-25000 m a pixel, corners within 6000 km); two shades and a coastline; no borders,
+                                       // no names; 8 KB of the application area while it draws (0.1.94)
+gfx_map_point(map_ptr, lat_e6, lon_e6, point_ptr)  // the pixel that holds a place, and whether it is on the map; any handler
+gfx_draw_map_radius(map_ptr, lat_e6, lon_e6, radius_m)  // the ring of places 100-2000 km from a place, clipped to the map
 gfx_icon_ink(icon, cell, ink_ptr)      // where it has ink, to place it by what is seen
 screen_redraw(flags)                  // the picture is out of date; SOON bypasses the data interval with a one-second minimum; CLEAN also requests full refresh;
                                        // NO_BLINK - now, never periodic full; QUESTION - OK must begin after the frame is shown
@@ -537,6 +543,9 @@ firmware/              the ESP-IDF project (build from this folder)
     deadlines/         shared deadlines of Perinkpheral OS: the table (pure) and the one timer behind it
     epd/               SSD1683 driver, display service, partial/full policy (pure), the changed box (pure)
     gfx/               primitives, the square font, the bitmap fonts (fonts/), the icons (icons/) (pure)
+    map/               the map service: Natural Earth's land at one arc-minute (map_land_data.c, made by tools/perinkpheral
+                       map), its rANS decoder, integer projections (map_geo.c, which the stand-in host builds too) and the
+                       drawing (pure); not in recovery
     words/             Perinkpheral OS's own words in the device's language: buttons, questions, days and months (pure)
     input/             buttons, debounce, short/long press, the way out by UP and BACK held together
     ui/                scene interface, the window manager, the kit, lists and notices (pure)
@@ -665,6 +674,7 @@ The owner's rule (2026-11-17): every push of every repository is built and teste
 | User manual pictures (`docs/manual/source/pictures`) | Print from committed, visually reviewed pictures; CI does not regenerate them |
 | Guide screens and icon sheets | Native `preview`; compare every committed PNG by pixels |
 | Fonts, `gfx_icon_art.c`, spelling and cities | Regenerate in scratch storage; compare committed text by bytes |
+| The map's land (`firmware/components/map/map_land_data.c`, `include/map_land_data.h`) | Regenerate from Natural Earth's land at the pinned commit, its SHA-256 checked, downloaded once into `~/.perinkpheral/sources` or passed with `--source`; compare by bytes. The generator decodes every row again before writing, and the host tests decode every row with the firmware's decoder |
 | Marks | Regenerate SVG/PNG; compare bytes or pixels and the page's embedded mark; compare embedded wordmark with its SVG master |
 | Russian HTML | Generate from each document's English source and translation pairs; ignored intermediate, no second committed copy |
 | Device page and gzip | Assemble in CI and each firmware build; no committed assembled copy |

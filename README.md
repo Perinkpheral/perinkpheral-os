@@ -96,4 +96,5 @@ repository's release workflows.
 
 [MIT](LICENSE). Departure Mono and Jersey fonts and their generated bitmaps
 use [SIL OFL 1.1](assets/fonts/OFL-DepartureMono.txt)
-([Jersey license](assets/fonts/OFL-Jersey.txt)).
+([Jersey license](assets/fonts/OFL-Jersey.txt)). The map service's land is made from
+[Natural Earth](https://www.naturalearthdata.com/) 1:10m land, which is in the public domain.
