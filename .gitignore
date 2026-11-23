@@ -21,6 +21,7 @@ firmware/sdkconfig.old
 firmware/test/host/*.dSYM/
 firmware/test/host/test_*
 !firmware/test/host/test_*.c
+firmware/test/host/bench_map
 firmware/test/host/build/
 sdk/apps/*/*.wasm
 .DS_Store

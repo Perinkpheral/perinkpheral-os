@@ -37,6 +37,18 @@ QR_SRCS := $(QR)/qrcodegen/qrcodegen.c $(QR)/wifi_qr.c
 QR_INCS := -I$(QR)/include -I$(QR)/qrcodegen
 TESTS   := test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
 TESTS   += test_answer_headers test_web_settings_json test_web_app_settings
+TESTS   += test_map
+
+MAP      := $(COMP)/map
+MAP_SRCS := $(MAP)/map_geo.c $(MAP)/map_land.c $(MAP)/map_land_data.c $(MAP)/map_draw.c
+MAP_DEPS := $(MAP_SRCS) $(wildcard $(MAP)/include/*.h)
+
+test_map: test_map.c tinytest.h $(MAP_DEPS) $(GFX_DEPS)
+	$(CC) $(CFLAGS) -I$(MAP)/include -I$(GFX)/include -I$(GFX)/fonts -o $@ test_map.c $(MAP_SRCS) $(GFX)/gfx.c $(GFX)/font_square.c -lm
+
+# Not a test: how long the views take, and an estimate for the C6 (bench_map.c).
+bench_map: bench_map.c bench_map.h $(MAP_DEPS) $(GFX_DEPS)
+	$(CC) -std=c11 -O2 -include bench_map.h -I$(MAP)/include -I$(GFX)/include -I$(GFX)/fonts -o $@ bench_map.c $(MAP_SRCS) $(GFX)/gfx.c $(GFX)/font_square.c
 
 test_web_app_settings: test_web_app_settings.c tinytest.h $(MAIN)/web_app_settings.c $(MAIN)/web_app_settings.h $(APPSTORE)/json_tree.c
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -I$(MAIN) -o $@ test_web_app_settings.c $(MAIN)/web_app_settings.c $(APPSTORE)/json_tree.c
@@ -309,7 +321,7 @@ test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/
 
 clean:
 	rm -rf build
-	rm -f $(TESTS)
+	rm -f $(TESTS) bench_map
 
 # Frozen contracts and packages are inputs, never rebuilt by this target.
 .PHONY: check-abi

@@ -19,7 +19,7 @@ object Generated {
             (0 until before.height).all { y -> (0 until before.width).all { x -> before.getRGB(x, y) == after.getRGB(x, y) } }
     }
 
-    fun check(root: File, contract: Contract): List<String> {
+    fun check(root: File, contract: Contract, mapSource: File? = null): List<String> {
         val scratch = Files.createTempDirectory("perinkpheral-generated").toFile()
         val checked = ArrayList<String>()
         val stale = ArrayList<String>()
@@ -51,6 +51,10 @@ object Generated {
                 Fonts.header(File(root, source), source, pixels, name, header)
                 compare("firmware/components/gfx/fonts/$name.h", header)
             }
+            val map = File(scratch, "map")
+            MapData.make(MapData.source(mapSource), map)
+            compare(MapData.DATA_H, File(map, "include/" + File(MapData.DATA_H).name))
+            compare(MapData.DATA_C, File(map, File(MapData.DATA_C).name))
             FirmwareTools.cities(File(root, "firmware/system/settings/cities.json"),
                 File(root, "firmware/system/settings/cities.h"), true)
             checked += "firmware/system/settings/cities.h"

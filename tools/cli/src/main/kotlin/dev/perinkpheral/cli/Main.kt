@@ -51,7 +51,8 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
                                               application's own tests (logic), from its test folder
 
   What the project makes of its sources:
-    perinkpheral check-generated              committed fonts, icons, marks, spelling and guide screens
+    perinkpheral check-generated [--source <geojson>]
+                                              committed fonts, icons, marks, spelling, map land and guide screens
     perinkpheral check-api                    OpenAPI paths and methods against the firmware routes
     perinkpheral check-pdf <kept> <made>       compare guide text, ignoring PDF metadata and pagination
     perinkpheral contract snapshot|check      record or check the frozen ABI (wasi-sdk required)
@@ -67,6 +68,8 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
     perinkpheral guide-units list|missing <language>|apply <language>
                                               the guide's pieces: what a translation is made of
     perinkpheral icons                        Perinkpheral OS's icons into gfx_icon_art.c
+    perinkpheral map [--source <geojson>]     the map service's land into firmware/components/map,
+                                              from Natural Earth at a pinned commit (downloaded once)
     perinkpheral video <video> --out frames.bin [--width 200] [--height 150] [--fps 1.5] [--threshold 128]
                                               a video into a 1-bit stream an application plays
     perinkpheral spelling --out <header>      how letters with no glyph are spelled in ASCII
@@ -256,7 +259,7 @@ private fun run(raw: Array<String>): Int {
             val out = File(arguments.words.getOrNull(1) ?: File(System.getProperty("java.io.tmpdir"), "perinkpheral-preview").path)
             Preview.render(root(), out, arguments.option("font")).forEach { println(it.path) }
         }
-        "check-generated" -> Generated.check(root(), Sdk(root()).contract).forEach(::println)
+        "check-generated" -> Generated.check(root(), Sdk(root()).contract, arguments.option("source")?.let { File(it) }).forEach(::println)
         "check-api" -> println(Generated.checkApi(root()))
         "check-pdf" -> Generated.checkPdf(File(arguments.word(1, "the committed PDF")),
             File(arguments.word(2, "the rebuilt PDF")))
@@ -326,6 +329,7 @@ private fun run(raw: Array<String>): Int {
             println("${report.applications} applications, ${report.checked} checks, ${report.failed.size} failed")
             if (report.failed.isNotEmpty()) return 1
         }
+        "map" -> println(MapData.make(MapData.source(arguments.option("source")?.let { File(it) }), File(root(), "firmware/components/map")))
         "icons" -> println("firmware/components/gfx/gfx_icon_art.c: ${Icons.make(root(), Sdk(root()).contract)} bytes of drawings")
         "mark" -> {
             val extra = arguments.words.drop(1).chunked(2).map { (pixels, file) -> pixels.toInt() to File(file) }
