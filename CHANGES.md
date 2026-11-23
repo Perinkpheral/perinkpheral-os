@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.95
+
+- The simulator stops when a supplied mocks file cannot be read or parsed. With mocks supplied, unmatched requests fail with a clear log message and never reach the network.
+
 ## 0.1.94
 
 - Maps for applications: `gfx_draw_map()` draws land and sea of the whole Earth (`HOST_MAP_WORLD`) or of a region round a place in the azimuthal equidistant projection (`HOST_MAP_AEQD`, 500 to 25,000 metres a pixel), in two shades and with a coastline; `gfx_map_point()` says which pixel holds a place, `gfx_draw_map_radius()` draws the ring of places at a distance. The land is Natural Earth's 1:10m land (public domain) at one arc-minute, 224 KB in the firmware; it has no borders, no countries, no cities and no names. The simulator and the SDK's stand-in host answer with the same code. The guide has a Maps section.

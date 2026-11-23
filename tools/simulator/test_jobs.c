@@ -26,6 +26,59 @@ static void set_value(const char *key, const char *value)
     assert(kv_store(s_options.app, key, value, (int32_t)strlen(value), true) == HOST_OK);
 }
 
+static void test_mocks(const char *state)
+{
+    char path[PATH_BYTES];
+    snprintf(path, sizeof path, "%s/mocks.json", state);
+    s_options.mocks = path;
+    assert(!load_mocks());
+    assert(strstr(s_log, "cannot be read") != NULL);
+    const char *invalid[] = { "", "{", "[]", "null", "{} trailing", "{\"http://example.test\":null}" };
+    for (size_t index = 0; index < sizeof invalid / sizeof invalid[0]; index++) {
+        FILE *file = fopen(path, "wb");
+        assert(file != NULL);
+        assert(fputs(invalid[index], file) >= 0);
+        assert(fclose(file) == 0);
+        assert(!load_mocks());
+        assert(s_mocks == NULL);
+    }
+    FILE *file = fopen(path, "wb");
+    assert(file != NULL);
+    static const char nul[] = "{}\0trailing";
+    assert(fwrite(nul, 1, sizeof nul - 1, file) == sizeof nul - 1);
+    assert(fclose(file) == 0);
+    assert(!load_mocks());
+    assert(remove(path) == 0);
+
+    /* A supplied fetcher must receive no bytes, even for an empty set of mocks. */
+    s_fetcher_in = tmpfile();
+    assert(s_fetcher_in != NULL);
+    const char *sets[] = { "{}", "{\"http://example.test/other\":{}}",
+                          "{\"http://example.test/data\":{\"method\":\"POST\"}}",
+                          "{\"http://example.test/data\":{\"request_body\":\"different\"}}" };
+    for (size_t index = 0; index < sizeof sets / sizeof sets[0]; index++) {
+        file = fopen(path, "wb");
+        assert(file != NULL);
+        assert(fputs(sets[index], file) >= 0);
+        assert(fclose(file) == 0);
+        assert(load_mocks());
+        job_t job = { .method = HOST_HTTP_GET };
+        snprintf(job.url, sizeof job.url, "http://example.test/data");
+        char next[APP_URL_MAX + 1];
+        exchange(&job, next, sizeof next);
+        assert(job.status == HOST_FAILED_NO_ANSWER && next[0] == '\0');
+        assert(ftell(s_fetcher_in) == 0);
+        assert(strstr(s_log, "no mock matches GET http://example.test/data; network disabled by --mocks") != NULL);
+        json_free(s_mocks);
+        s_mocks = NULL;
+    }
+    assert(fclose(s_fetcher_in) == 0);
+    s_fetcher_in = NULL;
+    assert(remove(path) == 0);
+    s_options.mocks = NULL;
+    assert(load_mocks());
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -34,6 +87,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_mocks(state);
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["
                              "{\"key\":\"server\",\"type\":\"url\"},"
                              "{\"key\":\"other\",\"type\":\"url\"}]}");

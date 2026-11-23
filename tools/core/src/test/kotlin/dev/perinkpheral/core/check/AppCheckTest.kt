@@ -275,6 +275,26 @@ object AppCheckTest {
 
         val scratch = Files.createTempDirectory("perinkpheral-app-check-test").toFile()
         try {
+            val mockCases = listOf("missing", "malformed", "array", "unmatched")
+            for (mockCase in mockCases) {
+                val copy = File(scratch, "mocks/$mockCase/specimen")
+                specimen.copyRecursively(copy)
+                File(copy, "test/check.json").writeText("{\"mocks\":\"answers.json\"}")
+                val answers = File(copy, "test/answers.json")
+                when (mockCase) {
+                    "malformed" -> answers.writeText("{")
+                    "array" -> answers.writeText("[]")
+                    "unmatched" -> answers.writeText("{}")
+                }
+                val report = checker.run(copy, only = "network")
+                if (mockCase == "unmatched") {
+                    check(report.failed.isEmpty()) { report.lines.flatMap { it.details }.joinToString("\n") }
+                    check(report.lines.single().details.any { "checked with failures only" in it })
+                } else {
+                    check(report.failed.isNotEmpty()) { "stand-in host accepted $mockCase mocks" }
+                    if (mockCase == "missing") check(report.failed.any { line -> line.details.any { "answers.json" in it } })
+                }
+            }
             val system = File(scratch, "system/specimen")
             specimen.copyRecursively(system)
             val manifest = File(system, "manifest.json")

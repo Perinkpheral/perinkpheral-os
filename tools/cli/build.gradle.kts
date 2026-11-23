@@ -48,4 +48,10 @@ val flashManifestTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.cli.FlashManifestTest")
 }
 tasks.check { dependsOn(flashManifestTest) }
+val simTestMocksTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.SimTestMocksTest")
+}
+tasks.check { dependsOn(simTestMocksTest) }
 tasks.test { failOnNoDiscoveredTests.set(false) }

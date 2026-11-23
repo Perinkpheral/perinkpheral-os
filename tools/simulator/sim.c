@@ -609,6 +609,11 @@ static void exchange(job_t *job, char *next, size_t next_size)
         answer_from_mock(job, mock);
         return;
     }
+    if (s_options.mocks != NULL) {
+        say('E', "sim", "no mock matches %s %s; network disabled by --mocks", METHODS[job->method], job->url);
+        job->status = HOST_FAILED_NO_ANSWER;
+        return;
+    }
     if (s_fetcher_in == NULL && !start_fetcher()) {
         job->status = HOST_FAILED_NO_NETWORK;
         return;
@@ -2011,35 +2016,61 @@ static void load_glyphs(void)
     }
 }
 
-static void load_mocks(void)
+static bool load_mocks(void)
 {
     if (s_options.mocks == NULL) {
-        return;
+        return true;
     }
     FILE *file = fopen(s_options.mocks, "rb");
     if (file == NULL) {
-        say('E', "sim", "%s cannot be read", s_options.mocks);
-        return;
+        say('E', "sim", "mocks %s cannot be read: %s", s_options.mocks, strerror(errno));
+        return false;
     }
-    fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    long size = -1;
+    if (fseek(file, 0, SEEK_END) == 0) {
+        size = ftell(file);
+    }
+    if (size < 0 || (uintmax_t)size >= SIZE_MAX || fseek(file, 0, SEEK_SET) != 0) {
+        say('E', "sim", "mocks %s cannot be read", s_options.mocks);
+        fclose(file);
+        return false;
+    }
     char *text = calloc(1, (size_t)size + 1);
+    if (text == NULL) {
+        say('E', "sim", "mocks %s cannot be read: out of memory", s_options.mocks);
+        fclose(file);
+        return false;
+    }
     size_t read = fread(text, 1, (size_t)size, file);
+    bool is_read = read == (size_t)size && !ferror(file);
     fclose(file);
-    text[read] = '\0';
-    s_mocks = json_parse(text);
+    if (!is_read) {
+        say('E', "sim", "mocks %s cannot be read completely", s_options.mocks);
+        free(text);
+        return false;
+    }
+    s_mocks = memchr(text, '\0', read) == NULL ? json_parse(text) : NULL;
     free(text);
     if (!json_is_object(s_mocks)) {
         say('E', "sim", "%s is not a JSON object of address: answer", s_options.mocks);
         json_free(s_mocks);
         s_mocks = NULL;
-        return;
+        return false;
+    }
+    const json_t *mock;
+    json_for_each(mock, s_mocks) {
+        if (!json_is_object(mock)) {
+            say('E', "sim", "mocks %s: the answer for %s is not a JSON object", s_options.mocks, mock->name);
+            json_free(s_mocks);
+            s_mocks = NULL;
+            return false;
+        }
     }
     const char *slash = strrchr(s_options.mocks, '/');
     snprintf(s_mocks_folder, sizeof s_mocks_folder, "%.*s", slash != NULL ? (int)(slash - s_options.mocks + 1) : 0,
              s_options.mocks);
     say('I', "sim", "%d mocked addresses from %s", json_count(s_mocks), s_options.mocks);
+    return true;
 }
 
 static void usage(void)
@@ -2111,7 +2142,11 @@ int main(int argc, char **argv)
         }
     }
     s_options.state = state;
-    if (s_options.mocks != NULL && realpath(s_options.mocks, mocks) != NULL) {
+    if (s_options.mocks != NULL) {
+        if (realpath(s_options.mocks, mocks) == NULL) {
+            fprintf(stderr, "mocks %s cannot be read: %s\n", s_options.mocks, strerror(errno));
+            return 1;
+        }
         s_options.mocks = mocks;
     }
     if (s_options.glyphs != NULL && realpath(s_options.glyphs, glyphs) != NULL) {
@@ -2177,7 +2212,9 @@ int main(int argc, char **argv)
     words_use(s_settings.language);
     gfx_font_use(s_options.jersey ? GFX_FAMILY_JERSEY : GFX_FAMILY_DEPARTURE_MONO);
     load_glyphs();
-    load_mocks();
+    if (!load_mocks()) {
+        return 1;
+    }
     if (pipe(s_jobs_done) != 0) {
         return 1;
     }

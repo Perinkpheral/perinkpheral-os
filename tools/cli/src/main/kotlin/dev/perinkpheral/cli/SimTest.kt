@@ -152,6 +152,7 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
                 // a file beside the scenario, whose "file"s are beside it too
                 is String -> command += listOf("--mocks", File(folder, mocks).absolutePath)
                 is Map<*, *> -> command += listOf("--mocks", File(state, "mocks.json").apply { writeText(Json.write(mocks)) }.path)
+                else -> if (scenario.containsKey("mocks")) throw BuildError("\"mocks\" must be an object or the name of a file")
             }
             val builderOfProcess = ProcessBuilder(command).redirectErrorStream(true).redirectOutput(File(state, "sim.log"))
             builderOfProcess.environment()["TZ"] = scenario["tz"] as? String ?: "UTC"
