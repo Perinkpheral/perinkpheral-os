@@ -100,6 +100,38 @@ require hardware tests. Injected presses do not test the button pins.
 
 ## Manual endurance test
 
+### Reconnect regression (2026-11-24)
+
+Before this change (commit `8d7b247`), `poller_network_is_back()` requested every poll
+only when `power_is_saving()` was false. Plugged and Auto with a USB host therefore
+refetched healthy polls too. Always and Auto without a USB host only woke the poller;
+a poll already answered with a transport failure waited its full resolved interval,
+with the 300-second saving floor. `run_wanted_poll()` scheduled that deadline after
+the round; it did not retain why the request failed. Connection, DNS and non-certificate
+TLS errors normally became `HOST_FAILED_NO_ANSWER`, or `HOST_FAILED_NO_NETWORK` if
+Wi-Fi was still down when classified; timeouts retained their own status.
+
+Raw requests stayed queued for up to 20 seconds without a network. A connection woke
+the poller and those still queued proceeded, subject to the existing per-application
+limit and alternating turns with polls. Expired or already failed raw requests were
+reported and removed, never replayed (`fail_request_without_network()`).
+
+`on_wifi_changed()` in `main.c` requests subscribed `network_up` intents only outside
+power saving. Unsubscribed applications get no intent. `status_check()` can redraw
+the header on recovery, but cannot clear an application's private error state. Poll
+answers and subscribed intents reach the usual application handlers; their redraw
+requests follow the display policy. A poll that cannot start for lack of network or
+memory is delivered only on screen (`poller_net_poll_not_made()`, `app_deliver()`).
+These intent and display rules remain unchanged by the reconnect fix.
+
+The initial host regressions failed in four assertions: saving mode did not retry
+an offline attempt, and plugged mode refetched a healthy poll. `test_poller.c` now
+covers both effective power states, coalescing, due work, reconnect during a failed
+request, list rounds, deferred calls, cooldowns and raw queue expiry and limits.
+`test_poller_net.c` exercises connection/DNS/TLS/read failures separately from HTTP
+refusals, certificate rejection and malformed answers. The simulator has no Wi-Fi
+loss, address-acquisition or power-profile model; its intent endpoint delivers news only.
+
 ### Observation collector
 
 ```sh
@@ -114,7 +146,13 @@ did not retain the ELF, which limits postmortem symbolication for that candidate
 
 The collector writes `run.json`, `status.jsonl`, `log.jsonl`, `events.jsonl` and an
 atomically replaced `progress.json`. Status is sampled every minute and the log every
-two seconds. Responses are not retried invisibly. Boot identifiers detect restarts
+two seconds. Each failed endpoint is retried independently after 2, 4 and then at most
+5 seconds, with a three-second read timeout per request. The first failure and recovery
+are events; `progress.json` retains each endpoint's last success, first failed request
+start, first failure detection, most recent failure and recovery timestamps. Recovery
+events include the observed unavailable duration (failure detection to recovery) and
+an upper bound (preceding success to recovery); sampling cannot establish the exact
+instant the network disappeared. Responses are not retried invisibly. Boot identifiers detect restarts
 even when the new log cursor has already passed the previous one; missing ring-buffer
 bytes and observation gaps are recorded. The collected files may contain private
 application data and network names; keep the directory private and outside git.
@@ -125,8 +163,8 @@ counted as evidence of continuous operation. Another collector cannot own the sa
 directory. There is no automatic device restart, repair, update or pass verdict.
 
 Use `phase.txt` in the run directory to label the physical scenario. `powered` is
-the default. `sleep` reduces log requests to one every 30 seconds; unavailable-device
-requests also back off to 30 seconds. This file changes observation only, not the
+the default. `sleep` reduces successful log sampling to once every 30 seconds; failed
+requests retain the short, capped retries. This file changes observation only, not the
 device's settings. After the first 24 hours the collector records a reminder that
 the physical sleep phase still needs to be arranged. At the end it says
 `awaiting_review`, not passed. Settings, applications, real buttons, the panel and

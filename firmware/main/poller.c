@@ -509,6 +509,10 @@ void poller_poll_is_due(uint32_t app, int poll)
     wake();
 }
 
+/* With the schedule lock: a connection can return before an outstanding
+ * request notices that its old connection broke. */
+static uint32_t s_network_generation;
+
 void poller_network_is_back(void)
 {
     note_network_use(true);
@@ -517,13 +521,10 @@ void poller_network_is_back(void)
     if (s_lock == NULL) {
         return;
     }
-    /* Not when the radio is only on for a poll: the one it was raised for
-     * is wanted already, and the others keep the pace they asked for. */
-    if (!power_is_saving()) {
-        lock();
-        poll_schedule_want_all(&s_schedule);
-        unlock();
-    }
+    lock();
+    s_network_generation++;
+    poll_schedule_network_is_back(&s_schedule);
+    unlock();
     wake();
 }
 
@@ -579,7 +580,9 @@ static void keep_radio_for_work(void)
      * twenty seconds before being told there is no network. */
     bool wanted = power_is_saving() && wants_network() && wifi_phase_has_radio(wifi.phase);
     if (wanted && !s_is_holding_radio) {
-        if (uptime_ms() >= retry_at_ms) {
+        /* Keeping an existing connection needs no wake-up. The retry pause
+         * limits attempts to raise an offline radio, not work already reachable. */
+        if (wifi_is_online() || uptime_ms() >= retry_at_ms) {
             power_hold_radio();
             s_is_holding_radio = true;
             held_since_ms = uptime_ms();
@@ -621,6 +624,7 @@ static bool run_wanted_poll(void)
     int  item = turn.item;
     bool is_round = turn.is_continuation;
     bool is_installed = has_turn && name_of(app, name);
+    uint32_t network_generation = s_network_generation;
     unlock();
     if (!has_turn) {
         return false;
@@ -652,17 +656,24 @@ static bool run_wanted_poll(void)
          * for the next one, and is not to be undone when this one ends. */
         lock();
         poll_schedule_answered(&s_schedule, app, poll);
+        deadlines_cancel(DEADLINE_POLL, (uint32_t)app, poll);
         unlock();
     }
+    bool network_failed = why_not == HOST_FAILED_NO_NETWORK;
     if (is_installed) {
         lock();
         begin_answer_locked((uint32_t)app, true);
         unlock();
         if (why_not == 0) {
-            items = poller_net_poll(name, poll, item, &method);
+            items = poller_net_poll(name, poll, item, &method, &network_failed);
         } else {
             poller_net_poll_not_made(name, poll, why_not);
         }
+    }
+    /* A broken connection ends the list round. Retrying each remaining item
+     * while offline would only deliver the same failure repeatedly. */
+    if (network_failed) {
+        items = 0;
     }
     /* More items to ask: the round goes on, between whatever else waits. */
     if (!poll_rounds_answered(&s_rounds, &turn, items)) {
@@ -670,6 +681,12 @@ static bool run_wanted_poll(void)
     }
     /* By id: if the application is gone meanwhile, so is its poll. */
     lock();
+    if (network_failed) {
+        poll_schedule_network_failed(&s_schedule, app, poll);
+        if (network_generation != s_network_generation && wifi_is_online()) {
+            poll_schedule_network_is_back(&s_schedule);
+        }
+    }
     uint32_t pace_ms = poll_schedule_pace_ms(&s_schedule, app, poll);
     /* A poll_run() its answer made and that was put off has its deadline already. */
     bool is_due_soon = poll_schedule_is_due_soon(&s_schedule, app, poll);
@@ -972,12 +989,12 @@ int32_t poller_set_interval(const char *app_name, int poll, uint32_t every_s)
     lock();
     bool updated = poll_schedule_set_interval(&s_schedule, app, poll, effective_s, &is_another);
     uint32_t pace_ms = poll_schedule_pace_ms(&s_schedule, app, poll);
+    if (updated && is_another &&
+        deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, pace_ms)) {
+        /* An application's cooldown also covers later items of this round.
+         * Neither its completion nor a reconnect may bring that deadline forward. */
+        poll_schedule_due_soon(&s_schedule, app, poll);
+    }
     unlock();
-    if (!updated) {
-        return HOST_ERR_ARGUMENT;
-    }
-    if (is_another) {
-        deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, pace_ms);
-    }
-    return HOST_OK;
+    return updated ? HOST_OK : HOST_ERR_ARGUMENT;
 }

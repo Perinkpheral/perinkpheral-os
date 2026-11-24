@@ -4,6 +4,11 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.97
+
+- Obtaining a Wi-Fi address immediately retries manifest polls that failed in transport or became due offline, including in power-saving profiles. Healthy polls, HTTP refusals such as 429, invalid answers and certificate refusals keep their pace. List retries coalesce into one round; queued raw requests proceed without replaying failed requests.
+- The endurance observer retries failed log and status reads independently after 2, 4 and then at most 5 seconds, with three-second read timeouts. Per-endpoint last success, failure request start, failure detection and recovery timestamps distinguish request latency and retry delay from the observed outage bounds. Existing collectors are unaffected until restarted.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.

@@ -81,6 +81,7 @@ bool poll_schedule_add(poll_schedule_t *schedule, int app, int poll, uint32_t ev
     entry->every_ms = every_s * MS_PER_SECOND;
     entry->is_wanted = false;
     entry->is_due_soon = false;
+    entry->failed_for_network = false;
     return true;
 }
 
@@ -135,10 +136,21 @@ void poll_schedule_want_of(poll_schedule_t *schedule, int app)
     }
 }
 
-void poll_schedule_want_all(poll_schedule_t *schedule)
+void poll_schedule_network_is_back(poll_schedule_t *schedule)
 {
     for (int i = 0; i < schedule->count; i++) {
-        want(schedule, &schedule->entries[i]);
+        poll_entry_t *entry = &schedule->entries[i];
+        if (entry->failed_for_network && !entry->is_due_soon) {
+            want(schedule, entry);
+        }
+    }
+}
+
+void poll_schedule_network_failed(poll_schedule_t *schedule, int app, int poll)
+{
+    poll_entry_t *entry = find(schedule, app, poll);
+    if (entry != NULL) {
+        entry->failed_for_network = true;
     }
 }
 
@@ -162,6 +174,7 @@ void poll_schedule_answered(poll_schedule_t *schedule, int app, int poll)
     if (entry != NULL) {
         entry->is_wanted = false;
         entry->is_due_soon = false;
+        entry->failed_for_network = false;
     }
 }
 

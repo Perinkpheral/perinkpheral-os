@@ -123,12 +123,13 @@ class DeviceClient(val host: String) {
     class Answer(val status: Int, val body: ByteArray, val headers: Map<String, String>)
 
     /** Asks once and gives back whatever the device answered, a refusal included. */
-    fun raw(path: String, method: String = "GET"): Answer {
+    fun raw(path: String, method: String = "GET", timeoutMs: Int = 10_000): Answer {
+        require(timeoutMs > 0) { "timeout must be positive" }
         val connection = URI.create(base + path).toURL().openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
             connection.connectTimeout = 3_000
-            connection.readTimeout = 10_000
+            connection.readTimeout = timeoutMs
             connection.setRequestProperty("Connection", "close")
             if (method != "GET") {
                 connection.doOutput = true

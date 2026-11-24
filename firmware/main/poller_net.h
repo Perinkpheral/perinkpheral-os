@@ -38,8 +38,10 @@ bool poller_net_setting_of(void *context, const char *key, char *value, size_t v
  * `item` of the list. Returns the number of items of the list, 0 for a
  * poll of one request - or of a list that is empty, which is told "not
  * ready". Writes the method being sent to `method` before delivering any answer;
- * leaves it unchanged when no request is prepared. */
-int poller_net_poll(const char *app_name, int poll_number, int item, int *method);
+ * leaves it unchanged when no request is prepared. `network_failed` separates
+ * transport failures from HTTP refusals, invalid bodies and local failures. */
+int poller_net_poll(const char *app_name, int poll_number, int item, int *method,
+                    bool *network_failed);
 
 /* A poll that cannot be made now - `why` is a HOST_FAILED_*: no network,
  * no memory. The application on the screen is told; one that is not is

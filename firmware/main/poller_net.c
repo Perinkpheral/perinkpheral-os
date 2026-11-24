@@ -192,6 +192,7 @@ typedef struct {
      * with "each" stands for. */
     const char *app_name;
     char        item[APP_LIST_ITEM_MAX + 1];
+    bool        network_failed;
 } request_t;
 
 /* A setting for a request's templates: the item, for the key of the list
@@ -466,6 +467,10 @@ static void fetch_values(request_t *request, esp_http_client_handle_t client,
     if (!json_pick_finish(&request->pick)) {
         is_whole = false; /* "{\"price\":123": values, and no document around them */
     }
+    if (length == 0 && !esp_http_client_is_complete_data_received(client)) {
+        length = -1;
+    }
+    request->network_failed = length < 0 && http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
     cut_forget();
     esp_http_client_close(client);
     bool is_ok = http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
@@ -510,6 +515,10 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
             break;
         }
         if (next_length == 0) {
+            if (!esp_http_client_is_complete_data_received(client)) {
+                next_length = -1;
+                break;
+            }
             flags |= HOST_DATA_LAST;
         }
         hand_over_piece(app_name, poll_number, http_status, &request->response, &request->headers, piece,
@@ -524,6 +533,9 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
         length = next_length;
     }
     bool is_too_long = length == READ_TOO_LONG || next_length == READ_TOO_LONG;
+    request->network_failed = (length < 0 || next_length < 0) &&
+                              total <= HOST_ANSWER_PIECES_MAX &&
+                              http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
     if (is_too_long) {
         ESP_LOGW(TAG, "%s/%d: the answer took over %d s", app_name, poll_number,
                  PIECES_WITHIN_MS / MS_PER_SECOND);
@@ -741,6 +753,7 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         tell_failure(app_name, number, wants_values, HOST_FAILED_NOT_ALLOWED);
     } else if (err != ESP_OK || http_status <= 0) {
         int why = why_no_answer(client, err);
+        request->network_failed = why != HOST_FAILED_NOT_TRUSTED;
         /* A poll over a list is one number for every item: which of them did not answer. */
         ESP_LOGW(TAG, "%s/%d%s%s: no answer (%d): %s", app_name, number,
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
@@ -817,8 +830,10 @@ static int list_item(const char *app_name, const char *key, int item, char *text
     }
 }
 
-int poller_net_poll(const char *app_name, int poll_number, int item, int *method)
+int poller_net_poll(const char *app_name, int poll_number, int item, int *method,
+                    bool *network_failed)
 {
+    *network_failed = false;
     request_t *request = calloc(1, sizeof *request);
     if (request == NULL) {
         ESP_LOGW(TAG, "%s/%d: no memory for the request", app_name, poll_number);
@@ -848,6 +863,7 @@ int poller_net_poll(const char *app_name, int poll_number, int item, int *method
         }
         *method = request->poll.method;
         perform(request, app_name, poll_number, *method, NULL, 0, false);
+        *network_failed = request->network_failed;
         s_item = -1;
     }
     free(request);
