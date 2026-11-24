@@ -27,7 +27,9 @@
  * breaks between them. Omit a manifest default when absent; explicit null is
  * invalid. URL/link defaults need HTTP(S), a nonempty host, no userinfo and
  * an optional decimal port 1..65535. URL defaults have no path/query/fragment;
- * link defaults may include them and contain no spaces. */
+ * link defaults may include them and contain no spaces. Companion pages receive
+ * effective non-secret, non-link values too: defaults for absent settings,
+ * preserved stored empty values, and list defaults joined with line feeds. */
 HOST_IMPORT(kv_get, int32_t kv_get(const char *key, int32_t key_length, void *value,
                                    int32_t capacity));
 

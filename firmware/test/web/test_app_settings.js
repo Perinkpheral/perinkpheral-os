@@ -70,4 +70,36 @@ assert.equal(unavailable.disabled, true);
 assert.equal(unavailable.placeholder, "Unavailable");
 assert.equal(unavailable.dataset.key, undefined, "an unavailable field cannot be submitted or filled by a companion");
 assert.equal(unavailable.value, "", "an unavailable field does not display a fabricated default");
+/* Exercise the actual ready-message handler, including defaults and redacted fields. */
+const companionButton = element("button"), dialog = { open: true };
+const messages = [], listeners = {};
+const companionWindow = { postMessage: (message, origin) => messages.push({ message, origin }) };
+context.companionApp = {
+  name: "example", title: "Example", companion: "https://example.test/setup",
+  settings: [
+    { key: "absent", type: "text", default: "Default" },
+    { key: "empty", type: "text", default: "Overridden" },
+    { key: "list", type: "list", default: ["one", "two"] },
+    { key: "empty_list", type: "list", default: ["default"] },
+    { key: "missing", type: "text" },
+    { key: "secret", type: "secret", default: "secret" },
+    { key: "link", type: "link", default: "https://private.test/feed" },
+  ],
+  values: { empty: "", empty_list: "", secret: "stored secret", link: "stored link" },
+};
+context.URL = URL;
+context.document.getElementById = id => id === "app-companion" ? companionButton : dialog;
+context.window = {
+  open: () => companionWindow,
+  addEventListener: (event, handler) => { listeners[event] = handler; },
+};
+vm.runInContext("let appInDialog = companionApp;\n" +
+  between(apps, "let companion = null;", "/* One page sends one install"), context);
+companionButton.listeners.click();
+listeners.message({ data: { perinkpheral: "ready" }, source: companionWindow, origin: "https://example.test" });
+assert.equal(messages.length, 1);
+assert.equal(messages[0].origin, "https://example.test");
+assert.deepEqual(JSON.parse(JSON.stringify(messages[0].message.values)), {
+  absent: "Default", empty: "", list: "one\ntwo", empty_list: "", missing: "",
+});
 console.log("app settings: ok");

@@ -447,7 +447,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <pre>{ perinkpheral: "ready" }
 { perinkpheral: "app", name, title, settings, values }
 { perinkpheral: "settings", values: { key: "value" } }</pre>
-<p>The companion sends ready; the device page replies with app, the manifest settings and their current values. Both secret and link values are omitted. The companion returns settings with declared keys and string values of at most 255 bytes. Only inputs present in the form can be filled, including coordinate inputs referenced by a place setting even when marked hidden. Other hidden settings have no inputs. An integration can write hidden settings through <code>/api/apps/settings</code>. The user must press Save to store filled values.</p>
+<p>The companion sends ready; the device page replies with app, the manifest settings and their effective values: manifest defaults for absent settings, stored empty values preserved, and list defaults joined with line feeds. Both secret and link values are omitted. The companion returns settings with declared keys and string values of at most 255 bytes. Only inputs present in the form can be filled, including coordinate inputs referenced by a place setting even when marked hidden. Other hidden settings have no inputs. An integration can write hidden settings through <code>/api/apps/settings</code>. The user must press Save to store filled values.</p>
 <p>Check event.source against window.opener and validate event.origin against the expected device origin. Use that origin as postMessage's target for values. The initial ready message carries no user data.</p>
 <h1 id="screen">6. Screen</h1>
 
