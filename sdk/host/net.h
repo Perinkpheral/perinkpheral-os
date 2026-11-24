@@ -168,7 +168,11 @@ HOST_IMPORT(answer_info, int32_t answer_info(host_answer_info_t *response, int32
  * Only the final response after redirects is exposed; no cookies are stored
  * or sent automatically. Save required session values with kv_set only when
  * they change: background instances are unloaded between answers. Bind cached
- * credentials to their server/account and clear them when settings change. */
+ * credentials to their server/account and clear them when settings change.
+ * app-check mocks supply response headers as string values or arrays of
+ * repeated values in "headers". Its stand-in uses the firmware storage and
+ * fixed metadata parser; no transport decoding or automatic headers are
+ * simulated (sdk/check/README.md). */
 #define HOST_SINCE_answer_header "0.1.51"
 HOST_IMPORT(answer_header,
             int32_t answer_header(const char *name, int32_t name_length, int32_t occurrence,
