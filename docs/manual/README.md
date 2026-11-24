@@ -54,10 +54,11 @@ Blender or silently regenerate reviewed artwork.
 
 - `export_model.py` uses the enclosure exporter's tessellator and the named
   STEP solids, in their assembly positions.
-- `render_device.py` renders that assembly in Blender and projects the real
-  button centres. `hardware_pictures.cjs` adds callout lines and button outlines:
-  dashed for a press, solid for a hold. There are no fingers. Numbers 1-4 and
-  the outline convention are explained in both languages in the manual.
+- `render_device.py` renders that assembly in Blender using the production case
+  and cap colours, with close-up cameras and neutral lighting for print. It
+  projects the button centres and the USB-C opening. `hardware_pictures.cjs` adds
+  callout lines and button outlines: dashed for a press, solid for a hold.
+  Numbers 1-4 and the outline convention are explained in both languages.
   Raster dimensions and quality are preserved; SVGs embed the original PNG bytes.
   The base and USB-port PNG renders stay in the review folder as SVG inputs.
 - `screen_pictures.py` runs the real Settings and Weather applications through

@@ -33,20 +33,40 @@ def material(name, color, roughness=0.7):
     node.inputs['Roughness'].default_value = roughness
     return result
 
-shell = material('Warm paper enclosure', (0.69, 0.68, 0.64))
-ink = material('Graphite', (0.055, 0.055, 0.05))
-rubber = material('Feet', (0.16, 0.16, 0.15))
-paper = material('E-paper', (0.91, 0.91, 0.86))
+def srgb(red, green, blue):
+    return tuple(((channel / 255 + 0.055) / 1.055) ** 2.4 for channel in (red, green, blue))
+
+# Match the production case and caps under the manual's neutral lighting.
+shell = material('Copper PLA', srgb(126, 83, 60), roughness=0.48)
+ink = material('Black PLA', srgb(21, 21, 21), roughness=0.45)
+rubber = material('Feet', srgb(27, 27, 27), roughness=0.85)
+paper = material('E-paper', srgb(173, 173, 168), roughness=0.8)
+buttons = {}
 for item in json.loads(model.read_text()):
-    mesh = bpy.data.meshes.new(item['name'])
+    name = item['name']
+    mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(item['vertices'], [], item['triangles'])
     mesh.update()
-    obj = bpy.data.objects.new(item['name'], mesh)
+    obj = bpy.data.objects.new(name, mesh)
     scene.collection.objects.link(obj)
-    obj.data.materials.append(ink if item['name'] == 'Logo' else rubber if item['name'].startswith('Foot') and item['name'][4:].isdigit() else shell)
+    if name.startswith('Cap'):
+        top = max(vertex[2] for vertex in item['vertices'])
+        center = [(min(vertex[axis] for vertex in item['vertices']) +
+                   max(vertex[axis] for vertex in item['vertices'])) / 2 for axis in (0, 1)]
+        buttons[name] = (*center, top)
+        mesh.materials.append(ink)
+    elif name == 'Logo':
+        mesh.materials.append(ink)
+    elif name.startswith('Foot') and name[4:].isdigit():
+        mesh.materials.append(rubber)
+    else:
+        mesh.materials.append(shell)
 # The STEP describes the enclosure. This insert is the panel inside its aperture.
 mesh = bpy.data.meshes.new('Panel insert')
-vertices = [(x, z * 0.267949 - 0.5, z) for x, z in [(10, 19), (101.5, 19), (101.5, 74), (10, 74)]]
+panel_up = Vector((0, 0.25882, 0.96593))
+panel_normal = Vector((0, -0.96593, 0.25882))
+vertices = [Vector((x, 0, 0)) + panel_up * height + panel_normal * (0.518 - 2.25)
+            for x, height in [(10.25, 6.7), (101.25, 6.7), (101.25, 83.7), (10.25, 83.7)]]
 mesh.from_pydata(vertices, [], [(0, 1, 2, 3)])
 obj = bpy.data.objects.new('Panel insert', mesh)
 scene.collection.objects.link(obj)
@@ -70,7 +90,7 @@ scene.camera = camera
 camera_data.type = 'ORTHO'
 # The USB opening is the capsule on the Foot's right wall:
 # x=111.5, y=28.53..38.53, z=4.53..9.13 in assembly coordinates.
-anchors = {'buttons': [(98.25, y, 19) for y in (54, 66.7, 79.4, 92.1)],
+anchors = {'buttons': [buttons[f'Cap{number}'] for number in range(1, 5)],
            'port': [(111.51, 33.53, 6.83)]}
 result = {}
 for name, position, target, scale in [
