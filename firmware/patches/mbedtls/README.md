@@ -27,6 +27,13 @@ expected target/source layout are checked during configuration. The source and
 diff are CMake configure dependencies, so changing either triggers the checks
 on an incremental build. Nothing writes to IDF or `managed_components/`.
 
+Each consumer regenerates its own copy from upstream on every configuration.
+Git receives that output directory as an explicit `--work-tree`, so it applies
+the diff relative to the generated tree even inside a repository's ignored build
+directory. Without it, Git's subdirectory filtering can skip the entire patch
+with a successful exit status; an external `/tmp` build does not expose this.
+Both source hashes remain mandatory, including when a generated copy exists.
+
 Recovery is a separate CMake project and never includes this hook. Its Wi-Fi
 stack uses cryptographic primitives, but the image contains no X.509 parser
 or TLS handshake implementation. Do not add the hook there.

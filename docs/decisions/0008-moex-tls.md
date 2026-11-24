@@ -129,6 +129,16 @@ dependencies, including for incremental builds. No installed or managed
 vendor file is modified. The generated source preserves upstream's license.
 Hashes and the exact base commit are in the patch's README.
 
+CI on `031ee04` exposed a Git invocation error: the native test under `/tmp`
+passed, while firmware configuration inside the checkout left the generated
+file identical to upstream. From a repository subdirectory, `git apply` can
+skip the absolute `--directory` patch paths and still return success. The
+helper now sets the generated directory as Git's explicit `--work-tree` and
+applies relative paths there. Each consumer still regenerates from the verified
+upstream into its own build directory, and both hashes remain enforced. A native
+regression creates ignored host, release and debug directories inside a Git
+repository and checks repeated generation, including over a stale copy.
+
 This hook runs for developer builds, IDE builds and both CI firmware flavors.
 `.github/workflows/ci.yml` obtains IDF from the pinned
 `espressif/idf:v5.5.5` container rather than a repository checkout step; no
@@ -202,6 +212,23 @@ On 2026-11-24:
   suite passed on retry with `ASAN_OPTIONS=symbolize=0` and
   `UBSAN_OPTIONS=symbolize=0`; sanitizer fault detection remained enabled,
   with no change to the checked source or test expectations.
+
+Follow-up validation of the CI build-directory fix on the same date:
+
+- Linux/amd64, `espressif/idf:v5.5.5`, Java 21 and wasi-sdk 34: unmodified
+  `031ee04` passes all three native tests, then fails release configuration
+  with the unchanged upstream hash. Verbose Git output confirms a skipped patch
+  with exit status 0. The new build-directory regression fails against that helper.
+- With the fix, all four native tests pass before each firmware flavor. The
+  workflow's release and debug build commands and size reports complete. Main
+  images are 1,600,688 and 1,687,840 bytes respectively; both recovery images are
+  855,952 bytes. Each image passes its own partition check.
+- The host, release and debug copies all have the expected patched hash and
+  distinct build paths. Recovery compiles upstream instead, links no X.509 parser
+  or TLS handshake, and its debug image is byte-identical to the baseline from
+  the original recovery project. The shared IDF source retains its original hash.
+- The external macOS release build, all four native tests and the full host
+  suite also pass.
 
 Native chain verification covers parsing, signatures, validity, trust and
 hostname; it is not an ESP TLS handshake. No device was contacted, and no

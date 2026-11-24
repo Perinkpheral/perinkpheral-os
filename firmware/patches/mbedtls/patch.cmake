@@ -15,9 +15,9 @@ function(perinkpheral_patch_mbedtls_x509 upstream output_dir)
     get_filename_component(output_dir "${output_dir}" REALPATH)
     # Apply only to a disposable build copy, never to the shared ESP-IDF checkout.
     configure_file("${upstream}" "${output_dir}/library/x509.c" COPYONLY)
+    # An explicit work tree prevents Git from skipping paths below a repository subdirectory.
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" apply --no-index --unsafe-paths
-                "--directory=${output_dir}" "${patch}"
+        COMMAND "${GIT_EXECUTABLE}" "--work-tree=${output_dir}" apply --no-index "${patch}"
         WORKING_DIRECTORY "${output_dir}"
         RESULT_VARIABLE patch_result ERROR_VARIABLE patch_error)
     if(NOT patch_result EQUAL 0)

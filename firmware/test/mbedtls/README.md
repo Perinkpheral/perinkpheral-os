@@ -31,6 +31,12 @@ library and reproduces exactly -0x23E2.
 The positive certificate test would fail against that parser. Expiration does
 not affect certificate parsing.
 
+The build-directory regression creates a Git repository with ignored host,
+release and debug build directories. Each gets its own verified patched source;
+repeated generation and replacement of a stale copy must also succeed without
+changing upstream. This covers the repository subdirectory filtering that an
+external `/tmp/mbedtls-host` build alone cannot exercise.
+
 For a live end-to-end certificate check, use the root from Stocks' prepared
 catalog change. Set `PERINKPHERAL_APPS` to a local catalog checkout containing
 commit `9b2932916e0c6009d0b9be02d0a66e21dcacf059` (`fix/moex-ca` when tested):

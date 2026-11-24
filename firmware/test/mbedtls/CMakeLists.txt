@@ -19,6 +19,10 @@ add_test(NAME changed_upstream_is_refused COMMAND "${CMAKE_COMMAND}"
     "-DUPSTREAM=${MBEDTLS_SOURCE}/library/x509.c"
     "-DPATCH_HELPER=${CMAKE_CURRENT_SOURCE_DIR}/../../patches/mbedtls/patch.cmake"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/test_patch_guard.cmake")
+add_test(NAME separate_build_directories COMMAND "${CMAKE_COMMAND}"
+    "-DUPSTREAM=${MBEDTLS_SOURCE}/library/x509.c"
+    "-DPATCH_HELPER=${CMAKE_CURRENT_SOURCE_DIR}/../../patches/mbedtls/patch.cmake"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/test_patch_build_dirs.cmake")
 
 add_executable(test_x509 test_x509.c)
 target_link_libraries(test_x509 PRIVATE mbedx509)
