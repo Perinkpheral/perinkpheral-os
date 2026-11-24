@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.97
+
+- Untitled application screens can put their screen count beside the connection icon in Perinkpheral OS header, followed by their own left text. The SDK's `app_nav_set_header()` composes both; `app_nav_draw_title()` with no title draws nothing and leaves all content space available. Titled screens keep their existing count on the title's baseline. The host API and ABI 3 are unchanged.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.
