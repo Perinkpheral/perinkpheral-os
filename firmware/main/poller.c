@@ -30,7 +30,6 @@
 #include "poll_round.h"
 #include "poller_net.h"
 #include "power.h"
-#include "status.h"
 #include "storage.h"
 #include "text_template.h"
 #include "wifi.h"
@@ -147,26 +146,8 @@ static void hand_over(const char *app_name, const app_delivery_t *delivery)
     events_call_patiently(deliver_in_host_loop, &handed);
 }
 
-/* Whether the last time the network was needed it was there: what the
- * header's icon says. Unknown until something was asked. */
-static volatile bool s_last_use_failed;
-
-static void note_network_use(bool worked)
-{
-    if (s_last_use_failed == worked) {
-        s_last_use_failed = !worked;
-        status_check();
-    }
-}
-
-bool poller_last_use_failed(void)
-{
-    return s_last_use_failed;
-}
-
 static const poller_net_host_t NET_HOST = {
     .deliver = hand_over,
-    .network_worked = note_network_use,
 };
 
 /* ---- the applications, by id ---- */
@@ -380,7 +361,6 @@ static bool fail_request_without_network(void)
     unlock();
     if (found) {
         ESP_LOGW(TAG, "%s/%d: no network", app_name, number);
-        note_network_use(false);
         poller_net_tell_failure(app_name, number, HOST_FAILED_NO_NETWORK);
     }
     return found;
@@ -511,7 +491,6 @@ void poller_poll_is_due(uint32_t app, int poll)
 
 void poller_network_is_back(void)
 {
-    note_network_use(true);
     /* What could not be asked while it was away is asked now, not when
      * each poll's turn comes round again. */
     if (s_lock == NULL) {

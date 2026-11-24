@@ -309,3 +309,6 @@ When the page asks for confirmation on the device, press <code>OK</code> within 
 
 If you are installing firmware for the first time, use the <a href="https://perinkpheral.dev/flash">web flasher</a> with the device connected by USB. A fresh install erases existing data. Wait for flashing and restart to finish: the Wi-Fi setup screen with its QR code appears automatically. Continue below.
 Если вы устанавливаете прошивку впервые, подключите устройство по USB и используйте <a href="https://perinkpheral.dev/flash">прошивку через браузер</a>. Чистая установка стирает имеющиеся данные. Дождитесь завершения прошивки и перезапуска: экран настройки Wi-Fi с QR-кодом появится автоматически. Продолжайте по инструкции ниже.
+
+The header's Wi-Fi icon shows whether the device has joined a network and obtained an address. A crossed-out icon means no connection. While Wi-Fi sleeps to save power, it keeps the last connection attempt's result. A server error is reported by the application and does not cross out the icon.
+Значок Wi-Fi в заголовке показывает, подключилось ли устройство к сети и получило ли адрес. Перечёркнутый значок означает, что подключения нет. Пока Wi-Fi выключен для экономии энергии, значок сохраняет результат последней попытки подключения. Об ошибке сервера сообщает приложение, и значок при этом не перечёркивается.

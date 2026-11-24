@@ -261,7 +261,7 @@ A device on a shelf has to come back from a restart showing what it showed, with
 
 ### Header
 Perinkpheral OS draws a header above its own screens and above every application that does not ask for the full screen:
-- On the left the Wi-Fi icon in one of two states - connected, or not connected (the same icon struck through). It shows the outcome of the last connection attempt, which is what matters in the profiles where Wi-Fi is off between polls.
+- On the left the Wi-Fi icon in one of two states - connected, or not connected (the same icon struck through). It shows whether Wi-Fi has joined a network and obtained an address. A single server's TLS, HTTP or response failure does not change it; the application reports that failure. While the radio is off to save power, it keeps the outcome of the last Wi-Fi connection attempt. No extra connectivity requests are made for the icon.
 - On the right the date (`Wed 11 Nov`), blank while the time is unknown.
 - No application title or network name is added by Perinkpheral OS. The date changes once a day. There is no footer. **The time instead of the date** is a setting (`header_clock`, on by default since 2026-11-17; Appearance in Settings on the device, and on the page): the header then turns with every minute, above every application.
 - **An application may put its own text into both**: beside the icon on the left, where Perinkpheral OS has nothing, and on the right in place of the date (`header_set_text`). It gives a line and nothing more - the font and the size are Perinkpheral OS's. A text that does not fit is cut with `...`, and the two never meet: when together they are too wide each is sure of half the width, and what one does not need of its half goes to the other (`wm_header_share`, `gfx_fit_text`). A side the application gave nothing for is Perinkpheral OS's; a text of one space leaves it empty. The texts are forgotten when the application leaves the screen. `weather` shows its city, behind a setting of its own.
@@ -522,7 +522,7 @@ The owner's architecture decisions of 2026-11-12. The mechanisms below are imple
 **The contract.**
 - `http_send(tag, ...)`: the application chooses the tag, a number it has a name for, and the answer comes with it. Tags are an application's own; two applications with the same one never meet.
 - An application asks for data; "there is no network" is one of the answers, and a request that failed says why: no network, no answer, a host the manifest does not allow.
-- The header's icon says whether the last use of the network worked.
+- The header's icon says whether Wi-Fi has an address; with the radio asleep it keeps the latest connection attempt's outcome. A server, HTTP or TLS failure does not change it while Wi-Fi remains connected.
 - The system API gives applications by id, not by their place in a list.
 - `"system": true` stays one consent for all of it.
 - `firmware/main/poller.c` connects four parts: which polls are wanted and at what pace (`poll_schedule.c`, pure - when each is due is a deadline, the alarms are deadlines outright), the one that talks to the network (`poller_net.c`), the requests applications make, waiting their turn (`firmware/components/appstore/request_queue.c`, pure), and what ties them to Perinkpheral OS (`poller.c`: the task, the radio). The task sleeps until it is woken and has no clock of its own. Calling the main event loop and waiting for it is `events_call_patiently()`.

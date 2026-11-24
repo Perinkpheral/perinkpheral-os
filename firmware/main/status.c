@@ -18,7 +18,6 @@
 #include "events.h"
 #include "settings.h"
 #include "net_time.h"
-#include "poller.h"
 #include "wifi.h"
 #include "units.h"
 
@@ -40,10 +39,7 @@ void status_read(status_t *status)
      * went: that is all there is to know. */
     wifi_status_t wifi;
     wifi_get_status(&wifi);
-    bool has_network = wifi.is_radio_off ? wifi.was_reached : wifi.phase == WIFI_PHASE_ONLINE;
-    /* And being on a network is not yet having one that answers: the icon
-     * is about the last time the network was needed. */
-    status->wifi_connected = has_network && !poller_last_use_failed();
+    status->wifi_connected = wifi.is_radio_off ? wifi.was_reached : wifi.phase == WIFI_PHASE_ONLINE;
     status->date_known = net_time_is_known();
     status->shows_clock = shows_clock();
     if (status->date_known) {

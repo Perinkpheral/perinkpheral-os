@@ -4,7 +4,9 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
-## 0.1.96
+## 0.1.97
+
+- The header's Wi-Fi icon shows whether the device has joined a network and obtained an address. A server's TLS or HTTP failure no longer crosses it out. While Wi-Fi sleeps between polls, the icon keeps the last connection attempt's outcome.
 
 - Application capability checks carry mocked response headers into streamed and picked answers. Header lookup and fixed metadata share the firmware implementation, including repeated fields and fail-closed aggregate overflow.
 
