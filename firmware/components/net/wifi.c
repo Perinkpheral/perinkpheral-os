@@ -5,6 +5,7 @@
 #include "priorities.h"
 #include "board.h"
 #include "wifi.h"
+#include "wifi_status.h"
 #include "wifi_credentials.h"
 #include "wifi_events.h"
 #include "wifi_search.h"
@@ -64,11 +65,7 @@ static struct {
 
     /* What other tasks may ask about, under the lock. */
     SemaphoreHandle_t lock;
-    wifi_phase_t      phase;
-    char              address[sizeof "255.255.255.255"];
-    bool              is_radio_off;
-    bool              is_access_point_up; /* access_point_up, as others may ask it */
-    bool              was_reached;
+    wifi_status_t     status;
 } s_wifi;
 
 static int64_t now_ms(void)
@@ -176,7 +173,7 @@ static void on_got_address(void *arg, esp_event_base_t base, int32_t id, void *d
     (void)id;
     const ip_event_got_ip_t *got = data;
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
-    esp_ip4addr_ntoa(&got->ip_info.ip, s_wifi.address, sizeof s_wifi.address);
+    esp_ip4addr_ntoa(&got->ip_info.ip, s_wifi.status.address, sizeof s_wifi.status.address);
     xSemaphoreGive(s_wifi.lock);
     remember_where_found();
     wifi_avoided_clear(&s_avoided);
@@ -277,7 +274,7 @@ static bool start_access_point(void)
     }
     s_wifi.access_point_up = true;
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
-    s_wifi.is_access_point_up = true;
+    s_wifi.status.access_point_up = true;
     xSemaphoreGive(s_wifi.lock);
     captive_dns_enable(true);
     ESP_LOGI(TAG, "setup access point \"%s\" is up", s_wifi.access_point_name);
@@ -293,7 +290,7 @@ static void stop_access_point(void)
     }
     s_wifi.access_point_up = false;
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
-    s_wifi.is_access_point_up = false;
+    s_wifi.status.access_point_up = false;
     xSemaphoreGive(s_wifi.lock);
     captive_dns_enable(false);
     ESP_LOGI(TAG, "setup access point is down");
@@ -383,24 +380,11 @@ static void carry_out(const wifi_plan_actions_t *actions)
     }
 }
 
-/* `failed_last`: the event just handled was an attempt that failed. */
-static void publish_phase(bool failed_last)
+static void publish_phase(void)
 {
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
-    /* With the radio off nobody is online, whatever the plan was left at;
-     * whether the network was reached last time is what it was. */
-    wifi_phase_t phase = s_wifi.radio_off ? WIFI_PHASE_CONNECTING : s_wifi.plan.phase;
-    bool was_reached = s_wifi.radio_off ? s_wifi.was_reached
-                                        : s_wifi.plan.phase == WIFI_PHASE_ONLINE ||
-                                              (s_wifi.was_reached && !failed_last);
-    bool changed = s_wifi.phase != phase || s_wifi.was_reached != was_reached ||
-                   s_wifi.is_radio_off != s_wifi.radio_off;
-    s_wifi.phase = phase;
-    s_wifi.was_reached = was_reached;
-    s_wifi.is_radio_off = s_wifi.radio_off;
-    if (s_wifi.phase != WIFI_PHASE_ONLINE) {
-        s_wifi.address[0] = '\0';
-    }
+    bool changed = wifi_status_update(&s_wifi.status, s_wifi.plan.phase,
+                                      s_wifi.radio_off);
     xSemaphoreGive(s_wifi.lock);
     if (changed && s_wifi.on_change != NULL) {
         s_wifi.on_change();
@@ -444,20 +428,20 @@ static void handle_event(wifi_plan_event_t event)
             deadlines_cancel(DEADLINE_WIFI_RESCUE, 0, 0);
             esp_wifi_stop();
         }
-        publish_phase(false);
+        publish_phase();
         return;
     }
     if (event == RADIO_ON_ASKED) {
         if (s_wifi.radio_off) {
             start_radio();
         }
-        publish_phase(false);
+        publish_phase();
         return;
     }
     if (s_wifi.radio_off) {
         if (event == WIFI_EVENT_RETRY_DUE && s_wifi.is_starting_again) {
             start_radio();
-            publish_phase(false);
+            publish_phase();
         }
         return; /* else the last words of a radio that was turned off */
     }
@@ -467,10 +451,9 @@ static void handle_event(wifi_plan_event_t event)
     if (event == WIFI_EVENT_CONNECTED) {
         deadlines_cancel(DEADLINE_WIFI_RESCUE, 0, 0);
     }
-    bool failed = event == WIFI_EVENT_DISCONNECTED;
     wifi_plan_actions_t actions = wifi_plan_step(&s_wifi.plan, event, now_ms());
     carry_out(&actions);
-    publish_phase(failed);
+    publish_phase();
 }
 
 static void wifi_task(void *arg)
@@ -519,7 +502,7 @@ void wifi_start(const wifi_config_in_t *config)
             sizeof s_wifi.access_point_name);
     s_wifi.on_change = config->on_change;
     wifi_plan_init(&s_wifi.plan, s_wifi.ssid[0] != '\0', config->is_off);
-    s_wifi.phase = s_wifi.plan.phase;
+    s_wifi.status.phase = s_wifi.plan.phase;
 
     s_wifi.lock = xSemaphoreCreateMutex();
     configASSERT(s_wifi.lock != NULL);
@@ -581,11 +564,11 @@ void wifi_get_status(wifi_status_t *status)
         return; /* not started: everything stays empty, the phase is setup */
     }
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
-    status->phase = s_wifi.phase;
-    status->is_radio_off = s_wifi.is_radio_off;
-    status->was_reached = s_wifi.was_reached;
-    status->access_point_up = s_wifi.is_access_point_up;
-    strlcpy(status->address, s_wifi.address, sizeof status->address);
+    status->phase = s_wifi.status.phase;
+    status->is_radio_off = s_wifi.status.is_radio_off;
+    status->was_reached = s_wifi.status.was_reached;
+    status->access_point_up = s_wifi.status.access_point_up;
+    strlcpy(status->address, s_wifi.status.address, sizeof status->address);
     xSemaphoreGive(s_wifi.lock);
 }
 

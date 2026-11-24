@@ -5,6 +5,7 @@
 #include "events.h"
 #include "deadlines.h"
 #include "wifi.h"
+#include "wifi_status.h"
 #include "net_time.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -48,38 +49,61 @@ static void expect_connection(bool connected, int expected_changes)
     CHECK(changes == expected_changes);
 }
 
+static void begin_attempt(wifi_plan_t *plan, int64_t now_ms)
+{
+    wifi_plan_init(plan, true, false);
+    wifi_plan_step(plan, WIFI_EVENT_STARTED, now_ms);
+    wifi_status_update(&network, plan->phase, false);
+}
+
+static void receive_address(wifi_plan_t *plan, int64_t now_ms)
+{
+    strcpy(network.address, "192.0.2.1");
+    wifi_plan_step(plan, WIFI_EVENT_CONNECTED, now_ms);
+    wifi_status_update(&network, plan->phase, false);
+}
+
 int main(void)
 {
-    network.phase = WIFI_PHASE_CONNECTING;
+    wifi_plan_t plan;
+    begin_attempt(&plan, 0);
     status_start();
     expect_connection(false, 0);
-    network.phase = WIFI_PHASE_ONLINE;
-    strcpy(network.address, "192.0.2.1");
-    network.was_reached = true;
+    receive_address(&plan, 1000);
     expect_connection(true, 1);
 
     /* Sleeping the radio preserves success without an active address. */
-    network.is_radio_off = true;
-    network.phase = WIFI_PHASE_CONNECTING;
-    network.address[0] = '\0';
+    wifi_status_update(&network, plan.phase, true);
+    CHECK(network.address[0] == '\0');
     expect_connection(true, 1);
-    network.is_radio_off = false;
+
+    /* A wake associates but never gets an address or a disconnect event.
+     * After the poller's 20-second wait it gives the radio back. */
+    begin_attempt(&plan, 300000);
     expect_connection(false, 2);
-    network.phase = WIFI_PHASE_ONLINE;
-    strcpy(network.address, "192.0.2.1");
+    CHECK(plan.phase == WIFI_PHASE_CONNECTING);
+    CHECK(plan.failed_attempts == 0);
+    CHECK(network.address[0] == '\0');
+    wifi_status_update(&network, plan.phase, true);
+    expect_connection(false, 2);
+
+    /* Repeated sleep publication must keep the latest attempt's outcome. */
+    wifi_status_update(&network, plan.phase, true);
+    expect_connection(false, 2);
+    begin_attempt(&plan, 620001);
+    expect_connection(false, 2);
+    receive_address(&plan, 621001);
     expect_connection(true, 3);
 
-    /* A lost connection, and a failed attempt followed by sleep, stay crossed out. */
-    network.phase = WIFI_PHASE_CONNECTING;
-    network.address[0] = '\0';
-    network.was_reached = false;
+    /* A real disconnect also remains crossed out during sleep. */
+    wifi_plan_step(&plan, WIFI_EVENT_DISCONNECTED, 622001);
+    wifi_status_update(&network, plan.phase, false);
     expect_connection(false, 4);
-    network.is_radio_off = true;
+    wifi_status_update(&network, plan.phase, true);
     expect_connection(false, 4);
-    network.is_radio_off = false;
-    network.phase = WIFI_PHASE_SETUP;
+    wifi_status_update(&network, WIFI_PHASE_SETUP, false);
     expect_connection(false, 4);
-    network.phase = WIFI_PHASE_OFF;
+    wifi_status_update(&network, WIFI_PHASE_OFF, false);
     expect_connection(false, 4);
     REPORT();
 }

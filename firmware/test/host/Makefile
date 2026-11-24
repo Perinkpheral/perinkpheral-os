@@ -77,8 +77,8 @@ TESTS   += test_wifi_events test_web_connections test_question_press test_launch
 TESTS   += test_poller_net
 TESTS   += test_status
 
-test_status: test_status.c tinytest.h $(MAIN)/status.c $(MAIN)/status.h $(wildcard event_stubs/freertos/*.h)
-	$(CC) $(CFLAGS) -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -o $@ test_status.c $(MAIN)/status.c
+test_status: test_status.c tinytest.h $(MAIN)/status.c $(MAIN)/status.h $(NET)/wifi_status.c $(NET)/include/wifi_status.h $(NET)/wifi_plan.c $(wildcard event_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -o $@ test_status.c $(MAIN)/status.c $(NET)/wifi_status.c $(NET)/wifi_plan.c
 
 test_poller_net: test_poller_net.c tinytest.h $(MAIN)/poller_net.c $(MAIN)/poller_net.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c $(wildcard net_stubs/*.h net_stubs/*/*.h)
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Inet_stubs -Ipoller_stubs -Iinstall_stubs -I$(UI)/include -I$(GFX)/include -I$(NET)/include -I$(MAIN) -o $@ test_poller_net.c $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c -lm
@@ -128,8 +128,8 @@ test_app_kv: test_app_kv.c tinytest.h $(PERSISTENCE_STUBS) $(MAIN)/app_kv.c $(MA
 test_poll_round: test_poll_round.c tinytest.h $(APPSTORE)/poll_round.c $(APPSTORE)/include/poll_round.h $(APPSTORE)/poll_schedule.c $(APPSTORE)/include/poll_schedule.h
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -o $@ test_poll_round.c $(APPSTORE)/poll_round.c $(APPSTORE)/poll_schedule.c
 
-test_poller: test_poller.c tinytest.h $(MAIN)/poller.c $(MAIN)/poller_net.h $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c $(wildcard poller_stubs/freertos/*.h)
-	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Ipoller_stubs -Iinstall_stubs -Ipersistence_stubs -Imemory_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(NET)/include -I$(DEADLINES)/include -I$(MAIN) -o $@ test_poller.c $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c -lm
+test_poller: test_poller.c tinytest.h $(MAIN)/poller.c $(MAIN)/poller_net.h $(NET)/wifi_status.c $(NET)/include/wifi_status.h $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c $(wildcard poller_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Ipoller_stubs -Iinstall_stubs -Ipersistence_stubs -Imemory_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(NET)/include -I$(DEADLINES)/include -I$(MAIN) -o $@ test_poller.c $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/text_template.c $(MANIFEST_SRCS) $(DEADLINES)/deadline_table.c $(NET)/wifi_plan.c $(NET)/wifi_status.c -lm
 
 test_wifi_credentials: test_wifi_credentials.c tinytest.h $(NET)/wifi_credentials.c $(NET)/include/wifi_credentials.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_credentials.c $(NET)/wifi_credentials.c

@@ -522,7 +522,7 @@ The owner's architecture decisions of 2026-11-12. The mechanisms below are imple
 **The contract.**
 - `http_send(tag, ...)`: the application chooses the tag, a number it has a name for, and the answer comes with it. Tags are an application's own; two applications with the same one never meet.
 - An application asks for data; "there is no network" is one of the answers, and a request that failed says why: no network, no answer, a host the manifest does not allow.
-- The header's icon says whether the last use of the network worked.
+- The header's icon says whether Wi-Fi has an address; with the radio asleep it keeps the latest connection attempt's outcome. A server, HTTP or TLS failure does not change it while Wi-Fi remains connected.
 - The system API gives applications by id, not by their place in a list.
 - `"system": true` stays one consent for all of it.
 - `firmware/main/poller.c` connects four parts: which polls are wanted and at what pace (`poll_schedule.c`, pure - when each is due is a deadline, the alarms are deadlines outright), the one that talks to the network (`poller_net.c`), the requests applications make, waiting their turn (`firmware/components/appstore/request_queue.c`, pure), and what ties them to Perinkpheral OS (`poller.c`: the task, the radio). The task sleeps until it is woken and has no clock of its own. Calling the main event loop and waiting for it is `events_call_patiently()`.

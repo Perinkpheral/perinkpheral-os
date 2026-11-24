@@ -4,6 +4,7 @@
  */
 #include "tinytest.h"
 #include "../../main/poller.c"
+#include "wifi_status.h"
 
 static app_manifest_t installed_apps[3];
 static int installed_count;
@@ -12,6 +13,8 @@ static deadline_table_t test_deadlines;
 static int64_t clock_ms;
 static int sent_method, requests_sent;
 static bool abandon_answer, saving_power;
+static wifi_plan_t network_plan;
+static wifi_status_t network;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
 const app_manifest_t *launcher_installed(int *count)
@@ -50,11 +53,19 @@ unsigned ulTaskNotifyTake(int clear, TickType_t timeout)
 }
 int64_t esp_timer_get_time(void) { return clock_ms * US_PER_MS; }
 bool memory_has(memory_need_t need) { (void)need; return true; }
-bool wifi_is_online(void) { return true; }
-void wifi_get_status(wifi_status_t *status) { status->phase = WIFI_PHASE_ONLINE; }
+bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
+void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }
-void power_hold_radio(void) { }
-void power_release_radio(void) { }
+void power_hold_radio(void)
+{
+    wifi_plan_init(&network_plan, true, false);
+    wifi_plan_step(&network_plan, WIFI_EVENT_STARTED, clock_ms);
+    wifi_status_update(&network, network_plan.phase, false);
+}
+void power_release_radio(void)
+{
+    wifi_status_update(&network, network_plan.phase, true);
+}
 void settings_watch(settings_watch_fn watcher) { (void)watcher; }
 bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
@@ -143,6 +154,7 @@ static void reset_poller(void)
     requests_sent = 0;
     abandon_answer = false;
     saving_power = false;
+    network = (wifi_status_t){ .phase = WIFI_PHASE_ONLINE };
     s_lock = xSemaphoreCreateMutex();
 }
 
@@ -242,10 +254,48 @@ static void test_interval_below_saving_floor(void)
     CHECK(deadline_table_when(&test_deadlines, poll) == 301000);
 }
 
+static void test_wake_without_address(void)
+{
+    reset_poller();
+    saving_power = true;
+    sent_method = HOST_HTTP_GET;
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    wifi_plan_step(&network_plan, WIFI_EVENT_CONNECTED, 1000);
+    strcpy(network.address, "192.0.2.1");
+    wifi_status_update(&network, network_plan.phase, false);
+    CHECK(run_wanted_poll());
+    keep_radio_for_work();
+    CHECK(!s_is_holding_radio);
+    CHECK(network.is_radio_off && network.was_reached);
+
+    clock_ms = 300000;
+    CHECK(poller_poll_now("probe", 0));
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    CHECK(!network.is_radio_off);
+    /* Association alone supplies neither an address nor a disconnect event. */
+    CHECK(network_plan.phase == WIFI_PHASE_CONNECTING);
+    CHECK(network_plan.failed_attempts == 0);
+    CHECK(network.address[0] == '\0');
+    clock_ms += RADIO_WAIT_MS;
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    clock_ms++;
+    keep_radio_for_work();
+    CHECK(!s_is_holding_radio);
+    CHECK(network.is_radio_off);
+    CHECK(!network.was_reached);
+    CHECK(requests_sent == 1);
+}
+
 int main(void)
 {
     test_abandoned_methods();
     test_incompatible_apps();
     test_interval_below_saving_floor();
+    test_wake_without_address();
     REPORT();
 }
