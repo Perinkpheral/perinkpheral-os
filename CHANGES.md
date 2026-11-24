@@ -6,6 +6,8 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.96
 
+- Contract snapshots require valid introduction stamps for new imports, exports and constants. Only response metadata may grow by appending fields while preserving its recorded prefix and alignment.
+
 - JSON extraction combines surrogate escapes only when adjacent within one string, including across response chunks. Network documentation clarifies skipped list members, first-path ownership, preparation failures and non-2xx status preservation.
 
 ## 0.1.95

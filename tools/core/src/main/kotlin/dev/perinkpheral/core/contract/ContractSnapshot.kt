@@ -15,6 +15,7 @@ object ContractSnapshot {
 
     fun run(sdk: Sdk, wasi: File, out: File, check: Boolean, unfrozen: Boolean = false) {
         val current = entries(sdk, wasi)
+        checkIntroductionStamps(sdk, current, out)
         val packages = File(sdk.sdk, "abi/${sdk.hostApiVersion}")
         val fixtures = File(packages, "fixtures.txt")
         val hashes = fixtureEntries(packages, fixtures)
@@ -35,7 +36,8 @@ object ContractSnapshot {
         if (out.isFile) {
             val recorded = read(out)
             val broken = recorded.filter { (key, value) ->
-                current[key] != value && !iconCountAddition(key, value, current, recorded)
+                current[key] != value && !iconCountAddition(key, value, current, recorded) &&
+                    !answerInfoExtension(key, current, recorded)
             }
             if (broken.isNotEmpty()) throw BuildError("$label changed:\n" + broken.entries.joinToString("\n") {
                 "  ${it.key}: recorded ${it.value}; now ${current[it.key] ?: "missing"}"
@@ -44,6 +46,38 @@ object ContractSnapshot {
             if (check && unrecorded.isNotEmpty()) throw BuildError("$label has unrecorded entries; run " +
                 "tools/perinkpheral contract snapshot:\n" + unrecorded.sorted().joinToString("\n") { "  $it" })
         } else if (check) throw BuildError("Missing $label: ${out.path}")
+    }
+
+    private fun checkIntroductionStamps(sdk: Sdk, current: Map<String, String>, out: File) {
+        val stamps = sdk.callSince // Also validates every declared introduction version.
+        val recorded = if (out.isFile) read(out) else emptyMap()
+        val unstamped = (current.keys - recorded.keys).mapNotNull { key ->
+            val kind = key.substringBefore(' ')
+            val name = key.substringAfter(' ')
+            if (kind in setOf("import", "export", "constant") &&
+                !name.startsWith("HOST_SINCE_") && name !in stamps) name else null
+        }
+        if (unstamped.isNotEmpty()) throw BuildError("New ABI entries require HOST_SINCE_<name> introduction stamps:\n" +
+            unstamped.sorted().joinToString("\n") { "  HOST_SINCE_$it" })
+    }
+
+    /* answer_info copies a capacity-bounded prefix; only fields beyond the old
+     * extent may be added. Recorded prefix fields and alignment stay fixed. */
+    private fun answerInfoExtension(key: String, current: Map<String, String>, recorded: Map<String, String>): Boolean {
+        if (key != "struct host_answer_info_t size") return false
+        val before = recorded[key]?.toLongOrNull() ?: return false
+        val after = current[key]?.toLongOrNull() ?: return false
+        if (after <= before || current["struct host_answer_info_t align"] != recorded["struct host_answer_info_t align"]) return false
+        val prefix = "field host_answer_info_t."
+        if (recorded.filterKeys { it.startsWith(prefix) }.any { (field, value) -> current[field] != value }) return false
+        val additions = current.keys.filter { it.startsWith(prefix) && it !in recorded }
+        val fields = additions.map { it.substringBeforeLast(' ') }.toSet()
+        if (fields.isEmpty()) return false
+        return fields.all { field ->
+            val offset = current["$field offset"]?.toLongOrNull() ?: return false
+            val size = current["$field size"]?.toLongOrNull() ?: return false
+            current["$field type"] != null && offset >= before && size > 0 && offset <= after - size
+        }
     }
 
     /* The count describes the set, so appending icons grows it without changing

@@ -125,7 +125,9 @@ HOST_IMPORT(answer_element,
  * answer. Valid inside app_on_data() and app_on_picked(). */
 HOST_IMPORT(answer_item, int32_t answer_item(void));
 
-/* Response metadata. Valid inside app_on_data() and app_on_picked(), for
+/* Response metadata. Future fields may be appended beyond its existing size
+ * with alignment and the existing field types, offsets and sizes preserved.
+ * Valid inside app_on_data() and app_on_picked(), for
  * the answer being delivered. The same for every piece of one answer.
  * A header that the server did not send is an empty string. A header
  * longer than its field is cut. A terminal HOST_DATA_FAILED callback may
