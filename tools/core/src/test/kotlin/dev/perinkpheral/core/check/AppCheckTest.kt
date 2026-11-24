@@ -31,6 +31,10 @@ object AppCheckTest {
             "    if (row_length <= 0 || is_same(row, \"null\")) {\n        row[0] = '-';\n        row[1] = '\\0';\n    }")
 
     private val BREAKS = listOf(
+        Break("network", "a raw application with a timer that never retries an unsuccessful read",
+            listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""),
+            "after the whole answer it shows another picture",
+            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
         Break("network", "optional fallback declarations still check required null values",
             OPTIONAL_EDITS + listOf("length < 10 && picked[0] >= '0' && picked[0] <= '9'" to "length <= HOST_VALUE_MAX"),
             "response nulls", checkPatch = OPTIONAL_RESPONSES),
@@ -350,6 +354,10 @@ object AppCheckTest {
             listOf("    if (event != BTN_OK_PRESSED) {" to "    ask_note();\n    if (event != BTN_OK_PRESSED) {"), "",
             manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
 
+        Break("network", "raw HTTP recovers on its foreground refresh timer",
+            listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to "",
+                "        timer_set(TICK_TIMER, TICK_MS);" to "        timer_set(TICK_TIMER, TICK_MS);\n        ask_note();"), "",
+            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
         Break("network", "raw HTTP refreshes on focus without periodic retries",
             listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""), "",
             manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to ""),

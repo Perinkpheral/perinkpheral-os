@@ -216,6 +216,7 @@ typedef struct {
     int32_t        response_refusal; /* a HOST_ERR_* applied during the answer callbacks */
     int32_t        refuse_after_press; /* 1-based: a refusal of writes begins before this press */
     bool           retry_events;
+    int32_t        retry_round;   /* 1-based: allow a foreground retry timer before answering */
     bool           recover_alarms;
     int32_t        refusal;        /* a HOST_ERR_*: what every write answers while the first round arrives */
     round_t        rounds[ROUNDS_MAX];
@@ -547,6 +548,21 @@ static int32_t soonest_timer(void)
     return soonest;
 }
 
+/* Raw foreground reads may retry on a timer. Do not invent a request if
+ * the app has none, nor run foreground timers for off-screen deliveries. */
+static void wait_for_request(void)
+{
+    standin_t *host = standin();
+    for (int32_t fired = 0; fired < REQUESTS_A_ROUND && !host->is_leaving && host->request_count == 0; fired++) {
+        int32_t timer = soonest_timer();
+        if (timer < 0) {
+            return;
+        }
+        standin_pass(standin_timer_left(timer));
+        standin_timer(timer);
+    }
+}
+
 static void press(char key)
 {
     static const char KEYS[] = "UODB";
@@ -642,6 +658,9 @@ static void scene_run(void *context)
     for (int32_t index = 0; index < ROUNDS_MAX && scene->rounds[index].kind != ROUND_NONE; index++) {
         if (index > 0 || scene->has_data || scene->is_off_screen) {
             ask_again();
+        }
+        if (scene->retry_round == index + 1 && !scene->is_off_screen && standin_subject.poll_count == 0) {
+            wait_for_request();
         }
         host->refuse_writes = index == 0 ? scene->refusal : HOST_OK;
         answer_round(&scene->rounds[index]);
@@ -1308,7 +1327,7 @@ static void check_network(void)
     scene_t failed = { .rounds = { { ROUND_STATUS, HOST_FAILED_NO_ANSWER, 0 } } };
     uint64_t after_failure = play(&failed) ? mark(MARK_ROUND_PICTURE) : 0;
     standin_reset();
-    scene_t failed_late = { .rounds = { { ROUND_FAILED_LATE, 0, 0 }, { ROUND_WHOLE, 0, 0 } } };
+    scene_t failed_late = { .retry_round = 2, .rounds = { { ROUND_FAILED_LATE, 0, 0 }, { ROUND_WHOLE, 0, 0 } } };
     if (play(&failed_late)) {
         expect(NETWORK, mark(MARK_ROUND_PICTURE) == after_failure,
                "%s: after the failure it shows another picture than after a request that failed with no pieces",
@@ -1330,7 +1349,7 @@ static void check_network(void)
     /* Every way a request fails, and a server that is unwell: it goes on, and the next answer is shown. */
     for (int32_t status = HOST_FAILED_NO_NETWORK; status >= HOST_FAILED_NO_MEMORY; status--) {
         standin_reset();
-        scene_t refused = { .rounds = { { ROUND_STATUS, status, 0 }, { ROUND_WHOLE, 0, 0 } } };
+        scene_t refused = { .retry_round = 2, .rounds = { { ROUND_STATUS, status, 0 }, { ROUND_WHOLE, 0, 0 } } };
         if (play(&refused)) {
             expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered || deferred_recovery,
                    "%s: after the whole answer it shows another picture than after a whole answer alone", told(&refused));
@@ -1339,7 +1358,7 @@ static void check_network(void)
     static const int32_t UNWELL[] = { 503, 404, 304 };
     for (size_t index = 0; index < sizeof UNWELL / sizeof UNWELL[0]; index++) {
         standin_reset();
-        scene_t unwell = { .rounds = { { ROUND_HTTP, UNWELL[index], 0 }, { ROUND_WHOLE, 0, 0 } } };
+        scene_t unwell = { .retry_round = 2, .rounds = { { ROUND_HTTP, UNWELL[index], 0 }, { ROUND_WHOLE, 0, 0 } } };
         if (play(&unwell)) {
             expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered || deferred_recovery,
                    "%s: after the whole answer it shows another picture than after a whole answer alone", told(&unwell));
@@ -1391,7 +1410,11 @@ static void check_network(void)
         }
         standin_reset();
         scene_t then = { .is_off_screen = true, .rounds = { { ROUND_WHOLE, 0, 0 } } };
-        if (play(&ON_SCREEN) && play(&away) && play(&then) && play(&ON_SCREEN)) {
+        /* The failed or cut delivery may have consumed the only raw request.
+         * On return, answer a fresh request if focus or its timer asks for one. */
+        scene_t reopened = { .retry_round = 1, .rounds = { { ROUND_WHOLE, 0, 0 } } };
+        const scene_t *returned = standin_subject.poll_count == 0 ? &reopened : &ON_SCREEN;
+        if (play(&ON_SCREEN) && play(&away) && play(&then) && play(returned)) {
             expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive || deferred_recovery,
                    "%s, then a whole answer off the screen, then on the screen: it shows another picture than "
                    "after the whole answer alone", told(&away));
