@@ -86,12 +86,21 @@ independently reproducible without heap pressure.
 
 The owner accepted the parser correction on 2026-11-24. Main firmware accepts
 ASN.1 NumericString (0x12) wherever `x509_get_attr_type_value()` already accepts
-PrintableString. The diff changes only `library/x509.c`: a private
-`MBEDTLS_ASN1_NUMERIC_STRING` definition (the bundled header has none) and one
-additional accepted-tag comparison. It does not change name comparison,
+PrintableString, with content restricted to X.680's alphabet: ASCII digits 0-9
+and space only. The diff changes only `library/x509.c`: a private
+`MBEDTLS_ASN1_NUMERIC_STRING` definition (the bundled header has none), one
+additional accepted-tag comparison and a byte check after the bounded length
+has been read. Invalid content returns `MBEDTLS_ERR_X509_INVALID_NAME` plus
+`MBEDTLS_ERR_ASN1_INVALID_DATA`. It does not change name comparison,
 rendering, writers, generic ASN.1 string helpers, algorithms, trust or hostname
 verification. This corrects the demonstrated parser gap rather than hiding a
 request failure or weakening verification.
+
+Blind review found that accepting the tag alone lets a signed certificate
+without SAN carry `*.example.com` in a NumericString CN and pass wildcard
+hostname matching: CN fallback does not check the value tag. The alphabet
+check rejects such a certificate during parsing, before hostname verification.
+It applies to every NumericString attribute, including CN and custom OIDs.
 
 Stocks 0.2.15's matching root is prepared separately in the catalog's
 `fix/moex-ca`, commit `9b2932916e0c6009d0b9be02d0a66e21dcacf059`.
@@ -166,6 +175,12 @@ On 2026-11-24:
 - Patched parser: returns 0 and preserves both NumericString OIDs and values.
   All previously accepted tags still parse; an unrelated tag and a truncated
   attribute fail. A changed upstream source is refused with a useful diagnostic.
+- Review regression: all 256 byte values are tested in both positions of a
+  two-byte NumericString; only digits and space are accepted. The saved signed
+  certificate without SAN and with NumericString CN `*.example.com` is rejected
+  at parse time with -0x23E8. Before the alphabet check, that same fixture
+  parsed and verified for `service.example.com` against its test CA with return
+  code 0 and flags 0. MOEX still parses with both exact INN/OGRN values.
 - Live capture: all four served certificates, including the duplicate leaf,
   parse without skipped errors. With Stocks' prepared root and `iss.moex.com`,
   `mbedtls_x509_crt_verify()` returns 0 with flags `0x00000000`.
@@ -173,10 +188,10 @@ On 2026-11-24:
   substituting IDF's Mozilla bundle for Stocks' root fails with flags
   `0x00000008`. No verification callback overrides failures.
 - Release builds with ESP-IDF 5.5.5 and `sdkconfig.defaults;sdkconfig.release`:
-  main 1,600,272 bytes (496,880 bytes free in its 2 MiB slot), recovery 855,952
-  bytes (61,552 bytes free in its 896 KiB slot). Main has the same padded size
-  as the baseline and different bytes. Recovery was built before and after
-  the hook in the same build directory and is byte-identical (`cmp` succeeds),
+  main after alphabet validation 1,600,336 bytes (496,816 bytes free in its
+  2 MiB slot), 64 bytes larger than the tag-only patch; recovery 855,952 bytes
+  (61,552 bytes free in its 896 KiB slot). Recovery is byte-identical to both
+  the pre-hook and tag-only builds in the same build directory (`cmp` succeeds),
   SHA-256 `1f32a5605b7e42776355625f6858f655e892c9ec7945d8a2efdd89a35533c7ad`.
 - Existing checks passed: the full host suite, simulator (8 scenarios and 34
   pictures), `check-generated`, `check-api`, `contract check`, and core

@@ -4,6 +4,7 @@
 #include "mbedtls/x509_crt.h"
 #include "x509_internal.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -49,9 +50,62 @@ static int test_name_tags(void)
     return mbedtls_x509_get_name(&cursor, invalid_name + sizeof(invalid_name), &name) == 0;
 }
 
+static int test_numericstring_alphabet(void)
+{
+    for (unsigned value = 0; value <= 255; ++value) {
+        for (size_t position = 10; position < 12; ++position) {
+            unsigned char encoded_name[] = { 0x31, 0x0a, 0x30, 0x08, 0x06, 0x02, 0x2a, 0x03, 0x12, 0x02, '0', ' ' };
+            encoded_name[position] = (unsigned char)value;
+            unsigned char *cursor = encoded_name;
+            mbedtls_x509_name name = { 0 };
+            int result = mbedtls_x509_get_name(&cursor, encoded_name + sizeof(encoded_name), &name);
+#ifdef EXPECT_UNPATCHED
+            int expected = MBEDTLS_ERR_X509_INVALID_NAME + MBEDTLS_ERR_ASN1_UNEXPECTED_TAG;
+#else
+            int expected = (value == ' ' || (value >= '0' && value <= '9')) ? 0 :
+                MBEDTLS_ERR_X509_INVALID_NAME + MBEDTLS_ERR_ASN1_INVALID_DATA;
+#endif
+            if (result != expected) {
+                fprintf(stderr, "Unexpected NumericString byte 0x%02x at %zu: %d\n", value, position, result);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int test_numericstring_wildcard(const char *certificate_path, const char *root_path)
+{
+    mbedtls_x509_crt certificate;
+    mbedtls_x509_crt root;
+    mbedtls_x509_crt_init(&certificate);
+    mbedtls_x509_crt_init(&root);
+    int failed = mbedtls_x509_crt_parse_file(&root, root_path) != 0;
+    int result = mbedtls_x509_crt_parse_file(&certificate, certificate_path);
+#ifdef EXPECT_UNPATCHED
+    int expected = MBEDTLS_ERR_X509_INVALID_NAME + MBEDTLS_ERR_ASN1_UNEXPECTED_TAG;
+#else
+    int expected = MBEDTLS_ERR_X509_INVALID_NAME + MBEDTLS_ERR_ASN1_INVALID_DATA;
+#endif
+    if (result != expected) {
+        fprintf(stderr, "Unexpected NumericString wildcard certificate parse: %d\n", result);
+        if (result == 0) {
+            uint32_t flags = 0;
+            int verified = mbedtls_x509_crt_verify(&certificate, &root, NULL,
+                                                 "service.example.com", &flags, NULL, NULL);
+            fprintf(stderr, "Wildcard CN verification: %d; flags: 0x%08x; SAN present: %d\n",
+                    verified, (unsigned)flags, certificate.subject_alt_names.buf.p != NULL);
+        }
+        failed = 1;
+    }
+    mbedtls_x509_crt_free(&root);
+    mbedtls_x509_crt_free(&certificate);
+    return failed;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
+    if (argc != 4) {
         return 1;
     }
     mbedtls_x509_crt certificate;
@@ -83,5 +137,6 @@ int main(int argc, char **argv)
     printf("Patched MOEX leaf parse: %d; NumericString INN/OGRN attributes: %zu\n", result, numeric_attributes);
 #endif
     mbedtls_x509_crt_free(&certificate);
-    return failed | test_name_tags();
+    return failed | test_name_tags() | test_numericstring_alphabet() |
+           test_numericstring_wildcard(argv[2], argv[3]);
 }

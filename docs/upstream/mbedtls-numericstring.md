@@ -59,6 +59,27 @@ in `x509.c` to carry only one replaced source file. Add the condition:
 ```
 
 alongside the existing accepted-tag comparisons in `x509_get_attr_type_value()`.
+After `mbedtls_asn1_get_len()` has checked the value bounds, validate its content
+before assigning the value pointer:
+
+```c
+    if (val->tag == MBEDTLS_ASN1_NUMERIC_STRING) {
+        for (size_t index = 0; index < val->len; ++index) {
+            if ((*p)[index] != ' ' &&
+                ((*p)[index] < '0' || (*p)[index] > '9')) {
+                return MBEDTLS_ERROR_ADD(MBEDTLS_ERR_X509_INVALID_NAME,
+                                         MBEDTLS_ERR_ASN1_INVALID_DATA);
+            }
+        }
+    }
+```
+
+X.680 permits only ASCII digits 0-9 and space in NumericString. This check is
+required for every attribute: CN fallback ignores the value tag, so accepting
+NumericString without content validation allows a signed certificate without
+SAN whose NumericString CN is `*.example.com` to pass wildcard hostname matching.
+Rejecting invalid content during parsing prevents it from reaching that code.
+
 Do not change name comparison, name rendering, writers, generic ASN.1 string
 helpers, signature algorithms or certificate verification. Do not widen
 DirectoryString schema definitions or add OID-specific policy in this fix.
@@ -67,8 +88,13 @@ DirectoryString schema definitions or add OID-specific policy in this fix.
 
 The committed native regression reproduces -0x23E2 with the original parser
 and succeeds with the patch, retaining both NumericString tags and exact
-INN/OGRN values. Existing accepted tags still parse; unrelated tags and
-truncated values fail. The separately fetched complete chain verifies with
+INN/OGRN values. All 256 byte values are checked at both positions of a two-byte
+NumericString; only digits and space parse. A signed test certificate without
+SAN, issued by a test CA, whose NumericString CN contains `*.example.com` fails
+parsing with -0x23E8. Without the alphabet check the same certificate parses
+and verifies for `service.example.com` against that CA with return code 0 and
+flags 0. Existing accepted tags still parse; unrelated tags and truncated
+values fail. The separately fetched complete chain verifies with
 the matching Russian Trusted Root CA and `iss.moex.com`, returning 0 with
 verification flags 0. A wrong hostname and the Mozilla bundle without that
 root both fail. The added root is an independent trust decision; parsing

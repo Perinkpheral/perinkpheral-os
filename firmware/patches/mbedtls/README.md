@@ -2,9 +2,12 @@
 
 Decision [0008](../../../docs/decisions/0008-moex-tls.md) authorizes this parser
 correction. `numericstring.patch` changes only `library/x509.c`: name values
-accept tag 0x12, alongside the existing accepted tags. The private
-`MBEDTLS_ASN1_NUMERIC_STRING` definition is needed because the bundled ASN.1
-header does not name it. No other parsing or verification behavior changes.
+accept tag 0x12, alongside the existing accepted tags, and validate every
+NumericString byte against X.680's alphabet (ASCII digits 0-9 and space).
+Invalid content returns `MBEDTLS_ERR_X509_INVALID_NAME` plus
+`MBEDTLS_ERR_ASN1_INVALID_DATA` before the name can reach hostname matching.
+The private `MBEDTLS_ASN1_NUMERIC_STRING` definition is needed because the bundled ASN.1
+header does not name it. Other tags and verification behavior are unchanged.
 The generated file retains upstream's Apache-2.0 OR GPL-2.0-or-later header.
 
 Base: ESP-IDF v5.5.5, Espressif mbedTLS 3.6.6, commit
@@ -13,7 +16,7 @@ Base: ESP-IDF v5.5.5, Espressif mbedTLS 3.6.6, commit
 - Original `library/x509.c` SHA-256:
   `cdd67a9f53f3029c712cfd843038ffaf25dc477f9de215f55e585a15bc164995`.
 - Patched SHA-256:
-  `a28f4371d03fbaa9b2ed47ceb8ca38c9df1a8dae72d381b092a6fe82d7061a72`.
+  `66a9357a43fb9b7ac67eb06a7f921af229cf69566f61cf2c2b32f813c56633a8`.
 
 After `project()`, main firmware uses `patch.cmake` to copy that verified source
 to `<build>/patched-mbedtls/library/x509.c`, apply the diff with Git and replace

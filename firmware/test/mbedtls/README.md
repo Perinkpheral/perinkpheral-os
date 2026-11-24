@@ -20,8 +20,14 @@ suite continues to work without ESP-IDF.
 The offline tests need no network or CA installation. They check the saved
 public MOEX leaf and its two NumericString OID/value pairs, every previously
 accepted name tag, rejection of an unrelated tag and of a truncated value,
-and refusal of a changed upstream source. A second executable uses the original
-`x509.c` object with the same crypto library and reproduces exactly -0x23E2.
+and refusal of a changed upstream source. They test all 256 byte values in
+both positions of a two-byte NumericString: only ASCII digits and space parse.
+A signed certificate without SAN whose NumericString CN is `*.example.com`
+must fail parsing with -0x23E8. Before alphabet validation, the same certificate
+verified for `service.example.com` against its test CA with return code 0 and
+flags 0. Fixture provenance is documented beside the certificates.
+A second executable uses the original `x509.c` object with the same crypto
+library and reproduces exactly -0x23E2.
 The positive certificate test would fail against that parser. Expiration does
 not affect certificate parsing.
 

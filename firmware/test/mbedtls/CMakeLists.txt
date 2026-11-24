@@ -24,14 +24,18 @@ add_executable(test_x509 test_x509.c)
 target_link_libraries(test_x509 PRIVATE mbedx509)
 target_include_directories(test_x509 PRIVATE "${MBEDTLS_SOURCE}/library")
 target_compile_options(test_x509 PRIVATE -Wall -Wextra -Werror)
-add_test(NAME numericstring COMMAND test_x509 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/iss-moex-com.pem")
+set(certificate_fixtures
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/iss-moex-com.pem"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/numericstring-wildcard.pem"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/test-root.pem")
+add_test(NAME numericstring COMMAND test_x509 ${certificate_fixtures})
 
 # The original object satisfies x509.c's symbols before the patched archive is searched.
 add_executable(test_x509_unpatched test_x509.c "${MBEDTLS_SOURCE}/library/x509.c")
 target_link_libraries(test_x509_unpatched PRIVATE mbedx509)
 target_include_directories(test_x509_unpatched PRIVATE "${MBEDTLS_SOURCE}/library")
 target_compile_definitions(test_x509_unpatched PRIVATE EXPECT_UNPATCHED=1)
-add_test(NAME original_rejects_numericstring COMMAND test_x509_unpatched "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/iss-moex-com.pem")
+add_test(NAME original_rejects_numericstring COMMAND test_x509_unpatched ${certificate_fixtures})
 
 add_executable(verify_chain verify_chain.c)
 target_link_libraries(verify_chain PRIVATE mbedx509)
