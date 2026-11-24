@@ -7,6 +7,8 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 ## 0.1.100
 
 - Applications can read elements and attributes from small XML documents using native SDK calls, including a single-pass query for several attributes.
+- Applications can declare JSON, XML or raw responses for GET and POST. Without a declared format, the OS uses Content-Type. The SDK can deliver a complete validated document in an application-provided buffer.
+- Fresh installations include catalog applications with explicit response formats. On existing devices, update the catalog applications before updating the firmware to preserve JSON field extraction from servers that omit or mislabel Content-Type.
 
 ## 0.1.99
 
