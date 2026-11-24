@@ -5,7 +5,9 @@ import com.sun.net.httpserver.HttpServer
 import dev.perinkpheral.core.Json
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
+import kotlin.concurrent.thread
 
 object SimulatorHeadersTest {
     @JvmStatic fun main(args: Array<String>) {
@@ -61,6 +63,24 @@ object SimulatorHeadersTest {
                 check(get("/selection?text/plain", limits + ("formatPolicy" to 1))["status"] == -7L)
                 val conflict = get("/conflict")
                 check(conflict["headers_overflow"] == true && conflict["mimeFormat"] == 0L)
+                val overflowXml = get("/selection?application/xml", limits + ("rawMax" to 12))
+                check(overflowXml["status"] == -7L && overflowXml["mimeFormat"] == 2L)
+                check((overflowXml["headers"] as Map<*, *>)["content-type"] == listOf("application/xml"))
+                val truncated = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { endpoint ->
+                    val responder = thread(isDaemon = true) {
+                        endpoint.accept().use { client ->
+                            val input = client.getInputStream().bufferedReader()
+                            while (!input.readLine().isNullOrEmpty()) { /* consume request headers */ }
+                            client.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n" +
+                                "Content-Type: application/vnd.receiver+xml\r\n" +
+                                "X-Response-Test: body-ended-early\r\nConnection: close\r\n\r\n<r").toByteArray())
+                        }
+                    }
+                    get("/truncated", limits + ("url" to "http://127.0.0.1:${endpoint.localPort}/truncated"))
+                        .also { responder.join(3000) }
+                }
+                check(truncated["status"] == -2L && truncated["mimeFormat"] == 2L) { truncated }
+                check((truncated["headers"] as Map<*, *>)["x-response-test"] == listOf("body-ended-early"))
                 val challenge = get("/auth")
                 check(challenge["status"] == 401L)
                 val headers = challenge["headers"] as Map<*, *>

@@ -925,8 +925,12 @@ static void hand_over(job_t *job)
     if (job->status < 0) {
         say('W', "sim", "%s/%s %d%s: failed (%d)", s_options.app, kind, job->number, item,
             job->status);
+        /* A pre-header failure keeps the request's original route. Once
+         * headers arrived, a body failure uses the final representation. */
+        bool picked = job->wants_values && (!job->response_headers.type_seen ||
+            answer_format(job->format_policy,&job->response_headers,&job->response)==HOST_FORMAT_JSON);
         app_delivery_t failed = {
-            .kind = job->wants_values ? APP_DELIVERY_VALUES : APP_DELIVERY_PIECE,
+            .kind = picked ? APP_DELIVERY_VALUES : APP_DELIVERY_PIECE,
             .request = job->number, .http_status = job->status, .flags = HOST_DATA_FAILED,
             .headers=&job->response_headers,.response=&job->response,
             .has_item = job->item >= 0, .item = job->item,

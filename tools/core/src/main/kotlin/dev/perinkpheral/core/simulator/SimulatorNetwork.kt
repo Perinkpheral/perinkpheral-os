@@ -198,19 +198,6 @@ object SimulatorNetwork {
             val picked = wantsValues && (policy == null || policy == 1L || (policy == 0L && mime == 1))
             val most = if (picked) configuredMax else (asked["rawMax"] as? Long) ?: configuredMax
             val isRefusal = picked && response.statusCode() !in 200..299
-            var content = try {
-                stream.use { it.readNBytes((most + 1).toInt()) }
-            } catch (error: IOException) {
-                if (!isRefusal && isCut.get()) return mapOf("status" to TIMEOUT)
-                if (!isRefusal) throw error
-                ByteArray(0)
-            } finally {
-                deadline.cancel()
-            }
-            if (isCut.get() || content.size > most) {
-                if (!isRefusal) return mapOf("status" to if (isCut.get()) TIMEOUT else TOO_LARGE)
-                content = ByteArray(0)
-            }
             val kept = LinkedHashMap<String, Any?>()
             var headerBytes = 0
             var headersOverflow = false
@@ -230,7 +217,21 @@ object SimulatorNetwork {
             val metadata = response.headers().map().filterKeys { it.lowercase() in KEPT_HEADERS }
                 .mapValues { it.value.firstOrNull().orEmpty() }
             val answer = linkedMapOf<String, Any?>("status" to response.statusCode().toLong(), "headers" to kept, "headers_overflow" to headersOverflow,
-                "mimeFormat" to mime, "metadata" to metadata, "body" to Base64.getEncoder().encodeToString(content))
+                "mimeFormat" to mime, "metadata" to metadata)
+            var content = try {
+                stream.use { it.readNBytes((most + 1).toInt()) }
+            } catch (error: IOException) {
+                if (!isRefusal && isCut.get()) return answer.apply { put("status", TIMEOUT) }
+                if (!isRefusal) return answer.apply { put("status", NO_ANSWER) }
+                ByteArray(0)
+            } finally {
+                deadline.cancel()
+            }
+            if (isCut.get() || content.size > most) {
+                if (!isRefusal) return answer.apply { put("status", if (isCut.get()) TIMEOUT else TOO_LARGE) }
+                content = ByteArray(0)
+            }
+            answer["body"] = Base64.getEncoder().encodeToString(content)
             val location = response.headers().firstValue("location").orElse(null)
             if (response.statusCode() in REDIRECTS && location != null) {
                 try {

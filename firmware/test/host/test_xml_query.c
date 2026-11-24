@@ -143,5 +143,16 @@ int main(void)
     strcat(all, "/>");
     CHECK(xml_query_attrs(all, strlen(all), 0, sixteen, 16, out, 32) == 65535);
     CHECK(!strcmp(out + 30, "x"));
+    const char *unrelated[] = {"<r id='good' x='p' x='q'/>", "<r id='good'><s x='&bogus;'/></r>",
+                                "<r id='good'><s x='p' x='q'/></r>"};
+    const host_xml_field_t id_field = {"id", 0, 8, HOST_XML_REQUIRED, {0}};
+    for (unsigned i=0;i<sizeof unrelated/sizeof unrelated[0];i++) {
+        const char *doc=unrelated[i];
+        strcpy(out,"keep");
+        CHECK(!xml_document_valid(doc,strlen(doc)));
+        CHECK(CHILD(doc,-1,"r",0)==-2);
+        CHECK(ATTR(doc,0,"id",out,8,0)==-1 && !strcmp(out,"keep"));
+        CHECK(xml_query_attrs(doc,strlen(doc),0,&id_field,1,out,8)==-1 && !strcmp(out,"keep"));
+    }
     REPORT();
 }
