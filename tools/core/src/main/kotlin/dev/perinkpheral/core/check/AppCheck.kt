@@ -11,6 +11,8 @@ import dev.perinkpheral.core.build.Wasm
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.ZoneId
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -21,7 +23,7 @@ import java.util.concurrent.TimeUnit
  *
  * Every application's C is compiled for this computer, with the sanitizers, against the
  * SDK's stand-in host (`sdk/check/standin.c`) and run by the capability checks
- * (`sdk/check/checks.c`): sessions, store, timers, network, drawing. Which of them apply to
+ * (`sdk/check/checks.c`): sessions, store, timers, network, drawing, notices, clock. Which apply to
  * an application is read off its module's imports and exports and its manifest. Nothing
  * here or there knows an application by name.
  *
@@ -221,6 +223,8 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
         }
     }
 
+    private data class ClockProbe(val now: Long, val event: Long, val presses: String, val local: LocalDateTime?)
+
     /** The application as the stand-in host is told of it: a C file made of its manifest and
      * of what is kept beside it. */
     private inner class Subject(private val built: Built, checkFile: File, private val scratch: File) {
@@ -301,6 +305,47 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 }
                 appendLine("};")
             }
+            val exceptions = kept["exceptions"]?.let { it as? Map<*, *> ?: throw BuildError("exceptions must be an object") }.orEmpty()
+            val exceptionNames = setOf("store.button", "store.response", "timers.refusal", "notices.retry", "notices.receipt", "network.recovery", "network.backoff") +
+                listOf("truncated", "wrong-types", "empty-lists", "nulls", "missing-record", "long-values", "numeric-overflow", "picked-null", "numeric-tokens").map { "responses.$it" }
+            exceptions.forEach { (key, reason) ->
+                if (key !in exceptionNames || reason !is String || reason.isBlank()) throw BuildError("unknown exception or empty reason: $key")
+            }
+            if (exceptions.isNotEmpty()) {
+                appendLine("static const standin_pair_t EXCEPTIONS[] = {")
+                exceptions.forEach { (key, reason) -> appendLine("    { ${text(key.toString())}, ${text(reason.toString())} },") }
+                appendLine("};")
+            }
+            val failures = kept["failure_text"]?.let { it as? List<*> ?: throw BuildError("failure_text must be an array") }.orEmpty()
+            if (failures.any { it !is String || it.isBlank() }) throw BuildError("failure_text must contain nonempty strings")
+            if (failures.isNotEmpty()) appendLine("static const char *const FAILURE_TEXT[] = { ${failures.joinToString(", ") { text(it as String) }} };")
+            // Exact alternate bodies keep an optional-field policy from disabling required-field checks.
+            val validResponses = kept["valid_responses"]?.let {
+                it as? Map<*, *> ?: throw BuildError("valid_responses must be an object")
+            }.orEmpty().mapValues { (address, bodies) ->
+                if (address !is String || answers.none { it.address == address }) throw BuildError("unknown valid_responses address: $address")
+                val variants = bodies as? List<*> ?: throw BuildError("valid_responses bodies must be an array")
+                if (variants.isEmpty()) throw BuildError("valid_responses bodies must not be empty")
+                variants.map { body ->
+                    if (body !is String) throw BuildError("valid_responses bodies must be JSON strings")
+                    val parsed = runCatching { Json.parse(body) }.getOrElse { throw BuildError("invalid valid_responses JSON") }
+                    if (parsed !is Map<*, *> && parsed !is List<*>) throw BuildError("valid_responses bodies must be JSON objects or arrays")
+                    parsed
+                }
+            }
+            val mutations = answers.flatMapIndexed { index, (address, status, file) ->
+                if (status != 200L) emptyList() else ResponseMutations.make(file.readText()).mapIndexed { number, mutation ->
+                    val mutated = File(scratch, "answers/$index-$number.body").apply { writeText(mutation.body) }
+                    val parsed = runCatching { Json.parse(mutation.body) }.getOrNull()
+                    val valid = validResponses[address].orEmpty().any { it == parsed }
+                    "    { ${text(address)}, ${text(mutation.kind)}, ${text(mutated.path)}, $valid },"
+                }
+            }
+            if (mutations.isNotEmpty()) {
+                appendLine("static const standin_mutation_t MUTATIONS[] = {")
+                mutations.forEach { appendLine(it) }
+                appendLine("};")
+            }
             val at = kept["at"] as? Long ?: 0L
             // The zone's rules as its changes, for the years around the time it is checked at:
             // what an application converts lies there. Before the first, the offset of the start.
@@ -313,6 +358,49 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (changes.isNotEmpty()) {
                 appendLine("static const standin_zone_change_t ZONE[] = {")
                 changes.forEach { appendLine("    { ${it.instant.epochSecond}LL, ${it.offsetAfter.totalSeconds} },") }
+                appendLine("};")
+            }
+            val zoneNames = listOf("Europe/Berlin", "America/New_York", "Australia/Lord_Howe", "Pacific/Auckland")
+            val probeValues = kept["clock_probes"]?.let { it as? List<*> ?: throw BuildError("clock_probes must be an array") }.orEmpty().map { probe ->
+                val fields = probe as? Map<*, *> ?: throw BuildError("clock_probes entries must be objects")
+                val now = fields["now"] as? Long ?: throw BuildError("clock probe needs now")
+                val local = fields["local"]?.let { value ->
+                    if (value !is String) throw BuildError("clock probe local must be an ISO local date/time")
+                    runCatching { LocalDateTime.parse(value) }.getOrElse { throw BuildError("invalid clock probe local: $value") }
+                }
+                if ((local != null) == (fields["event"] != null)) throw BuildError("clock probe needs exactly one of event or local")
+                val event = local?.toEpochSecond(ZoneOffset.UTC) ?: (fields["event"] as? Long ?: throw BuildError("clock probe needs event"))
+                val range = sdk.contract.number("HOST_TIME_MIN")..sdk.contract.number("HOST_TIME_MAX")
+                if ((now != 0L && now !in range) || event !in range) throw BuildError("clock probe time outside HOST_TIME_MIN..HOST_TIME_MAX")
+                val presses = fields["presses"] as? String ?: ""
+                if (presses.any { it !in "UODBuodb" }) throw BuildError("clock probe presses use UODBuodb")
+                ClockProbe(now, event, presses, local)
+            }
+            val zoneFrom = Instant.ofEpochSecond(minOf(from.epochSecond, probeValues.minOfOrNull { minOf(it.now, it.event) } ?: from.epochSecond))
+            val zoneUntil = Instant.ofEpochSecond(maxOf(until.epochSecond, (probeValues.maxOfOrNull { maxOf(it.now, it.event) } ?: 0) + SECONDS_A_YEAR))
+            val profiles = zoneNames.map { name ->
+                val profileRules = ZoneId.of(name).rules
+                val transitions = generateSequence(profileRules.nextTransition(zoneFrom)) { profileRules.nextTransition(it.instant) }
+                    .takeWhile { it.instant < zoneUntil }.toList()
+                Triple(name, profileRules.getOffset(zoneFrom).totalSeconds, transitions)
+            }
+            profiles.forEachIndexed { index, (_, _, transitions) ->
+                appendLine("static const standin_zone_change_t CLOCK_ZONE_$index[] = {")
+                transitions.forEach { appendLine("    { ${it.instant.epochSecond}LL, ${it.offsetAfter.totalSeconds} },") }
+                appendLine("};")
+            }
+            appendLine("static const standin_zone_t CLOCK_ZONES[] = {")
+            profiles.forEachIndexed { index, (name, offset, transitions) ->
+                appendLine("    { ${text(name)}, $offset, CLOCK_ZONE_$index, ${transitions.size} },")
+            }
+            appendLine("};")
+            if (probeValues.isNotEmpty()) {
+                appendLine("static const standin_clock_probe_t CLOCK_PROBES[] = {")
+                probeValues.forEach { (now, event, presses, local) ->
+                    val parts = if (local == null) "{ 0 }" else "{ .year = ${local.year}, .month = ${local.monthValue}, .day = ${local.dayOfMonth}, " +
+                        ".hour = ${local.hour}, .minute = ${local.minute}, .second = ${local.second} }"
+                    appendLine("    { $now" + "LL, $event" + "LL, ${text(presses)}, $parts },")
+                }
                 appendLine("};")
             }
             val arena = arenaBytes(built.memoryEnd)
@@ -328,6 +416,11 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (store.isNotEmpty()) appendLine("    .store = STORE, .store_count = ${store.size},")
             if (answers.isNotEmpty()) appendLine("    .answers = ANSWERS, .answer_count = ${answers.size},")
             if (changes.isNotEmpty()) appendLine("    .zone_changes = ZONE, .zone_change_count = ${changes.size},")
+            if (exceptions.isNotEmpty()) appendLine("    .exceptions = EXCEPTIONS, .exception_count = ${exceptions.size},")
+            if (failures.isNotEmpty()) appendLine("    .failure_text = FAILURE_TEXT, .failure_text_count = ${failures.size},")
+            if (mutations.isNotEmpty()) appendLine("    .mutations = MUTATIONS, .mutation_count = ${mutations.size},")
+            if (probeValues.isNotEmpty()) appendLine("    .clock_probes = CLOCK_PROBES, .clock_probe_count = ${probeValues.size},")
+            appendLine("    .zones = CLOCK_ZONES, .zone_count = ${profiles.size},")
             appendLine("    .intents = $intents, .at = ${at}LL, .zone_offset = $zone, .arena_bytes = $arena,")
             appendLine("};")
             if (exports != null) {
@@ -396,7 +489,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
 
     companion object {
         const val OWN_TESTS = "logic"
-        val CAPABILITIES = listOf("sessions", "store", "timers", "network", "drawing")
+        val CAPABILITIES = listOf("sessions", "store", "timers", "network", "drawing", "notices", "clock")
 
         private const val MANIFEST = "manifest.json"
         private const val MODULE = "app.wasm"
@@ -440,6 +533,8 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             "store" -> "kv_set" in imports || "file_write" in imports
             "timers" -> imports.any { it == "timer_set" || it.startsWith("alarm_set") }
             "network" -> "http_send" in imports || (manifest["polls"] as? List<*>).orEmpty().isNotEmpty()
+            "notices" -> "notification_post" in imports
+            "clock" -> imports.any { it.startsWith("time_") }
             "drawing" -> "app_on_draw" in exports
             else -> false
         }

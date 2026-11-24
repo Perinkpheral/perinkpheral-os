@@ -70,6 +70,11 @@ typedef struct {
 } standin_answer_t;
 
 typedef struct {
+    const char *address, *kind, *file;
+    bool is_valid; /* exact alternate response declared by the application */
+} standin_mutation_t;
+
+typedef struct {
     const char *name; /* on the device */
     const char *file; /* on this computer */
 } standin_file_t;
@@ -79,6 +84,19 @@ typedef struct {
     int64_t at;
     int32_t offset;
 } standin_zone_change_t;
+
+typedef struct {
+    const char *name;
+    int32_t offset;
+    const standin_zone_change_t *changes;
+    int32_t count;
+} standin_zone_t;
+
+typedef struct {
+    int64_t now, event;
+    const char *presses;
+    host_local_time_t local; /* year != 0: floating calendar time instead of an absolute instant */
+} standin_clock_probe_t;
 
 typedef struct {
     const char              *name;
@@ -102,6 +120,16 @@ typedef struct {
     int32_t                  store_count;
     const standin_answer_t  *answers;
     int32_t                  answer_count;
+    const standin_mutation_t *mutations;
+    int32_t                  mutation_count;
+    const standin_pair_t    *exceptions;
+    int32_t                  exception_count;
+    const char *const      *failure_text;
+    int32_t                  failure_text_count;
+    const standin_zone_t   *zones;
+    int32_t                  zone_count;
+    const standin_clock_probe_t *clock_probes;
+    int32_t                  clock_probe_count;
 } standin_subject_t;
 
 /* Made by the tools for every program linked with the stand-in. */
@@ -138,6 +166,7 @@ extern standin_handlers_t standin_handlers;
 #define STANDIN_NOTE_BYTES   200
 #define STANDIN_NOTES        16
 #define STANDIN_URL_BYTES    512
+#define STANDIN_DRAW_TEXT_BYTES 8192
 
 #define STANDIN_ALARM_NONE  0
 #define STANDIN_ALARM_IN    1 /* alarm_set: by the uptime */
@@ -186,6 +215,18 @@ typedef struct {
     /* The store and the files, with the device's accounting. */
     standin_value_t       values[STANDIN_STORE_VALUES];
     standin_stored_file_t files[STANDIN_FILES];
+    int32_t refuse_notices, refused_notices, notice_attempts;
+    int32_t refuse_alarms, refused_alarms, alarm_attempts;
+    bool refuse_receipts; /* refuse writes only after an accepted notification */
+    int32_t active_zone; /* 0: configured zone; otherwise subject.zones[index - 1] */
+    int32_t mutation_deliveries;
+    bool monitor_backoff;
+    int32_t rate_limits;
+    uint32_t alarms_delivered;
+    int64_t retry_until_ms;
+    int32_t early_requests;
+    char draw_text[STANDIN_DRAW_TEXT_BYTES]; /* visible text, in drawing order, separated by newlines */
+    bool visible_failure; /* ui_draw_reason() drew an error */
     int32_t refuse_writes;   /* a HOST_ERR_*: every write of the store and the files answers it */
     int32_t store_writes;    /* kv_set calls the store took */
     int32_t store_changes;   /* those that changed what it holds: the device's store writes the flash
@@ -221,6 +262,7 @@ typedef struct {
     char    status_text[2][HOST_STATUS_TEXT_MAX + 1];
     int32_t status_icon[2];
     int32_t logs, error_logs;
+    uint64_t diagnostics; /* hash of log records */
     char    last_log[HOST_LOG_TEXT_MAX + 1];
 
     /* The network. */
@@ -261,6 +303,9 @@ void standin_reset(void);
 void standin_clock(int64_t unix_time);     /* the clock is set; no intent is delivered */
 void standin_pass(int64_t milliseconds);   /* time goes by: the uptime and, when known, the clock */
 void standin_restart(void);                /* another boot: uptime 0, no alarms, no session, no requests */
+void standin_refuse_session(int32_t error);
+int32_t standin_refused_sessions(void);
+bool standin_session_failure_reported(void);
 void standin_forget_session(void);         /* the application left the stack */
 
 /* A value as a setting is saved; NULL forgets it. */

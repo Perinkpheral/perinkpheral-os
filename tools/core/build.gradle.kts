@@ -123,6 +123,14 @@ val documentationTest by tasks.registering(JavaExec::class) {
 }
 tasks.check { dependsOn(documentationTest) }
 
+val responseMutationsTest by tasks.registering(JavaExec::class) {
+    maxHeapSize = "256m" // Wide JSON regression must stay bounded before a subprocess starts.
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.check.ResponseMutationsTest")
+}
+tasks.check { dependsOn(responseMutationsTest) }
+
 val contractSnapshotTest by tasks.registering(JavaExec::class) {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath

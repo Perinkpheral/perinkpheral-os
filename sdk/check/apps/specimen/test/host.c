@@ -239,10 +239,10 @@ static void test_answers(void)
     standin_set("place", NULL);
     /* The specimen's own handler takes a picked value from the SDK's picker. */
     standin_handlers.on_picked = app_on_picked;
-    standin_picked(0, -1, 200, "{\"value\": \"21\"}", 15);
-    assert(strcmp(value, "21") == 0 && standin()->store_writes == 1);
-    standin_picked(0, -1, 200, "{\"value\": \"21\"}", 15);
-    assert(standin()->store_writes == 1);
+    standin_picked(0, -1, 200, "{\"value\": \"21\",\"rows\":[{\"name\":\"row\"}]}", 39);
+    assert(strcmp(value, "21") == 0 && standin()->store_writes == 2);
+    standin_picked(0, -1, 200, "{\"value\": \"21\",\"rows\":[{\"name\":\"row\"}]}", 39);
+    assert(standin()->store_writes == 2);
     standin_picked(0, -1, HOST_FAILED_NO_NETWORK, NULL, 0);
     assert(strcmp(value, "21") == 0);
     /* As poller_net.c hands it over: a success the picker cannot read is no answer; a refusal keeps
@@ -304,6 +304,12 @@ static void check_response_headers(void)
         assert(answer_header("ETag", 4, 0, text, 2) == HOST_ERR_NO_SPACE);
         assert(strcmp(text, "unchanged") == 0);
         assert(answer_header("Empty", 5, 0, NULL, 0) == 0);
+    } else if (header_mode == 3) {
+        assert(info.retry_after == 120);
+        assert(answer_header("retry-after", 11, 0, text, sizeof text) == 3 && memcmp(text, "120", 3) == 0);
+        assert(answer_header("Retry-After", 11, 1, text, sizeof text) == HOST_ERR_NOT_FOUND);
+        assert(answer_header("Retry-After", 11, 0, text, 2) == HOST_ERR_NO_SPACE);
+        assert(answer_header("Cache-Control", 13, 0, text, sizeof text) == 10 && memcmp(text, "max-age=60", 10) == 0);
     } else if (header_mode == 2) {
         assert(answer_header("set-cookie", 10, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
         assert(answer_header("absent", 6, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
@@ -386,7 +392,7 @@ static void test_drawing(void)
     standin_handlers.on_draw = app_on_draw;
     page = 0;
     uint64_t first_page = standin_draw();
-    assert(standin()->draw_calls == 2 && standin_draw() == first_page);
+    assert(standin()->draw_calls == 5 && standin_draw() == first_page);
     page = 1;
     assert(standin_draw() != first_page && standin()->refused_draws == 0);
     standin()->is_drawing = true;
@@ -413,6 +419,63 @@ static void test_drawing(void)
            HOST_ERR_ARGUMENT);
 }
 
+static void test_refusals_and_metadata(void)
+{
+    standin_reset();
+    standin()->is_session_writable = true;
+    int32_t kept = 7;
+    assert(session_set(&kept, sizeof kept) == HOST_OK);
+    standin_refuse_session(HOST_ERR_NO_SPACE);
+    kept = 8;
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
+    assert(standin_refused_sessions() == 1 && !standin_session_failure_reported());
+    assert(session_get(&kept, sizeof kept) == sizeof kept && kept == 7);
+    log_write(HOST_LOG_ERROR, "Session error.", 14);
+    assert(standin_session_failure_reported());
+    standin_refuse_session(HOST_OK);
+
+    standin()->refuse_alarms = HOST_ERR_NO_SPACE;
+    assert(alarm_set(0, 10) == HOST_ERR_NO_SPACE);
+    assert(alarm_set_at(0, time_now() + 10) == HOST_ERR_NO_SPACE);
+    assert(alarm_set_every(0, 60, 0) == HOST_ERR_NO_SPACE);
+    assert(standin_alarms() == 0 && standin()->refused_alarms == 3);
+    assert(alarm_set(0, 0) == HOST_OK); /* cancellation needs no allocation */
+    standin()->refuse_alarms = HOST_OK;
+    assert(alarm_set(0, 10) == HOST_OK);
+
+    host_notice_t notice = { .icon = HOST_ICON_NONE };
+    notice.first[0] = 'S';
+    standin()->refuse_notices = HOST_ERR_NO_SPACE;
+    assert(notification_post(&notice) == HOST_ERR_NO_SPACE && standin()->notices == 0);
+    standin()->refuse_notices = HOST_OK;
+    standin()->refuse_receipts = true;
+    assert(notification_post(&notice) == HOST_OK && standin()->notices == 1);
+    assert(kv_set("receipt", 7, &kept, sizeof kept) == HOST_ERR_NO_SPACE);
+    assert(standin()->refused_notices == 1);
+
+    const standin_pair_t headers[] = { { "Retry-After", "120" }, { "Cache-Control", "max-age=60" } };
+    standin_handlers.on_data = headers_in_data;
+    header_mode = 3;
+    standin_answer_headers(headers, 2);
+    standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    const standin_pair_t date_header[] = { { "Retry-After", "Wed, 25 Nov 2026 12:00:00 GMT" } };
+    header_mode = 0;
+    standin_answer_headers(date_header, 1);
+    standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    char header[64];
+    assert(answer_header("retry-after", 11, 0, header, sizeof header) == HOST_ERR_NOT_FOUND);
+
+    standin_reset();
+    standin()->is_drawing = true;
+    char repeated[HOST_TEXT_MAX];
+    memset(repeated, 'W', sizeof repeated);
+    for (int repeat = 0; repeat < 64; repeat++) {
+        assert(gfx_draw_text(0, 0, HOST_FONT_SMALL, repeated, sizeof repeated) >= 0);
+    }
+    assert(strlen(standin()->draw_text) < sizeof standin()->draw_text);
+    standin()->is_drawing = false;
+}
+
 int main(void)
 {
     test_arena_alignment();
@@ -422,6 +485,7 @@ int main(void)
     test_timers_and_alarms();
     test_answers();
     test_drawing();
+    test_refusals_and_metadata();
     test_response_headers();
     puts("the stand-in host: store, session, time, timers and alarms, answers, drawing");
     return 0;

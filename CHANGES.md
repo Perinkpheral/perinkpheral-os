@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.98
+
+- Application capability checks cover refused saves, session and alarm allocation, notification retries, malformed response fields, HTTP cooldowns and date-aware event times. Application fixtures can declare exact valid response variants, visible errors and narrowly scoped exceptions.
+
 ## 0.1.97
 
 - The header's Wi-Fi icon shows whether the device has joined a network and obtained an address. A server's TLS or HTTP failure no longer crosses it out. While Wi-Fi sleeps between polls, the icon keeps the last connection attempt's outcome.
