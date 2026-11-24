@@ -672,7 +672,9 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
 <p>An application with several screens - peers, like Keenetic's Overview, System, Network and Devices - switches them with held UP and DOWN, round. Short UP and DOWN belong to the screen: a list's rows, a month on a chart. A view opened from a screen, such as an event's page over a list, closes with BACK. An application of one screen keeps its held presses for itself. An application whose short presses have nothing else to do may switch screens with them too.</p>
 <p>The screens need no names. On a screen without a title, the count, <code>2/4</code>, goes beside the connection icon in the left side of Perinkpheral OS header, in its font and size. The application's own left text follows it: <code>1/2 Panormos</code>. <code>app_nav_set_header()</code> composes both, capped at <code>HOST_HEADER_TEXT_MAX</code> bytes between UTF-8 characters; Perinkpheral OS cuts the text with <code>...</code> to the available width. Set it on focus, because leaving the screen clears the header, and when the screen, view or app text changes, before requesting a redraw. Pass the app text each time; use this helper instead of setting the left header separately.</p>
 <p><code>app_nav_draw_title()</code> with <code>NULL</code> or an empty title draws nothing and returns 0: content starts at the top. With a title it keeps the count small at the right on the title's baseline. The count is the application's to show or hide, per screen: HA Companion's screens hide it. The header helper omits the count in a view and in an application of one screen. <code>sdk/lib/app_nav.h</code> is a recommendation, and an application may handle its buttons and draw its screens its own way.</p>
-<pre>#include "app_nav.h"
+<pre>#include &lt;stddef.h&gt;
+#include "app_nav.h"
+#include "app_state.h"
 
 static app_nav_t nav = { .screens = 4 };
 
