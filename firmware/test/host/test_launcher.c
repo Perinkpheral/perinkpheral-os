@@ -14,10 +14,11 @@ static char test_root[sizeof "/tmp/perink-launcher-XXXXXX"];
 
 /* Force a digest-prefix collision while exercising the real package hash path. */
 static bool collide;
+static unsigned char exempt_digest[32];
 static int finish_hash(mbedtls_sha256_context *hash, unsigned char digest[32])
 {
     int result = mbedtls_sha256_finish(hash, digest);
-    if (collide) {
+    if (collide && memcmp(digest, exempt_digest, sizeof exempt_digest) != 0) {
         memset(digest, 0, 4);
         digest[3] = 7;
     }
@@ -73,7 +74,13 @@ void app_scene_destroy(scene_t *scene)
 }
 static void drop_scene(scene_t *scene, void *context)
 {
-    (void)scene; (void)context;
+    if (context != NULL) {
+        scene_t **active = context;
+        CHECK(scene == *active);
+        CHECK(!strcmp(launcher_app_name(scene), "gamma"));
+        CHECK(launcher_find("gamma") == borrowed[scene - scenes]);
+        *active = NULL;
+    }
     scenes_dropped++;
 }
 static const char *language = "en";
@@ -151,6 +158,36 @@ int main(void)
     CHECK(mkdir(folder, 0700) == 0);
     write_file("beta", "app.wasm.new", "module");
     CHECK(!launcher_incoming_id_is_unique("beta", BETA));
+    /* Alpha and Beta collide before Gamma in title order. Gamma must borrow
+     * compacted slot zero; the next reload must drop it before reusing that slot. */
+    language = "en";
+    write_file("beta", "manifest.json", BETA);
+    write_file("beta", "app.wasm", "module");
+    static const char GAMMA[] = "{\"name\":\"gamma\",\"title\":\"Gamma\",\"abi\":3}";
+    snprintf(folder, sizeof folder, "%s/gamma", test_root);
+    CHECK(mkdir(folder, 0700) == 0);
+    write_file("gamma", "manifest.json", GAMMA);
+    write_file("gamma", "app.wasm", "module");
+    mbedtls_sha256_context hash;
+    mbedtls_sha256_init(&hash);
+    mbedtls_sha256_starts(&hash, 0);
+    mbedtls_sha256_update(&hash, (const uint8_t *)"module", 6);
+    mbedtls_sha256_update(&hash, (const uint8_t *)GAMMA, strlen(GAMMA));
+    mbedtls_sha256_finish(&hash, exempt_digest);
+    mbedtls_sha256_free(&hash);
+    scenes_created = 0;
+    launcher_reload(drop_scene, NULL);
+    CHECK(s_installed_count == 1 && scenes_created == 1);
+    CHECK(launcher_find_id(7) == NULL);
+    CHECK(borrowed[0] == &s_installed[0] && borrowed[0] == launcher_find("gamma"));
+    CHECK(!strcmp(borrowed[0]->name, "gamma") && launcher_app_scene("gamma") == &scenes[0]);
+    scene_t *active = launcher_app_scene("gamma");
+    CHECK(app_store_remove(test_root, "gamma"));
+    scenes_created = 0;
+    launcher_reload(drop_scene, &active);
+    CHECK(active == NULL);
+    CHECK(s_installed_count == 0 && scenes_created == 0);
+    CHECK(scenes_destroyed == 6 && scenes_dropped == 6);
     CHECK(app_store_remove(test_root, "alpha"));
     CHECK(app_store_remove(test_root, "beta"));
     CHECK(rmdir(test_root) == 0);
