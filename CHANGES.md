@@ -21,6 +21,8 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 - The endurance observer retries failed log and status reads independently after 2, 4 and then at most 5 seconds, with three-second read timeouts. Per-endpoint last success, failure request start, failure detection and recovery timestamps distinguish request latency and retry delay from the observed outage bounds. Existing collectors are unaffected until restarted.
 - Untitled application screens can put their screen count beside the connection icon in Perinkpheral OS header, followed by their own left text. The SDK's `app_nav_set_header()` composes both; `app_nav_draw_title()` with no title draws nothing and leaves all content space available. Titled screens keep their existing count on the title's baseline. The host API and ABI 3 are unchanged.
 
+- HTTPS accepts certificates with NumericString name attributes, including MOEX's current certificate used by Stocks. Chain and hostname verification remain required; Stocks also needs its catalog update with the matching certificate-authority root.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.
