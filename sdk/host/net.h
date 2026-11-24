@@ -202,7 +202,8 @@ APP_EXPORT(app_data_buffer, uint8_t *app_data_buffer(void));
  * a response. Repeated pending requests are coalesced. Perinkpheral OS performs
  * one request at a time. Calls within a second of the last accepted
  * poll_run() are delayed until that second has elapsed; this does not
- * guarantee a one-second gap between request starts. */
+ * guarantee a one-second gap between request starts. Active server
+ * Retry-After delays also defer manifest polls requested by this call. */
 HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
 
 /* Queues a request from code.

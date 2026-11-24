@@ -78,6 +78,11 @@ records. The standard `Storage error.`, `Not enough space.`, `Could not save.` a
 `Schedule error.` and a drawn `ui_draw_reason()` are recognized without declarations.
 A log line is not a visible error.
 
+In the Retry-After probe, the stand-in defers settings-triggered and sibling
+manifest-poll deliveries. It observes app-issued requests separately, including
+explicit `poll_run()` calls. The firmware host poller tests cover deadline and
+list rescheduling, including reconnect and delays longer than a day.
+
 `exceptions` is an object mapping check keys to nonempty reasons. Each is printed:
 
 - `store.identical-answers`: durable request leases or equivalent metadata must be written even when successful response data is identical, including as time elapses. Only those write-count assertions are exempted; failed-answer and lifecycle write counts, refused-save recovery and sanitizer checks still run. A nonempty reason is required.

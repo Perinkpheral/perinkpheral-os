@@ -43,6 +43,8 @@ static const char *TAG = "poller";
 #define USER_AGENT          "perinkpheral"
 #define HTTP_OK_FIRST       200
 #define HTTP_OK_LAST        299
+#define HTTP_TOO_MANY_REQUESTS 429
+#define THROTTLE_DEFAULT_S   60
 
 static const poller_net_host_t *s_host;
 
@@ -768,6 +770,13 @@ static void ask_network(request_t *request, const char *app_name, int number, in
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
         tell_failure(app_name, number, wants_values, why);
     } else {
+        int retry_after = request->response.retry_after;
+        if (retry_after == 0 && http_status == HTTP_TOO_MANY_REQUESTS) {
+            retry_after = THROTTLE_DEFAULT_S;
+        }
+        if (retry_after > 0) {
+            s_host->retry_after(retry_after);
+        }
         request->response.length = esp_http_client_is_chunked_response(client)
                                        ? -1
                                        : (int32_t)esp_http_client_get_content_length(client);

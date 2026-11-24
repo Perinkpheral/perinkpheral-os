@@ -6,6 +6,8 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.98
 
+- Manifest polls respect server cooldowns across settings saves, reconnects and manual refreshes. A response with Retry-After, or a 429 without a usable delay, also defers sibling polls and stops the current list round. The cooldown lasts for the server delay within the current boot, including when the application unloads.
+
 - Session-allocation failure checks allow overwrites within the last saved length, matching firmware allocation. Applications can reserve their session on focus and update it on blur without a false allocation refusal.
 
 - Application capability checks cover refused saves, session and alarm allocation, notification retries, malformed response fields, HTTP cooldowns and date-aware event times. Application fixtures can declare exact valid response variants, visible errors and narrowly scoped exceptions. The documented `store.identical-answers` exception requires a reason for durable request metadata such as leases; save-refusal recovery and other checks remain enforced.

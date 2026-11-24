@@ -23,6 +23,8 @@ typedef struct {
     /* An answer, or the news that there is none, for the application: the
      * data is only there until this returns. */
     void (*deliver)(const char *app_name, const app_delivery_t *delivery);
+    /* The final response specified a delay. Called once, before reading the body. */
+    void (*retry_after)(int seconds);
 } poller_net_host_t;
 
 void poller_net_start(const poller_net_host_t *host);

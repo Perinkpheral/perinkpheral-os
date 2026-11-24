@@ -346,6 +346,7 @@ answer_info(struct_ptr, capacity)    // copies the first capacity bytes, at most
 poll_run(n)                            // request poll n through the shared queue; pending requests coalesce
                                        // within one second of the last accepted immediate request, delay until that window ends
                                        // this does not guarantee one-second spacing between network starts
+                                       // server cooldowns defer manifest polls across timer, settings, reconnect, and poll_run triggers
 poll_set_interval(n, seconds)          // persistent code override, 10..86400 s; 0 forgets it and resumes the manifest or setting
                                        // the code override takes precedence over the interval setting
                                        // out of range: ARGUMENT; persistence failure: FAILED; an unchanged resolved pace before the power-saving floor keeps its deadline

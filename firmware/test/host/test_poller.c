@@ -17,6 +17,7 @@ static wifi_plan_t network_plan;
 static wifi_status_t network;
 static bool transport_failure, reconnect_during_request;
 static int round_items, raw_sent, failures_told, notifications, radio_holds;
+static int retry_after, round_poll, sent_item;
 static bool session_memory = true;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
@@ -122,19 +123,32 @@ bool poller_net_setting_of(void *context, const char *key, char *value, size_t s
 }
 int poller_net_poll(const char *name, int poll, int item, int *method, bool *network_failed)
 {
-    (void)item;
+    sent_item = item;
+    if (retry_after != 0) {
+        NET_HOST.retry_after(retry_after);
+        retry_after = 0;
+    }
     *method = sent_method;
     *network_failed = transport_failure;
     if (reconnect_during_request) poller_network_is_back();
     requests_sent++;
     if (abandon_answer) poller_answer_was_abandoned(name, poll);
-    return round_items;
+    return poll == round_poll ? round_items : 0;
 }
 void poller_net_poll_not_made(const char *name, int poll, int why)
 {
     (void)name; (void)poll; (void)why;
 }
-void poller_net_request(const char *name, const poller_ask_t *ask) { (void)name; (void)ask; raw_sent++; }
+void poller_net_request(const char *name, const poller_ask_t *ask)
+{
+    (void)name;
+    (void)ask;
+    if (retry_after != 0) {
+        NET_HOST.retry_after(retry_after);
+        retry_after = 0;
+    }
+    raw_sent++;
+}
 void poller_net_tell_failure(const char *name, int number, int why)
 {
     (void)name; (void)number; (void)why; failures_told++;
@@ -159,6 +173,7 @@ static void reset_poller(void)
     memset(&s_rounds, 0, sizeof s_rounds);
     deadline_table_init(&test_deadlines);
     memset(&s_abandoned, 0, sizeof s_abandoned);
+    memset(s_cooldowns, 0, sizeof s_cooldowns);
     memset(installed_apps, 0, sizeof installed_apps);
     installed_count = 1;
     strcpy(installed_apps[0].name, "probe");
@@ -173,6 +188,7 @@ static void reset_poller(void)
     s_is_holding_radio = false;
     transport_failure = reconnect_during_request = false;
     round_items = raw_sent = failures_told = notifications = radio_holds = 0;
+    retry_after = round_poll = 0;
     s_network_generation = 0;
     s_memory_looks = 0;
     session_memory = true;
@@ -446,8 +462,8 @@ static void test_each_cooldown_survives_transport_failure(void)
     advance_to(0);
     round_items = 5;
     CHECK(run_wanted_poll());
-    /* One item returned 429 and its application extended the interval.
-     * A later item loses its connection before the round can finish. */
+    /* The application lengthens its interval mid-round. A later item
+     * loses its connection before the round can finish. */
     clock_ms = 100;
     CHECK(poller_set_interval("probe", 0, 7200) == HOST_OK);
     clock_ms = 200;
@@ -516,8 +532,115 @@ static void test_reconnect_raw_queue(void)
     CHECK(failures_told == 1);
 }
 
+static void test_settings_save_during_retry_after(void)
+{
+    for (int dispatch_before_settings = 0; dispatch_before_settings <= 1; dispatch_before_settings++) {
+        reset_poller();
+        CHECK(schedule_installed() == 1);
+        retry_after = 300;
+        advance_to(0);
+        CHECK(run_wanted_poll() && requests_sent == 1);
+
+        advance_to(1000);
+        poller_hurry("probe");
+        if (dispatch_before_settings) CHECK(run_wanted_poll() && requests_sent == 1);
+        /* The settings handler adjusts the interval after the host queues a refresh. */
+        CHECK(poller_set_interval("probe", 0, 301) == HOST_OK);
+        CHECK(poller_set_interval("probe", 0, 300) == HOST_OK);
+        while (run_wanted_poll()) { }
+        poller_network_is_back();
+        advance_to(299999);
+        CHECK(!run_wanted_poll() && requests_sent == 1);
+        advance_to(301000);
+        CHECK(run_wanted_poll() && requests_sent == 2);
+        CHECK(!run_wanted_poll());
+    }
+}
+
+static void test_retry_after_defers_startup_polls(void)
+{
+    reset_poller();
+    installed_apps[0].poll_count = 4;
+    for (int i = 0; i < 4; i++) installed_apps[0].poll_every_s[i] = 86400;
+    installed_count = 2;
+    strcpy(installed_apps[1].name, "other");
+    installed_apps[1].id = 2;
+    installed_apps[1].poll_count = 1;
+    installed_apps[1].poll_every_s[0] = 3600;
+    CHECK(schedule_installed() == 5);
+
+    retry_after = 300;
+    advance_to(0);
+    CHECK(run_wanted_poll() && requests_sent == 1);
+    advance_to(8000);
+    while (run_wanted_poll()) { }
+    CHECK(requests_sent == 2); /* only the other application's poll */
+    advance_to(299999);
+    CHECK(!run_wanted_poll());
+    advance_to(300000);
+    while (run_wanted_poll()) { }
+    CHECK(requests_sent == 5);
+}
+
+static void test_retry_after_stops_list_round(void)
+{
+    for (int raw = 0; raw <= 1; raw++) {
+        reset_poller();
+        installed_apps[0].poll_every_s[0] = 60;
+        round_items = 3;
+        CHECK(schedule_installed() == 1);
+        advance_to(0);
+        CHECK(run_wanted_poll() && requests_sent == 1 && sent_item == 0);
+        advance_to(1000);
+        retry_after = 300;
+        if (raw) {
+            CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
+                  HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+            CHECK(run_pending_request(0) && raw_sent == 1);
+        }
+        CHECK(run_wanted_poll());
+        CHECK(requests_sent == (raw ? 1 : 2));
+        poller_hurry("probe");
+        while (run_wanted_poll()) { }
+        advance_to(300999);
+        CHECK(!run_wanted_poll());
+        advance_to(301000);
+        CHECK(run_wanted_poll() && sent_item == 0);
+        CHECK(run_wanted_poll() && sent_item == 1);
+        CHECK(run_wanted_poll() && sent_item == 2);
+        CHECK(!run_wanted_poll());
+    }
+}
+
+static void test_long_retry_after_survives_reload(void)
+{
+    reset_poller();
+    installed_apps[0].poll_every_s[0] = 60;
+    CHECK(schedule_installed() == 1);
+    retry_after = 172800;
+    advance_to(0);
+    CHECK(run_wanted_poll() && requests_sent == 1);
+
+    /* An unloaded application lost its saved cooldown and asks for a manual
+     * refresh after waking. The poller still has the original server delay. */
+    CHECK(poller_set_interval("probe", 0, 86400) == HOST_OK);
+    poller_reload();
+    advance_to(86400000);
+    CHECK(poller_poll_now("probe", 0));
+    CHECK(run_wanted_poll() && requests_sent == 1);
+    poller_network_is_back();
+    advance_to(172799999);
+    CHECK(!run_wanted_poll() && requests_sent == 1);
+    advance_to(172800000);
+    CHECK(run_wanted_poll() && requests_sent == 2);
+}
+
 int main(void)
 {
+    test_long_retry_after_survives_reload();
+    test_settings_save_during_retry_after();
+    test_retry_after_defers_startup_polls();
+    test_retry_after_stops_list_round();
     test_reconnect_offline_poll();
     test_reconnect_keeps_normal_pace();
     test_reconnect_transport_and_races();

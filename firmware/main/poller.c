@@ -68,6 +68,11 @@ typedef struct {
 static known_app_t       s_known[LAUNCHER_INSTALLED_MAX];
 static uint32_t user_interval_seconds(const known_app_t *known, int poll);
 static int               s_known_count;
+/* Server cooldowns belong to installed application IDs and this boot. */
+static struct {
+    uint32_t app;
+    int64_t until_ms;
+} s_cooldowns[LAUNCHER_INSTALLED_MAX];
 /* The schedule is changed from other tasks too: an application asks for a
  * poll, the web page saves settings. */
 static SemaphoreHandle_t s_lock;
@@ -146,8 +151,53 @@ static void hand_over(const char *app_name, const app_delivery_t *delivery)
     events_call_patiently(deliver_in_host_loop, &handed);
 }
 
+/* Under the poller lock. The same deadline covers an application's polls
+ * even when they were scheduled independently or belong to a list round. */
+static int64_t cooldown_left_ms(uint32_t app)
+{
+    for (int i = 0; i < LAUNCHER_INSTALLED_MAX; i++) {
+        if (s_cooldowns[i].app == app) {
+            int64_t left = s_cooldowns[i].until_ms - uptime_ms();
+            return left > 0 ? left : 0;
+        }
+    }
+    return 0;
+}
+
+static void remember_retry_after(int seconds)
+{
+    lock();
+    int64_t now_ms = uptime_ms();
+    int slot = -1;
+    for (int i = 0; i < LAUNCHER_INSTALLED_MAX; i++) {
+        if (s_cooldowns[i].app == s_answering_app) {
+            slot = i;
+            break;
+        }
+        if (slot < 0 && s_cooldowns[i].until_ms <= now_ms) {
+            slot = i;
+        }
+    }
+    bool installed = false;
+    for (int i = 0; i < s_known_count; i++) {
+        if (s_known[i].id == s_answering_app) {
+            installed = true;
+            break;
+        }
+    }
+    if (slot >= 0 && installed) {
+        int64_t until_ms = now_ms + (int64_t)seconds * MS_PER_SECOND;
+        if (s_cooldowns[slot].app != s_answering_app || until_ms > s_cooldowns[slot].until_ms) {
+            s_cooldowns[slot].app = s_answering_app;
+            s_cooldowns[slot].until_ms = until_ms;
+        }
+    }
+    unlock();
+}
+
 static const poller_net_host_t NET_HOST = {
     .deliver = hand_over,
+    .retry_after = remember_retry_after,
 };
 
 /* ---- the applications, by id ---- */
@@ -604,9 +654,23 @@ static bool run_wanted_poll(void)
     bool is_round = turn.is_continuation;
     bool is_installed = has_turn && name_of(app, name);
     uint32_t network_generation = s_network_generation;
+    int64_t cooldown_ms = is_installed ? cooldown_left_ms((uint32_t)app) : 0;
+    bool deferred = cooldown_ms > 0 &&
+                    deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, cooldown_ms);
+    if (deferred) {
+        poll_schedule_answered(&s_schedule, app, poll);
+        poll_schedule_due_soon(&s_schedule, app, poll);
+        poll_rounds_answered(&s_rounds, &turn, 0);
+    }
     unlock();
     if (!has_turn) {
         return false;
+    }
+    if (cooldown_ms > 0) {
+        if (!deferred) {
+            schedule_recheck(cooldown_ms);
+        }
+        return deferred;
     }
     if (is_round && !is_installed) {
         poll_rounds_answered(&s_rounds, &turn, 0); /* removed meanwhile, its round with it */
@@ -649,24 +713,26 @@ static bool run_wanted_poll(void)
             poller_net_poll_not_made(name, poll, why_not);
         }
     }
-    /* A broken connection ends the list round. Retrying each remaining item
-     * while offline would only deliver the same failure repeatedly. */
-    if (network_failed) {
+    /* A failed connection or throttled response ends the list round.
+     * A later poll starts with the first item of the current list. */
+    lock();
+    cooldown_ms = cooldown_left_ms((uint32_t)app);
+    if (network_failed || cooldown_ms > 0) {
         items = 0;
     }
     /* More items to ask: the round goes on, between whatever else waits. */
     if (!poll_rounds_answered(&s_rounds, &turn, items)) {
+        unlock();
         return true;
     }
     /* By id: if the application is gone meanwhile, so is its poll. */
-    lock();
     if (network_failed) {
         poll_schedule_network_failed(&s_schedule, app, poll);
         if (network_generation != s_network_generation && wifi_is_online()) {
             poll_schedule_network_is_back(&s_schedule);
         }
     }
-    uint32_t pace_ms = poll_schedule_pace_ms(&s_schedule, app, poll);
+    int64_t pace_ms = poll_schedule_pace_ms(&s_schedule, app, poll);
     /* A poll_run() its answer made and that was put off has its deadline already. */
     bool is_due_soon = poll_schedule_is_due_soon(&s_schedule, app, poll);
     if (s_abandoned.is_one && s_abandoned.app == app && s_abandoned.poll == poll) {
@@ -681,7 +747,8 @@ static bool run_wanted_poll(void)
     }
     /* Under the lock, so that a poll_run() put off meanwhile is not overwritten. */
     if (pace_ms > 0 && !is_due_soon) {
-        deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, pace_ms);
+        deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll,
+                         pace_ms > cooldown_ms ? pace_ms : cooldown_ms);
     }
     unlock();
     return true;
@@ -756,6 +823,16 @@ static int schedule_installed(void)
     for (int i = 0; i < s_known_count; i++) {
         apps[i] = (int)s_known[i].id;
         owners[i] = s_known[i].id;
+    }
+    for (int i = 0; i < LAUNCHER_INSTALLED_MAX; i++) {
+        bool installed = false;
+        for (int j = 0; j < s_known_count; j++) {
+            installed = installed || s_cooldowns[i].app == owners[j];
+        }
+        if (!installed) {
+            s_cooldowns[i].app = NO_APP;
+            s_cooldowns[i].until_ms = 0;
+        }
     }
     poll_schedule_keep_only(&s_schedule, apps, s_known_count);
     deadlines_keep_only(DEADLINE_POLL, owners, s_known_count);

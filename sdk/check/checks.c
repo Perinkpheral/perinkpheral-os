@@ -472,13 +472,18 @@ static void ask_again(void)
 
 /* Every poll of the manifest, an item of its list at a time, then the requests the application
  * made, each sent to the address it was queued with, authorized again and its headers filled. */
-static void answer_round(const round_t *round)
+static void answer_manifest_polls(const round_t *round)
 {
     standin_t *host = standin();
     for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
         int32_t items = standin_poll_items(poll);
         bool is_empty = standin_poll_list_is_empty(poll);
         for (int32_t index = 0; index < (items < 0 || is_empty ? 1 : items); index++) {
+            /* The firmware ends this list round and defers sibling polls
+             * during a server cooldown, including polls wanted by settings. */
+            if (host->monitor_backoff && host->uptime_ms < host->retry_until_ms) {
+                return;
+            }
             delivery_t answer = { .alarm = -1, .request = poll, .item = items < 0 || is_empty ? -1 : standin_poll_item(poll, index),
                                   .is_picked = standin_subject.polls[poll].picks != NULL, .is_permitted = true,
                                   .is_head = standin_subject.polls[poll].method == HOST_HTTP_HEAD, .round = round };
@@ -487,6 +492,12 @@ static void answer_round(const round_t *round)
             hand(&answer);
         }
     }
+}
+
+static void answer_round(const round_t *round)
+{
+    standin_t *host = standin();
+    answer_manifest_polls(round);
     for (int32_t answered = 0; host->request_count > 0 && answered < REQUESTS_A_ROUND && !has_away_failed;
          answered++) {
         standin_request_t request = host->requests[0];
@@ -1731,6 +1742,7 @@ static void during_backoff(void *context)
     standin_intent(HOST_INTENT_NETWORK_UP);
     standin_intent(HOST_INTENT_TIME_CHANGED);
     standin_settings();
+    answer_manifest_polls(&(round_t){ ROUND_HTTP, 429, 0 });
     standin_press(BTN_OK);
     for (int32_t step = 0; step < backoff_seconds - 1; step++) {
         standin_pass(1000);

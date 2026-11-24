@@ -14,6 +14,9 @@ static esp_err_t open_error, tls_failure;
 static int delivered_status;
 static bool delivered_only_on_screen;
 static const char *manifest_json;
+static esp_http_client_config_t active_client;
+static char *retry_header;
+static int cooldown_seconds, cooldown_calls;
 
 SemaphoreHandle_t xSemaphoreCreateMutex(void) { return &mutex_taken; }
 int xSemaphoreTake(SemaphoreHandle_t lock, unsigned wait) { (void)wait; CHECK(!*lock); *lock = true; return pdTRUE; }
@@ -26,11 +29,23 @@ int test_shutdown(int socket, int how) { (void)socket; (void)how; CHECK(false); 
 const char *esp_err_to_name(esp_err_t error) { (void)error; return "test error"; }
 esp_err_t esp_crt_bundle_attach(void *config) { (void)config; return ESP_OK; }
 esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config) {
-    CHECK_STR(config->url, "https://example.test/file"); return &response_status;
+    CHECK_STR(config->url, "https://example.test/file");
+    active_client = *config;
+    return &response_status;
 }
 esp_err_t esp_http_client_open(esp_http_client_handle_t client, int length) { (void)client; CHECK(length == 0); return fail_open ? open_error : ESP_OK; }
 int esp_http_client_get_socket(esp_http_client_handle_t client) { (void)client; return -1; }
-int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client) { (void)client; return header_failure != 0 ? header_failure : (int64_t)body_bytes; }
+int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client)
+{
+    (void)client;
+    if (header_failure != 0) return header_failure;
+    if (retry_header != NULL) {
+        esp_http_client_event_t event = { .event_id = HTTP_EVENT_ON_HEADER,
+            .user_data = active_client.user_data, .header_key = "Retry-After", .header_value = retry_header };
+        CHECK(active_client.event_handler(&event) == ESP_OK);
+    }
+    return (int64_t)body_bytes;
+}
 int esp_http_client_get_status_code(esp_http_client_handle_t client) { (void)client; return response_status; }
 int esp_http_client_read(esp_http_client_handle_t client, char *bytes, int capacity) {
     (void)client; read_calls++;
@@ -83,6 +98,8 @@ static void reset(void)
     tls_failure = ESP_OK;
     delivered_status = 0;
     manifest_json = NULL;
+    retry_header = NULL;
+    cooldown_seconds = cooldown_calls = 0;
     response_status = 200;
     body_bytes = HOST_DATA_CHUNK_MAX + 17;
     received = 0;
@@ -104,6 +121,13 @@ static void deliver(const char *name, const app_delivery_t *answer)
     (void)name;
     delivered_status = answer->http_status;
     delivered_only_on_screen = answer->only_on_screen;
+}
+
+static void record_retry_after(int seconds)
+{
+    CHECK(read_calls == 0);
+    cooldown_seconds = seconds;
+    cooldown_calls++;
 }
 
 static bool poll_failure(bool picked)
@@ -197,12 +221,34 @@ static void test_poll_transport_failures(void)
     CHECK(delivered_only_on_screen && delivered_status == HOST_FAILED_NO_NETWORK);
 }
 
+static void test_retry_after(void)
+{
+    reset();
+    response_status = 503;
+    retry_header = "300";
+    CHECK(!poll_failure(false));
+    CHECK(cooldown_calls == 1 && cooldown_seconds == 300);
+
+    reset();
+    response_status = 429;
+    retry_header = "invalid";
+    read_failure = -1;
+    CHECK(!poll_failure(false));
+    CHECK(cooldown_calls == 1 && cooldown_seconds == 60);
+
+    reset();
+    response_status = 503;
+    CHECK(!poll_failure(true));
+    CHECK(cooldown_calls == 0);
+}
+
 int main(void)
 {
-    const poller_net_host_t host = { .deliver = deliver };
+    const poller_net_host_t host = { .deliver = deliver, .retry_after = record_retry_after };
     poller_net_start(&host);
     test_poll_memory_failures();
     test_poll_transport_failures();
+    test_retry_after();
     int status;
     reset(); CHECK(fetch(4096, &status)); CHECK(status == 200 && received == HOST_DATA_CHUNK_MAX + 17);
     reset(); read_failure = -1;
