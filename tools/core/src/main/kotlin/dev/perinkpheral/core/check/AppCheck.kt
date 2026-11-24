@@ -11,6 +11,8 @@ import dev.perinkpheral.core.build.Wasm
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.ZoneId
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -21,7 +23,7 @@ import java.util.concurrent.TimeUnit
  *
  * Every application's C is compiled for this computer, with the sanitizers, against the
  * SDK's stand-in host (`sdk/check/standin.c`) and run by the capability checks
- * (`sdk/check/checks.c`): sessions, store, timers, network, drawing. Which of them apply to
+ * (`sdk/check/checks.c`): sessions, store, timers, network, drawing, notices, clock. Which apply to
  * an application is read off its module's imports and exports and its manifest. Nothing
  * here or there knows an application by name.
  *
@@ -219,6 +221,8 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
         }
     }
 
+    private data class ClockProbe(val now: Long, val event: Long, val presses: String, val local: LocalDateTime?)
+
     /** The application as the stand-in host is told of it: a C file made of its manifest and
      * of what is kept beside it. */
     private inner class Subject(private val built: Built, checkFile: File, private val scratch: File) {
@@ -290,7 +294,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 appendLine("};")
             }
             val exceptions = kept["exceptions"]?.let { it as? Map<*, *> ?: throw BuildError("exceptions must be an object") }.orEmpty()
-            val exceptionNames = setOf("store.button", "store.response", "timers.refusal", "notices.retry", "notices.receipt", "network.recovery") +
+            val exceptionNames = setOf("store.button", "store.response", "timers.refusal", "notices.retry", "notices.receipt", "network.recovery", "network.backoff") +
                 listOf("truncated", "wrong-types", "empty-lists", "nulls", "missing-record", "long-values", "numeric-overflow", "picked-null", "numeric-tokens").map { "responses.$it" }
             exceptions.forEach { (key, reason) ->
                 if (key !in exceptionNames || reason !is String || reason.isBlank()) throw BuildError("unknown exception or empty reason: $key")
@@ -332,15 +336,20 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             val probeValues = kept["clock_probes"]?.let { it as? List<*> ?: throw BuildError("clock_probes must be an array") }.orEmpty().map { probe ->
                 val fields = probe as? Map<*, *> ?: throw BuildError("clock_probes entries must be objects")
                 val now = fields["now"] as? Long ?: throw BuildError("clock probe needs now")
-                val event = fields["event"] as? Long ?: throw BuildError("clock probe needs event")
+                val local = fields["local"]?.let { value ->
+                    if (value !is String) throw BuildError("clock probe local must be an ISO local date/time")
+                    runCatching { LocalDateTime.parse(value) }.getOrElse { throw BuildError("invalid clock probe local: $value") }
+                }
+                if ((local != null) == (fields["event"] != null)) throw BuildError("clock probe needs exactly one of event or local")
+                val event = local?.toEpochSecond(ZoneOffset.UTC) ?: (fields["event"] as? Long ?: throw BuildError("clock probe needs event"))
                 val range = sdk.contract.number("HOST_TIME_MIN")..sdk.contract.number("HOST_TIME_MAX")
                 if ((now != 0L && now !in range) || event !in range) throw BuildError("clock probe time outside HOST_TIME_MIN..HOST_TIME_MAX")
                 val presses = fields["presses"] as? String ?: ""
                 if (presses.any { it !in "UODBuodb" }) throw BuildError("clock probe presses use UODBuodb")
-                Triple(now, event, presses)
+                ClockProbe(now, event, presses, local)
             }
-            val zoneFrom = Instant.ofEpochSecond(minOf(from.epochSecond, probeValues.minOfOrNull { minOf(it.first, it.second) } ?: from.epochSecond))
-            val zoneUntil = Instant.ofEpochSecond(maxOf(until.epochSecond, (probeValues.maxOfOrNull { maxOf(it.first, it.second) } ?: 0) + SECONDS_A_YEAR))
+            val zoneFrom = Instant.ofEpochSecond(minOf(from.epochSecond, probeValues.minOfOrNull { minOf(it.now, it.event) } ?: from.epochSecond))
+            val zoneUntil = Instant.ofEpochSecond(maxOf(until.epochSecond, (probeValues.maxOfOrNull { maxOf(it.now, it.event) } ?: 0) + SECONDS_A_YEAR))
             val profiles = zoneNames.map { name ->
                 val profileRules = ZoneId.of(name).rules
                 val transitions = generateSequence(profileRules.nextTransition(zoneFrom)) { profileRules.nextTransition(it.instant) }
@@ -359,7 +368,11 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             appendLine("};")
             if (probeValues.isNotEmpty()) {
                 appendLine("static const standin_clock_probe_t CLOCK_PROBES[] = {")
-                probeValues.forEach { (now, event, presses) -> appendLine("    { $now" + "LL, $event" + "LL, ${text(presses)} },") }
+                probeValues.forEach { (now, event, presses, local) ->
+                    val parts = if (local == null) "{ 0 }" else "{ .year = ${local.year}, .month = ${local.monthValue}, .day = ${local.dayOfMonth}, " +
+                        ".hour = ${local.hour}, .minute = ${local.minute}, .second = ${local.second} }"
+                    appendLine("    { $now" + "LL, $event" + "LL, ${text(presses)}, $parts },")
+                }
                 appendLine("};")
             }
             val arena = arenaBytes(built.memoryEnd)

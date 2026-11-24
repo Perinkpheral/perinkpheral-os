@@ -48,12 +48,15 @@ prove every possible input or button sequence. A coverage note identifies missin
 | `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |
 
 `headers` in a mock is an object of response headers. `answer_header()` exposes them
-case-insensitively. Injected 429s additionally expose `retry_after` in `answer_info()`.
+case-insensitively. Numeric Retry-After headers, including injected 429s, also expose `retry_after` in `answer_info()`.
 The stand-in observes early requests instead of refusing them, so an ignored deadline fails.
 Host-scheduled polling and real HTTP pacing remain simulator concerns.
 
 `clock_probes` is an array of `{ "now": <epoch>, "event": <epoch>, "presses": "O" }`.
-The fixtures must make the named event visible after those presses (`UODB` short,
+Exactly one of `event` or `local` is required. For floating calendar times, use
+`{ "now": <epoch>, "local": "2027-03-29T12:00:00", "presses": "O" }`: its date
+is converted with `time_from_local()` independently in each zone before checking the
+rendered HH:MM. The fixtures must make the named event visible after those presses (`UODB` short,
 `uodb` long). Every probe runs in each of the four zones. Its expected HH:MM comes
 from that zone's rules at **event**, not at **now**. This declaration identifies data,
 not an application: no provider, app name or parser format is built into the checker.
@@ -69,6 +72,8 @@ A log line is not a visible error.
 - `store.button`: changes in this view deliberately do not survive an unload.
 - `timers.refusal`: this schedule has another recovery policy.
 - `notices.retry`, `notices.receipt`: a different declared delivery policy.
+- `network.backoff`: independently paced services need a different request-scope policy.
+  The default scenario observes the application as one budget; keep per-service tests beside it.
 - `network.recovery`: backoff legitimately postpones the old immediate-recovery
   picture assertions; sanitizer, drawing and other network checks still run.
 - `responses.truncated`, `responses.wrong-types`, `responses.empty-lists`,

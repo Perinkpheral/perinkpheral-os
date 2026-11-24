@@ -1673,6 +1673,9 @@ static void during_backoff(void *context)
 
 static void check_backoff(void)
 {
+    if (excepted("network.backoff")) {
+        return;
+    }
     static const int32_t DELAYS[] = { 120, 300 };
     for (size_t delay = 0; delay < sizeof DELAYS / sizeof DELAYS[0]; delay++) {
         backoff_seconds = DELAYS[delay];
@@ -1779,7 +1782,15 @@ static void check_clock_boundaries(void)
             scene_t scene = { .has_data = has_polls_or_requests, .presses = probe->presses };
             if (play(&scene)) {
                 host_local_time_t local;
-                time_local_at(probe->event, &local);
+                int64_t event = probe->event;
+                if (probe->local.year != 0 && time_from_local(&probe->local, &event) != HOST_OK) {
+                    problem(CLOCK, "clock floating event outside the API range in %s", rules->name);
+                    continue;
+                }
+                if (time_local_at(event, &local) != HOST_OK) {
+                    problem(CLOCK, "clock event outside the API range in %s", rules->name);
+                    continue;
+                }
                 char expected[16];
                 snprintf(expected, sizeof expected, "%02d:%02d", local.hour, local.minute);
                 expect(CLOCK, strstr(standin()->draw_text, expected) != NULL,

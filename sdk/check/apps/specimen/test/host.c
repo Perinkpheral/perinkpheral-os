@@ -276,7 +276,7 @@ static void test_drawing(void)
     standin_handlers.on_draw = app_on_draw;
     page = 0;
     uint64_t first_page = standin_draw();
-    assert(standin()->draw_calls == 4 && standin_draw() == first_page);
+    assert(standin()->draw_calls == 5 && standin_draw() == first_page);
     page = 1;
     assert(standin_draw() != first_page && standin()->refused_draws == 0);
     standin()->is_drawing = true;
@@ -347,6 +347,10 @@ static void test_refusals_and_metadata(void)
     assert(answer_header("Retry-After", 11, 0, header, 2) == HOST_ERR_NO_SPACE);
     host_answer_info_t info;
     assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 120);
+    standin()->retry_after = 0;
+    assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 120);
+    snprintf(standin()->response_headers, sizeof standin()->response_headers, "Retry-After: Wed, 25 Nov 2026 12:00:00 GMT");
+    assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 0);
     standin()->is_delivering = false;
     assert(answer_header("retry-after", 11, 0, header, sizeof header) == HOST_ERR_NOT_FOUND);
 

@@ -47,8 +47,8 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
                                               N scenarios at a time (one a processor unless said), 1 for one by one
     perinkpheral app-check <folder> [--only <capability>] [--app <name>]
                                               applications against the contract on this computer, with the
-                                              sanitizers: sessions, store, timers, network, drawing, and each
-                                              application's own tests (logic), from its test folder
+                                              sanitizers: sessions, store, timers, network, drawing, notices, clock,
+                                              and each application's own tests (logic), from its test folder
 
   What the project makes of its sources:
     perinkpheral check-generated [--source <geojson>]

@@ -246,6 +246,13 @@ void app_on_draw(void)
     char future_text[6] = { (char)('0' + future.hour / 10), (char)('0' + future.hour % 10), ':',
                            (char)('0' + future.minute / 10), (char)('0' + future.minute % 10), '\0' };
     gfx_draw_text(MARGIN, 220, HOST_FONT_SMALL, future_text, 5);
+    host_local_time_t floating = { .year = 2027, .month = 3, .day = 29, .hour = 12 };
+    int64_t floating_at = 0;
+    time_from_local(&floating, &floating_at);
+    time_local_at(floating_at, &floating);
+    char floating_text[6] = { (char)('0' + floating.hour / 10), (char)('0' + floating.hour % 10), ':',
+                             (char)('0' + floating.minute / 10), (char)('0' + floating.minute % 10), '\0' };
+    gfx_draw_text(MARGIN, 240, HOST_FONT_SMALL, floating_text, 5);
     if (page == 0) {
         gfx_draw_text(MARGIN, MARGIN, HOST_FONT_TEXT, value, length_of(value));
         gfx_draw_text(MARGIN, 160, HOST_FONT_SMALL, row_name, length_of(row_name));

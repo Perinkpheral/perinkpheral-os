@@ -93,6 +93,7 @@ typedef struct {
 typedef struct {
     int64_t now, event;
     const char *presses;
+    host_local_time_t local; /* year != 0: floating calendar time instead of an absolute instant */
 } standin_clock_probe_t;
 
 typedef struct {

@@ -110,7 +110,7 @@ temporary files and simulated endpoints, not a device or live GitHub writes.
 
 Applications against the contract, on this computer: `tools/perinkpheral app-check <folder>`
 builds every application of the folder, then runs the capability checks (sessions, store,
-timers, network, drawing) and each application's own tests (`<application>/test/*.c`) on
+timers, network, drawing, notices, clock) and each application's own tests (`<application>/test/*.c`) on
 non-system applications, compiled with the sanitizers against the stand-in host of `sdk/check`. Applications with `"system": true` skip
 both capability checks and their own tests. It needs a C compiler and wasi-sdk.
 `--only <capability>` and `--app <name>` narrow it. The checks know no application: what one

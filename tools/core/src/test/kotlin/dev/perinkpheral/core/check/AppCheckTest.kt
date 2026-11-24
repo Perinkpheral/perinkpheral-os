@@ -20,6 +20,9 @@ object AppCheckTest {
                         val manifestEdits: List<Pair<String, String>> = emptyList(), val checkPatch: Map<String, Any?> = emptyMap())
 
     private val BREAKS = listOf(
+        Break("clock", "a floating future date uses today's offset",
+            listOf("    time_from_local(&floating, &floating_at);" to
+                "    floating_at = 1806321600LL - time_zone_offset();"), "clock event"),
         Break("store", "an unsaved answer silently reverts immediately on unload",
             listOf("        gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, \"Storage error.\", 14);" to ""), "response-save:"),
         Break("network", "a streamed protocol parses an unbounded integer",
@@ -261,6 +264,9 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("network", "an explicit alternative backoff policy",
+            listOf("    if (time_now() < retry_until) {\n        return;\n    }" to ""), "",
+            checkPatch = mapOf("exceptions" to mapOf("network.backoff" to "This policy variant leaves request pacing to its service-specific tests."))),
         Break("timers", "a declared custom visible schedule error",
             listOf("\"Schedule error.\", 15" to "\"Schedule unavailable.\", 21"), "",
             checkPatch = mapOf("failure_text" to listOf("Schedule unavailable."))),
@@ -355,7 +361,9 @@ object AppCheckTest {
                 "{\"exceptions\":{\"unknown\":\"reason\"}}",
                 "{\"exceptions\":false}",
                 "{\"failure_text\":[\"\"]}",
-                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}"
+                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}",
+                "{\"clock_probes\":[{\"now\":1795262400,\"local\":\"bad date\"}]}",
+                "{\"clock_probes\":[{\"now\":1795262400,\"event\":1806321600,\"local\":\"2027-03-29T12:00:00\"}]}"
             )
             invalidDeclarations.forEachIndexed { index, declaration ->
                 val copy = File(scratch, "declaration-$index/specimen")
@@ -409,8 +417,8 @@ object AppCheckTest {
                 val report = checker.run(copied(BREAKS.size + number, fine).parentFile, only = fine.capability)
                 val line = report.lines.single()
                 check(line.state == AppCheck.State.OK) { "${fine.what}: ${line.details.joinToString("\n")}" }
-                if (fine.checkPatch.containsKey("exceptions")) {
-                    check(line.details.any { "exception responses.empty-lists" in it }) { "exception was not reported" }
+                (fine.checkPatch["exceptions"] as? Map<*, *>).orEmpty().keys.forEach { exception ->
+                    check(line.details.any { "exception $exception" in it }) { "exception $exception was not reported" }
                 }
             }
         } finally {

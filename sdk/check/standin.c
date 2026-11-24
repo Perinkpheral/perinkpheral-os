@@ -1118,6 +1118,15 @@ int32_t answer_info(host_answer_info_t *response, int32_t capacity)
     }
     /* Retry-After is available in metadata as well as the raw mocked headers. */
     host_answer_info_t info = { .status = answer_status, .length = -1, .retry_after = world->retry_after };
+    if (info.retry_after == 0) {
+        char header[64];
+        int32_t header_length = answer_header("Retry-After", 11, 0, header, sizeof header - 1);
+        if (header_length > 0) {
+            header[header_length] = '\0';
+            long seconds = strtol(header, NULL, 10);
+            info.retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
+        }
+    }
     int32_t length = capacity < (int32_t)sizeof info ? capacity : (int32_t)sizeof info;
     copy(response, &info, (size_t)length);
     return length;
