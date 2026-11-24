@@ -4675,3 +4675,9 @@ To receive a complete recognized response, declare <code>app_on_document()</code
 
 The <a href="https://github.com/Perinkpheral/perinkpheral-os/tree/main/docs/examples/poll-formats">runnable example</a> includes two simulator scenarios. The first GET takes either a JSON or an XML document from its MIME type. The XML POST is a read-only search whose explicit format overrides the fixture’s text/plain response. The Jellyfin-style JSON GET uses the existing picker. The unknown MIME type arrives as bytes.
 <a href="https://github.com/Perinkpheral/perinkpheral-os/tree/main/docs/examples/poll-formats">Рабочий пример</a> включает два сценария симулятора. Первый GET принимает документ JSON или XML согласно MIME-типу. POST выполняет поиск без изменения данных, а явно заданный XML переопределяет text/plain тестового ответа. GET в стиле Jellyfin использует существующий разбор пути JSON. Ответ неизвестного MIME-типа приходит как байты.
+
+Leave the registered buffer untouched while a response is in progress. The host refuses another registration until the answer completes.
+Не меняйте содержимое зарегистрированного буфера во время приёма ответа. До завершения ответа прошивка отклоняет повторную регистрацию.
+
+Complete JSON documents must be valid UTF-8 and have at most 64 nesting levels. Complete XML documents use the attribute-only subset below and allow at most 64 attributes per element. Duplicate attributes and unknown entities cause validation to fail, even in fields the application does not query.
+Целый документ JSON должен быть корректным UTF-8 и иметь не более 64 уровней вложенности. Для целых документов XML действует описанное ниже подмножество с атрибутами и не более 64 атрибутов на элемент. Повторяющиеся атрибуты и неизвестные сущности приводят к ошибке проверки, даже если приложение не читает эти поля.
