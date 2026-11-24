@@ -4,6 +4,7 @@
  *
  * Data: answers, the store, files, requests, polls and alarms.
  */
+#include "xml_query.h"
 #include "app_internal.h"
 #include "answer_headers.h"
 
@@ -410,4 +411,42 @@ HOST_FUNCTION(file_write)
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     m3ApiReturn(app->services->file_write(app->name, name, offset, bytes, length));
+}
+
+
+HOST_FUNCTION(xml_child)
+{
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(uint32_t, document);
+    m3ApiGetArg(int32_t, length);
+    m3ApiGetArg(int32_t, parent);
+    m3ApiGetArg(uint32_t, key);
+    m3ApiGetArg(int32_t, key_length);
+    m3ApiGetArg(int32_t, from);
+    const char *text = (const char *)app_memory_at(runtime, _mem, document, length);
+    const char *name = (const char *)app_memory_at(runtime, _mem, key, key_length);
+    if (!text || (key_length && !name)) {
+        m3ApiReturn(-2);
+    }
+    m3ApiReturn(xml_query_child(text, length, parent, name, key_length, from));
+}
+
+HOST_FUNCTION(xml_attr)
+{
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(uint32_t, document);
+    m3ApiGetArg(int32_t, length);
+    m3ApiGetArg(int32_t, node);
+    m3ApiGetArg(uint32_t, key);
+    m3ApiGetArg(int32_t, key_length);
+    m3ApiGetArg(uint32_t, output);
+    m3ApiGetArg(int32_t, capacity);
+    m3ApiGetArg(int32_t, label);
+    const char *text = (const char *)app_memory_at(runtime, _mem, document, length);
+    const char *name = (const char *)app_memory_at(runtime, _mem, key, key_length);
+    char *out = (char *)app_memory_to_fill(runtime, _mem, output, capacity);
+    if (!text || !name || !out) {
+        m3ApiReturn(-1);
+    }
+    m3ApiReturn(xml_query_attr(text, length, node, name, key_length, out, capacity, label));
 }

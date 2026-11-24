@@ -14,7 +14,7 @@
     "https://example.test/stream": {
       "method": "POST",
       "request_body": "current",
-      "body": "ok"
+      "body": "<reply state='ok'/>"
     },
     "https://example.test/head": {
       "method": "HEAD",

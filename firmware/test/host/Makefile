@@ -34,13 +34,13 @@ GFX_DEPS := $(GFX_SRCS) $(wildcard $(GFX)/include/*.h $(GFX)/*.h $(GFX)/fonts/*.
 MAP      := $(COMP)/map
 MAP_SRCS := $(MAP)/map_geo.c $(MAP)/map_land.c $(MAP)/map_land_data.c $(MAP)/map_draw.c
 MAP_DEPS := $(MAP_SRCS) $(wildcard $(MAP)/include/*.h)
-APP_SRCS := $(APPSYS)/answer_headers.c $(APPSYS)/app.c $(APPSYS)/app_api_draw.c $(APPSYS)/app_api_map.c $(APPSYS)/app_api_ui.c $(APPSYS)/app_api_data.c \
+APP_SRCS := $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/app.c $(APPSYS)/app_api_draw.c $(APPSYS)/app_api_map.c $(APPSYS)/app_api_ui.c $(APPSYS)/app_api_data.c \
             $(APPSYS)/app_api_time.c $(APPSYS)/app_api_sys.c $(MAP_SRCS)
 QR      := $(COMP)/qr
 QR_SRCS := $(QR)/qrcodegen/qrcodegen.c $(QR)/wifi_qr.c
 QR_INCS := -I$(QR)/include -I$(QR)/qrcodegen
 TESTS   := test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
-TESTS   += test_answer_headers test_web_settings_json test_web_app_settings
+TESTS   += test_xml_query test_answer_headers test_web_settings_json test_web_app_settings
 TESTS   += test_map test_map_land
 
 
@@ -59,6 +59,9 @@ test_web_app_settings: test_web_app_settings.c tinytest.h $(MAIN)/web_app_settin
 
 test_web_settings_json: test_web_settings_json.c tinytest.h $(MAIN)/web_settings_json.c $(MAIN)/web_settings_json.h $(APPCONF)/appconf.c $(APPSTORE)/json_tree.c $(APPSTORE)/catalog.c $(APPSTORE)/include/catalog.h
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(APPCONF)/include -o $@ test_web_settings_json.c $(APPCONF)/appconf.c $(APPSTORE)/catalog.c
+
+test_xml_query: test_xml_query.c tinytest.h $(APPSYS)/xml_query.c $(APPSYS)/include/xml_query.h
+	$(CC) $(CFLAGS) -I$(APPSYS)/include -o $@ test_xml_query.c $(APPSYS)/xml_query.c
 
 test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c $(APPSYS)/include/answer_headers.h
 	$(CC) $(CFLAGS) -I$(APPSYS)/include -I$(SDK) -o $@ test_answer_headers.c $(APPSYS)/answer_headers.c

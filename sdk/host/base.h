@@ -65,11 +65,11 @@
  *
  * Buffers use byte lengths, without an implicit terminator. Imports that
  * return error codes reject negative lengths, negative capacities and ranges
- * outside module memory with HOST_ERR_ARGUMENT. log_write() returns no
+ * outside module memory with HOST_ERR_ARGUMENT unless they document their own result codes. log_write() returns no
  * status and ignores an invalid input range.
- * Zero capacity is accepted for buffer reads except time_text(); the
+ * Zero capacity is accepted for buffer reads except time_text() and xml_attr(); the
  * destination must still be a valid memory offset. Successful text reads
- * never append NUL, except the fixed string fields of host_answer_info_t.
+ * never append NUL, except xml_attr() and the fixed string fields of host_answer_info_t.
  * Unless a call says it truncates, insufficient capacity returns
  * HOST_ERR_NO_SPACE and copies nothing. Read/format/measurement errors
  * leave outputs untouched, except file_read(): a storage error can follow

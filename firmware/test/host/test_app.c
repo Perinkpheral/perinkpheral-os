@@ -354,6 +354,7 @@ static void test_scene_state(void)
     app_button(app, 15, BTN_PRESSED);
     draw(app);
     CHECK(gfx_get(&surface, 6, ROW_SCENE_STATE));
+    CHECK(gfx_get(&surface, 8, ROW_SCENE_STATE));
     CHECK(session.length == 0 && session.bytes == NULL);
     app_unload(app);
 }

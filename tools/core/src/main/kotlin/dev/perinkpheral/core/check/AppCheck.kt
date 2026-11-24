@@ -111,7 +111,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             return made
         }
         val shared = library.map(::compiled) + compiled(File(mapDir, "map_geo.c")) +
-            compiled(File(responseDir, "answer_headers.c"))
+            compiled(File(responseDir, "answer_headers.c")) + compiled(File(responseDir, "xml_query.c"))
         return Host(shared, compiled(File(checkDir, "standin.c")), compiled(File(checkDir, "checks.c")))
     }
 

@@ -456,6 +456,15 @@ void app_on_timer(int32_t id)
 
 void app_on_draw(void)
 {
+    static const char xml[] = "<r><item a='ok'/></r>";
+    char value[3];
+    if (xml_child(xml, sizeof xml - 1, 0, "item", 4, 0) == 1 &&
+        xml_attr(xml, sizeof xml - 1, 1, "a", 1, value, sizeof value, 0) == 1 &&
+        value[0] == 'o' && value[1] == 'k' && value[2] == 0 &&
+        xml_child((const char *)0xfffffff0u, 32, -1, 0, 0, 0) == -2 &&
+        xml_attr(xml, sizeof xml - 1, 1, "a", 1, (char *)0xfffffff0u, 32, 0) == -1) {
+        mark(8, ROW_SCENE_STATE);
+    }
     if (reads_empty) { mark(0, ROW_SCENE_STATE); }
     if (reads_scene) { mark(2, ROW_SCENE_STATE); }
     if (refuses_scene_write) { mark(4, ROW_SCENE_STATE); }

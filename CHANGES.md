@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.100
+
+- Applications can read elements and attributes from small XML documents using two native SDK calls.
+
 ## 0.1.99
 
 - Application requests drop their headers when a redirect moves from HTTPS to HTTP, including on the same host and after an earlier upgrade. HTTP-to-HTTPS upgrades on the same host continue to carry the original headers.

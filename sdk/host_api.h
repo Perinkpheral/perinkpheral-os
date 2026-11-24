@@ -41,3 +41,4 @@
 #include "host/store.h"
 #include "host/time.h"
 #include "host/sys.h"
+#include "host/xml.h"

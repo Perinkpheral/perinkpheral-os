@@ -5,6 +5,7 @@
  * The stand-in host: see standin.h. The calls are in the contract's order
  * of subjects; each refuses what the contract says the device refuses.
  */
+#include "xml_query.h"
 #include "standin.h"
 
 #include <signal.h>
@@ -3011,4 +3012,17 @@ bool standin_try(void (*run)(void *context), void *context)
     copy(world, before, sizeof *world);
     free(before);
     return is_whole;
+}
+
+
+int32_t xml_child(const char *doc, int32_t length, int32_t parent, const char *name,
+                  int32_t name_length, int32_t from)
+{
+    return xml_query_child(doc, length, parent, name, name_length, from);
+}
+
+int32_t xml_attr(const char *doc, int32_t length, int32_t node, const char *name,
+                 int32_t name_length, char *out, int32_t capacity, int32_t label)
+{
+    return xml_query_attr(doc, length, node, name, name_length, out, capacity, label);
 }

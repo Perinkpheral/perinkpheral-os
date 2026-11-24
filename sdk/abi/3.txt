@@ -193,6 +193,8 @@ constant HOST_SINCE_gfx_draw_map	"0.1.94"
 constant HOST_SINCE_gfx_draw_map_radius	"0.1.94"
 constant HOST_SINCE_gfx_map_point	"0.1.94"
 constant HOST_SINCE_screen_set_inverted	"0.1.54"
+constant HOST_SINCE_xml_attr	"0.1.100"
+constant HOST_SINCE_xml_child	"0.1.100"
 constant HOST_STATUS_TEXT_MAX	31
 constant HOST_TEXT_ARGUMENTS_MAX	4
 constant HOST_TEXT_MAX	127
@@ -654,6 +656,8 @@ import ui_list_visible	i(i) grant=none
 import ui_text_height	i(i) grant=none
 import ui_text_width	i(iii) grant=none
 import ui_value_width	i(iiiii) grant=none
+import xml_attr	i(iiiiiiii) grant=none
+import xml_child	i(iiiiii) grant=none
 macro BTN_ACTION_OF	(event) ((event) & 3)
 macro BTN_EVENT	(button, action) ((button) << 2 | (action))
 macro BTN_OF	(event) ((event) >> 2)
@@ -662,6 +666,8 @@ since gfx_draw_map	0.1.94
 since gfx_draw_map_radius	0.1.94
 since gfx_map_point	0.1.94
 since screen_set_inverted	0.1.54
+since xml_attr	0.1.100
+since xml_child	0.1.100
 struct host_answer_info_t align	4
 struct host_answer_info_t size	476
 struct host_cell_t align	4
