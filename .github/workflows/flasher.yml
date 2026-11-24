@@ -10,11 +10,6 @@ on:
   workflow_call:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -22,6 +17,10 @@ concurrency:
 jobs:
   site:
     runs-on: [self-hosted, perinkpheral]
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
     steps:
       - name: Every release
         env:
@@ -53,11 +52,26 @@ jobs:
           jq 'map(select(.builds.release != null or .builds.debug != null))' site/flash/index.json > index.json
           mv index.json site/flash/index.json
           echo "$(jq length site/flash/index.json) releases"
+      - name: Name the Pages artifact
+        id: artifact
+        run: echo "name=flasher-pages-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: ${{ steps.artifact.outputs.name }}
           path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+
+  deploy:
+    needs: site
+    runs-on: [self-hosted, perinkpheral]
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          # Retrying only deployment reuses the successful build's artifact name.
+          artifact_name: ${{ needs.site.outputs.artifact_name }}
