@@ -22,6 +22,12 @@ extern "C" {
 scene_t *app_scene_create(const app_manifest_t *manifest, const char *store_root,
                           const app_services_t *services);
 
+/* Launcher records remain immutable until their scenes have been destroyed.
+ * The manifest and services, and the mapped wasm or fallback store_root,
+ * must all outlive the scene. */
+scene_t *app_scene_borrow(const app_manifest_t *manifest, const char *store_root,
+                          const uint8_t *wasm, size_t wasm_size, const app_services_t *services);
+
 /* Unloads the application if it is loaded and frees the scene. Nobody may
  * hold the pointer after this. */
 void app_scene_destroy(scene_t *scene);

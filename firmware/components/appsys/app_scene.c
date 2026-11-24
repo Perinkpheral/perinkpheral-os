@@ -16,7 +16,7 @@
 
 typedef struct {
     scene_t               scene;
-    app_manifest_t        manifest;
+    const app_manifest_t *manifest;
     const char           *store_root;
     const app_services_t *services;
     const uint8_t        *in_place;   /* a module run where it lies - the firmware, the code partition - not copied */
@@ -84,7 +84,7 @@ static bool load(app_scene_t *self)
      * does not have. It is the firmware that is out of date, not the app. */
     const char *firmware = self->services != NULL && self->services->firmware_version != NULL
                                ? self->services->firmware_version() : NULL;
-    if (!app_manifest_runs_on(&self->manifest, firmware)) {
+    if (!app_manifest_runs_on(self->manifest, firmware)) {
         self->load_error = word(WORD_UPDATE_THE_FIRMWARE);
         return false;
     }
@@ -92,18 +92,18 @@ static bool load(app_scene_t *self)
     errno = 0;
     self->module = self->in_place != NULL ? self->in_place
                                           : app_store_read_module(self->store_root,
-                                                                  self->manifest.name, &module_size);
+                                                                  self->manifest->name, &module_size);
     if (self->module == NULL) {
         self->needs_memory = errno == ENOMEM;
         self->load_error = word(self->needs_memory ? WORD_OUT_OF_MEMORY : WORD_FILE_NOT_FOUND);
         return false;
     }
-    unsigned grants = (self->manifest.system ? APP_GRANT_SYSTEM : 0) |
-                      (self->manifest.writes_files ? APP_GRANT_FILES : 0);
-    switch (app_load(self->manifest.name, self->manifest.abi, self->module, module_size, grants, self->services,
+    unsigned grants = (self->manifest->system ? APP_GRANT_SYSTEM : 0) |
+                      (self->manifest->writes_files ? APP_GRANT_FILES : 0);
+    switch (app_load(self->manifest->name, self->manifest->abi, self->module, module_size, grants, self->services,
                      &self->app)) {
     case APP_OK:
-        app_response_policy(self->app,&self->manifest);
+        app_response_policy(self->app,self->manifest);
         self->instance++;
         return true;
     case APP_ERR_NO_MEMORY:
@@ -292,7 +292,7 @@ static void app_scene_draw(scene_t *scene, gfx_t *surface)
     app_scene_t *self = (app_scene_t *)scene;
     if (self->app == NULL) {
         scene->inverted = false;
-        draw_message(surface, self->manifest.title, word(WORD_CANNOT_START), self->load_error);
+        draw_message(surface, self->manifest->title, word(WORD_CANNOT_START), self->load_error);
         return;
     }
     if (!app_has_stopped(self->app)) {
@@ -310,7 +310,7 @@ static void app_scene_draw(scene_t *scene, gfx_t *surface)
         scene->inverted = false;
         /* Over whatever it managed to draw before it stopped. */
         gfx_clear(surface, false);
-        draw_message(surface, self->manifest.title, word(WORD_CRASHED), app_stop_reason(self->app));
+        draw_message(surface, self->manifest->title, word(WORD_CRASHED), app_stop_reason(self->app));
     }
 }
 
@@ -388,19 +388,45 @@ void app_scene_end_background(scene_t *scene)
     }
 }
 
+static scene_t *init_scene(app_scene_t *self, const app_manifest_t *manifest,
+                           const char *store_root, const uint8_t *wasm, size_t wasm_size,
+                           const app_services_t *services)
+{
+    self->scene.ops = &APP_SCENE_OPS;
+    self->scene.fullscreen = manifest->fullscreen;
+    self->manifest = manifest;
+    self->store_root = store_root;
+    self->services = services;
+    self->in_place = wasm;
+    self->in_place_size = wasm_size;
+    return &self->scene;
+}
+
+scene_t *app_scene_borrow(const app_manifest_t *manifest, const char *store_root,
+                          const uint8_t *wasm, size_t wasm_size, const app_services_t *services)
+{
+    app_scene_t *self = calloc(1, sizeof *self);
+    return self ? init_scene(self, manifest, store_root, wasm, wasm_size, services) : NULL;
+}
+
+static scene_t *create_owned(const app_manifest_t *manifest, const char *store_root,
+                             const uint8_t *wasm, size_t wasm_size, const app_services_t *services)
+{
+    struct {
+        app_scene_t scene;
+        app_manifest_t manifest;
+    } *owned = calloc(1, sizeof *owned);
+    if (!owned) {
+        return NULL;
+    }
+    owned->manifest = *manifest;
+    return init_scene(&owned->scene, &owned->manifest, store_root, wasm, wasm_size, services);
+}
+
 scene_t *app_scene_create(const app_manifest_t *manifest, const char *store_root,
                           const app_services_t *services)
 {
-    app_scene_t *self = calloc(1, sizeof *self);
-    if (self == NULL) {
-        return NULL;
-    }
-    self->scene.ops = &APP_SCENE_OPS;
-    self->scene.fullscreen = manifest->fullscreen;
-    self->manifest = *manifest;
-    self->store_root = store_root;
-    self->services = services;
-    return &self->scene;
+    return create_owned(manifest, store_root, NULL, 0, services);
 }
 
 void app_scene_destroy(scene_t *scene)
@@ -419,10 +445,5 @@ void app_scene_destroy(scene_t *scene)
 scene_t *app_scene_create_in_place(const app_manifest_t *manifest, const uint8_t *wasm,
                                    size_t wasm_size, const app_services_t *services)
 {
-    scene_t *scene = app_scene_create(manifest, NULL, services);
-    if (scene != NULL) {
-        ((app_scene_t *)scene)->in_place = wasm;
-        ((app_scene_t *)scene)->in_place_size = wasm_size;
-    }
-    return scene;
+    return create_owned(manifest, NULL, wasm, wasm_size, services);
 }

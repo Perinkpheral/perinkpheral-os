@@ -222,6 +222,31 @@ static void deliver_piece(size_t length, int flags, int64_t now_ms)
     app_deliver(&state, &wm, probe, &delivery, now_ms);
 }
 
+static void test_manifest_ownership(void)
+{
+    app_manifest_t manifest, temporary;
+    CHECK(app_store_list(root, &manifest, 1) == 1);
+    temporary = manifest;
+    size_t size;
+    uint8_t *module = app_store_read_module(root, manifest.name, &size);
+    CHECK(module != NULL);
+    scene_t *scenes[] = {
+        app_scene_create(&temporary, root, &SERVICES),
+        app_scene_create_in_place(&temporary, module, size, &SERVICES),
+        app_scene_borrow(&manifest, root, NULL, 0, &SERVICES),
+        app_scene_borrow(&manifest, NULL, module, size, &SERVICES),
+    };
+    memset(&temporary, 0, sizeof temporary);
+    for (size_t i = 0; i < sizeof scenes / sizeof scenes[0]; i++) {
+        CHECK(scenes[i] != NULL);
+        start_on(scenes[i]);
+        CHECK(app_scene_app(scenes[i]) != NULL);
+        wm_close(&wm, scenes[i]);
+        app_scene_destroy(scenes[i]);
+    }
+    free(module);
+}
+
 static void test_missing_application_area(void)
 {
     start_on(&menu.scene);
@@ -1047,6 +1072,7 @@ static void test_question_survives_background_delivery(void)
 int main(void)
 {
     install_probe();
+    test_manifest_ownership();
     test_missing_application_area();
     test_frozen_settings_translation();
     test_notification_consumption();

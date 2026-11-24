@@ -88,7 +88,7 @@ static scene_t *system_app_scene(app_manifest_t *manifest, const char *manifest_
             strlen(manifest->name) + 1);
     memcpy(manifest->name, SYSTEM_NAME_PREFIX, strlen(SYSTEM_NAME_PREFIX));
     take_translated_title(manifest);
-    return app_scene_create_in_place(manifest, wasm, wasm_size, app_host_services());
+    return app_scene_borrow(manifest, NULL, wasm, wasm_size, app_host_services());
 }
 
 /* What the host calls an application: a number made of its code and its
@@ -209,11 +209,10 @@ static void read_installed(void)
         s_installed[accepted] = s_installed[i];
         size_t size = 0;
         const uint8_t *code = app_code_find(STORAGE_APPS_ROOT, s_installed[accepted].name, &size);
-        s_app_scenes[accepted] = code != NULL
-                              ? app_scene_create_in_place(&s_installed[accepted], code, size,
-                                                          app_host_services())
-                              : app_scene_create(&s_installed[accepted], STORAGE_APPS_ROOT,
-                                                 app_host_services());
+        /* Compaction only writes subsequent slots. This entry stays put until
+         * launcher_reload drops and destroys its scene. */
+        s_app_scenes[accepted] = app_scene_borrow(&s_installed[accepted], STORAGE_APPS_ROOT,
+                                                  code, size, app_host_services());
         accepted++;
     }
     s_installed_count = accepted;

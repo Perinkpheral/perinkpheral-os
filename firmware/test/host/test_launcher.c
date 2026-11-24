@@ -52,30 +52,35 @@ const uint8_t *app_code_find(const char *root, const char *name, size_t *size)
     return NULL;
 }
 const app_services_t *app_host_services(void) { return NULL; }
-scene_t *app_scene_create(const app_manifest_t *manifest, const char *root,
-                           const app_services_t *services)
+static const app_manifest_t *borrowed[2];
+static app_manifest_t expected[2];
+scene_t *app_scene_borrow(const app_manifest_t *manifest, const char *root,
+                          const uint8_t *code, size_t size, const app_services_t *services)
 {
-    (void)root; (void)services;
+    (void)root; (void)code; (void)size; (void)services;
     CHECK(manifest->id != 0);
     CHECK(scenes_created < 2);
+    borrowed[scenes_created] = manifest;
+    expected[scenes_created] = *manifest;
     return &scenes[scenes_created++];
 }
-scene_t *app_scene_create_in_place(const app_manifest_t *manifest, const uint8_t *code,
-                                    size_t size, const app_services_t *services)
+void app_scene_destroy(scene_t *scene)
 {
-    (void)code; (void)size;
-    return app_scene_create(manifest, NULL, services);
+    size_t index = (size_t)(scene - scenes);
+    CHECK(borrowed[index] == &s_installed[index]);
+    CHECK(!memcmp(borrowed[index], &expected[index], sizeof expected[index]));
+    scenes_destroyed++;
 }
-void app_scene_destroy(scene_t *scene) { (void)scene; scenes_destroyed++; }
 static void drop_scene(scene_t *scene, void *context)
 {
     (void)scene; (void)context;
     scenes_dropped++;
 }
+static const char *language = "en";
 void settings_read(appconf_t *copy)
 {
     memset(copy, 0, sizeof *copy);
-    strcpy(copy->language, "en");
+    strcpy(copy->language, language);
 }
 void settings_load_menu_order(char *order, size_t size) { (void)size; order[0] = '\0'; }
 esp_err_t settings_save_menu_order(const char *order) { (void)order; return ESP_OK; }
@@ -117,10 +122,21 @@ int main(void)
     CHECK(launcher_incoming_id_is_unique("alpha", ALPHA));
     CHECK(!launcher_incoming_id_is_unique("missing", ALPHA));
 
+    /* A language reload reorders the slots, and a replaced module gets a new ID. */
+    uint32_t old_id = launcher_find("alpha")->id;
+    write_file("alpha", "manifest.ru", "{\"title\":\"Zulu\"}");
+    write_file("alpha", "app.wasm", "replacement");
+    language = "ru";
+    scenes_created = 0;
+    launcher_reload(drop_scene, NULL);
+    CHECK(s_installed_count == 2 && scenes_created == 2);
+    CHECK(!strcmp(borrowed[0]->name, "beta") && !strcmp(borrowed[1]->title, "Zulu"));
+    CHECK(borrowed[1] == launcher_find("alpha") && borrowed[1]->id != old_id);
+
     collide = true;
     launcher_reload(drop_scene, NULL);
     CHECK(s_installed_count == 0 && scenes_created == 2);
-    CHECK(scenes_destroyed == 2 && scenes_dropped == 2);
+    CHECK(scenes_destroyed == 4 && scenes_dropped == 4);
     CHECK(launcher_find_id(7) == NULL);
     CHECK(launcher_app_scene("alpha") == NULL && launcher_app_scene("beta") == NULL);
     CHECK(!launcher_incoming_id_is_unique("alpha", ALPHA));
