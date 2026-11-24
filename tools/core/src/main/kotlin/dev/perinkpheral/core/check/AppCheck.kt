@@ -290,7 +290,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 appendLine("};")
             }
             val exceptions = kept["exceptions"]?.let { it as? Map<*, *> ?: throw BuildError("exceptions must be an object") }.orEmpty()
-            val exceptionNames = setOf("store.button", "timers.refusal", "notices.retry", "notices.receipt", "network.recovery") +
+            val exceptionNames = setOf("store.button", "store.response", "timers.refusal", "notices.retry", "notices.receipt", "network.recovery") +
                 listOf("truncated", "wrong-types", "empty-lists", "nulls", "missing-record", "long-values", "numeric-overflow", "picked-null", "numeric-tokens").map { "responses.$it" }
             exceptions.forEach { (key, reason) ->
                 if (key !in exceptionNames || reason !is String || reason.isBlank()) throw BuildError("unknown exception or empty reason: $key")

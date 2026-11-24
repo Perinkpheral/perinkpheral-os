@@ -41,7 +41,7 @@ prove every possible input or button sequence. A coverage note identifies missin
 | Capability | Failure paths |
 | --- | --- |
 | `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic is required. |
-| `store` | Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Unload and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
+| `store` | Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Refuse response saves as well. Unload immediately and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
 | `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The healthy schedule must recover or the app must display failure. |
 | `notices` | Reach alarms/timers through the standard paths; compare accepted counts with queue rejection followed by acceptance and with writes refused immediately after acceptance. Retry for 60 seconds, then unload/replay; also deliver alarms into fresh background instances. No due notice reached is a coverage note. |
 | `network` | Derive malformed responses from good JSON mocks, compare the good/normal failed-response pictures and reloaded cache; observe new HTTP/poll requests during Retry-After, including lifecycle changes and chains of two refusals, with both 120- and 300-second deadlines. |
@@ -65,6 +65,7 @@ A log line is not a visible error.
 
 `exceptions` is an object mapping check keys to nonempty reasons. Each is printed:
 
+- `store.response`: a deliberately volatile answer cache.
 - `store.button`: changes in this view deliberately do not survive an unload.
 - `timers.refusal`: this schedule has another recovery policy.
 - `notices.retry`, `notices.receipt`: a different declared delivery policy.

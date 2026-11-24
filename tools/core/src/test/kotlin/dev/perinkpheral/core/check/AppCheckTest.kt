@@ -20,6 +20,8 @@ object AppCheckTest {
                         val manifestEdits: List<Pair<String, String>> = emptyList(), val checkPatch: Map<String, Any?> = emptyMap())
 
     private val BREAKS = listOf(
+        Break("store", "an unsaved answer silently reverts immediately on unload",
+            listOf("        gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, \"Storage error.\", 14);" to ""), "response-save:"),
         Break("network", "a streamed protocol parses an unbounded integer",
             listOf("        arriving[arriving_length] = '\\0';\n        keep_text(\"note\"" to
                 "        arriving[arriving_length] = '\\0';\n" +

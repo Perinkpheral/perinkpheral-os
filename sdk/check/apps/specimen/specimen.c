@@ -235,6 +235,9 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
 void app_on_draw(void)
 {
     int32_t line_height = gfx_font_height(HOST_FONT_TEXT);
+    if (value_is_unsaved || note_is_unsaved || row_is_unsaved) {
+        gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, "Storage error.", 14);
+    }
     if (schedule_failed) {
         gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, "Schedule error.", 15);
     }

@@ -1021,6 +1021,27 @@ static void check_button_refusal(void);
 
 static void check_elapsed_answers(void);
 
+static void check_response_refusal(int32_t refusal)
+{
+    if (!has_polls_or_requests || excepted("store.response")) {
+        return;
+    }
+    standin_reset();
+    standin()->refuse_writes = refusal;
+    scene_t answered = { .has_data = true };
+    if (!play(&answered) || mark(MARK_LEFT) || standin()->refused_writes == 0) {
+        return;
+    }
+    uint64_t picture = mark(MARK_PICTURE);
+    bool warned = mark(MARK_VISIBLE_FAILURE) != 0;
+    standin()->refuse_writes = HOST_OK;
+    if (play(&ON_SCREEN)) {
+        expect(STORE, warned || mark(MARK_VISIBLE_FAILURE) || mark(MARK_PICTURE) == picture,
+               "response-save: writes answered %d: after unload the picture silently reverts "
+               "(no visible failure; declare failure_text for custom copy)", refusal);
+    }
+}
+
 static void check_store(void)
 {
     checking = STORE;
@@ -1036,6 +1057,8 @@ static void check_store(void)
     check_refused(HOST_ERR_NO_SPACE);
     check_refused(HOST_ERR_FAILED);
     check_button_refusal();
+    check_response_refusal(HOST_ERR_NO_SPACE);
+    check_response_refusal(HOST_ERR_FAILED);
 }
 
 /* ---- Timers and alarms ---- */
