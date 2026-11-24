@@ -30,18 +30,28 @@ object SimulatorHeadersTest {
             exchange.sendResponseHeaders(302, -1)
             exchange.close()
         }
+        server.createContext("/selection") { exchange ->
+            exchange.responseHeaders.add("Content-Type", exchange.requestURI.query)
+            val bytes = ByteArray(48) { 'x'.code.toByte() }
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
         server.start()
         try {
             Socket(InetAddress.getLoopbackAddress(), SimulatorNetwork.port()).use { socket ->
                 val reader = socket.getInputStream().bufferedReader()
                 val writer = socket.getOutputStream().bufferedWriter()
-                fun get(path: String): Map<*, *> {
+                fun get(path: String, policy: Map<String, Any> = emptyMap()): Map<*, *> {
                     val request = mapOf("method" to "GET", "url" to "http://127.0.0.1:${server.address.port}$path",
                         "headers" to emptyMap<String, String>(), "body" to "", "max" to 1024, "timeout" to 3)
-                    writer.write(Json.write(request) + "\n")
+                    writer.write(Json.write(request + policy) + "\n")
                     writer.flush()
                     return Json.parse(reader.readLine()) as Map<*, *>
                 }
+                val limits = mapOf("max" to 8, "rawMax" to 64, "values" to true, "formatPolicy" to 0)
+                check(get("/selection?text/plain", limits)["status"] == 200L)
+                check(get("/selection?application/vendor+json", limits)["status"] == -7L)
+                check(get("/selection?text/plain", limits + ("formatPolicy" to 1))["status"] == -7L)
                 val challenge = get("/auth")
                 check(challenge["status"] == 401L)
                 val headers = challenge["headers"] as Map<*, *>

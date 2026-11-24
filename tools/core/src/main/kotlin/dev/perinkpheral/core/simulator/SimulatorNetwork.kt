@@ -136,12 +136,14 @@ object SimulatorNetwork {
         }
     }
 
+    private val JSON_SUFFIX = Regex("[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+\\+json")
+
     private fun fetch(asked: Map<*, *>): Map<String, Any?> {
         val method = asked["method"] as String
         val url = URI.create(asked["url"] as String)
         val body = Base64.getDecoder().decode((asked["body"] as? String).orEmpty())
         val headers = (asked["headers"] as? Map<*, *>).orEmpty()
-        val most = (asked["max"] as? Long) ?: (256L * 1024)
+        val configuredMax = (asked["max"] as? Long) ?: (256L * 1024)
         val timeout = Duration.ofSeconds((asked["timeout"] as? Long) ?: 15L)
         val wantsValues = asked["values"] == true
         val trust = (asked["trust"] as? List<*>).orEmpty().map { it as String }
@@ -181,7 +183,17 @@ object SimulatorNetwork {
             }, timeout.toMillis())
             // A refusal (not 2xx) whose values are picked keeps its status however its page arrives,
             // as the device does: its body then gives nothing. Pieces fail as before.
-            val isRefusal = wantsValues && response.statusCode() !in 200..299
+            // The device chooses the streaming or JSON projection limit only
+            // once the final Content-Type is known. Older simulator clients
+            // use the originally negotiated fixed limit.
+            val policy = asked["formatPolicy"] as? Long
+            val mimeTypes = response.headers().allValues("content-type").map { it.substringBefore(';').trim(' ', '\t').lowercase() }
+            val jsonMedia = mimeTypes.isNotEmpty() && mimeTypes.all { type ->
+                type == "application/json" || type == "text/json" || JSON_SUFFIX.matches(type)
+            }
+            val picked = wantsValues && (policy == null || policy == 1L || (policy == 0L && jsonMedia))
+            val most = if (picked) configuredMax else (asked["rawMax"] as? Long) ?: configuredMax
+            val isRefusal = picked && response.statusCode() !in 200..299
             var content = try {
                 stream.use { it.readNBytes((most + 1).toInt()) }
             } catch (error: IOException) {

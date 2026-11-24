@@ -2944,8 +2944,13 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
 {
     standin_t *host = standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
+    /* prepare_answer consumes the fixture's headers. Preserve them for the
+     * complete raw delivery when the effective type does not select JSON. */
+    const standin_pair_t *fields=pending_headers;
+    int count=pending_header_count;
     prepare_answer(status);
     if (status >= 0 && selected_format(poll) != HOST_FORMAT_JSON) {
+        standin_answer_headers(fields,count);
         standin_data(poll, item, status, body, length, HOST_DATA_CHUNK_MAX, STANDIN_WHOLE, 0);
         return;
     }

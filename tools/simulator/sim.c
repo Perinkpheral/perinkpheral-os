@@ -631,6 +631,8 @@ static void exchange(job_t *job, char *next, size_t next_size)
     json_add_number(asked, "max", job->wants_values ? HOST_ANSWER_MAX : HOST_ANSWER_PIECES_MAX);
     /* Values are picked: a refusal keeps its status however its page arrives, as on the device. */
     json_add_bool(asked, "values", job->wants_values);
+    json_add_number(asked, "formatPolicy", job->format_policy);
+    json_add_number(asked, "rawMax", HOST_ANSWER_PIECES_MAX);
     /* The application's own certificate authorities, as files: trusted for its requests beside
      * the computer's, as on the device. */
     char files[MANIFEST_CERTIFICATES_MAX][MANIFEST_FILE_NAME_MAX + 1];
