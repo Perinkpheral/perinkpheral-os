@@ -10,6 +10,7 @@ static int64_t clock_ms;
 static bool consumer_accepts, fail_open, expire_read;
 static bool mutex_taken, online = true, complete_body = true;
 static int socket_error, tls_error_code, certificate_flags, header_failure;
+static esp_err_t open_error, tls_failure;
 static int delivered_status;
 static bool delivered_only_on_screen;
 static const char *manifest_json;
@@ -27,7 +28,7 @@ esp_err_t esp_crt_bundle_attach(void *config) { (void)config; return ESP_OK; }
 esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config) {
     CHECK_STR(config->url, "https://example.test/file"); return &response_status;
 }
-esp_err_t esp_http_client_open(esp_http_client_handle_t client, int length) { (void)client; CHECK(length == 0); return fail_open ? ESP_FAIL : ESP_OK; }
+esp_err_t esp_http_client_open(esp_http_client_handle_t client, int length) { (void)client; CHECK(length == 0); return fail_open ? open_error : ESP_OK; }
 int esp_http_client_get_socket(esp_http_client_handle_t client) { (void)client; return -1; }
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client) { (void)client; return header_failure != 0 ? header_failure : (int64_t)body_bytes; }
 int esp_http_client_get_status_code(esp_http_client_handle_t client) { (void)client; return response_status; }
@@ -52,7 +53,7 @@ esp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t client, int ti
 bool esp_http_client_is_complete_data_received(esp_http_client_handle_t client) { (void)client; return complete_body; }
 bool esp_http_client_is_chunked_response(esp_http_client_handle_t client) { (void)client; return false; }
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t client) { (void)client; return (int64_t)body_bytes; }
-int esp_http_client_get_and_clear_last_tls_error(esp_http_client_handle_t client, int *error, int *flags) { (void)client; *error = tls_error_code; *flags = certificate_flags; return ESP_OK; }
+int esp_http_client_get_and_clear_last_tls_error(esp_http_client_handle_t client, int *error, int *flags) { (void)client; *error = tls_error_code; *flags = certificate_flags; return tls_failure; }
 int esp_http_client_get_errno(esp_http_client_handle_t client) { (void)client; return socket_error; }
 void mbedtls_x509_crt_init(mbedtls_x509_crt *chain) { (void)chain; }
 void mbedtls_x509_crt_free(mbedtls_x509_crt *chain) { (void)chain; }
@@ -78,6 +79,8 @@ static void reset(void)
 {
     online = complete_body = true;
     socket_error = tls_error_code = certificate_flags = header_failure = 0;
+    open_error = ESP_FAIL;
+    tls_failure = ESP_OK;
     delivered_status = 0;
     manifest_json = NULL;
     response_status = 200;
@@ -115,6 +118,44 @@ static bool poll_failure(bool picked)
     CHECK(poller_net_poll("probe", 0, 0, &method, &network_failed) == 0);
     CHECK(method == HOST_HTTP_GET);
     return network_failed;
+}
+
+static void test_poll_memory_failures(void)
+{
+    const int allocation_errors[] = {
+        -0x7F00, /* MBEDTLS_ERR_SSL_ALLOC_FAILED */
+        -0x2880, /* MBEDTLS_ERR_X509_ALLOC_FAILED */
+        -0x3F80, /* MBEDTLS_ERR_PK_ALLOC_FAILED */
+        -0x1180, /* MBEDTLS_ERR_PEM_ALLOC_FAILED */
+        -0x6180, /* MBEDTLS_ERR_CIPHER_ALLOC_FAILED */
+        -0x5180, /* MBEDTLS_ERR_MD_ALLOC_FAILED */
+        -0x4D80, /* MBEDTLS_ERR_ECP_ALLOC_FAILED */
+        -0x3400, /* MBEDTLS_ERR_DHM_ALLOC_FAILED */
+        -0x0010, /* MBEDTLS_ERR_MPI_ALLOC_FAILED */
+        -0x006A, /* MBEDTLS_ERR_ASN1_ALLOC_FAILED */
+        -0x4310, /* RSA private-key operation with an MPI allocation failure. */
+        -0x236A, /* X509 parsing with an ASN1 allocation failure. */
+        -0x7F10, /* SSL allocation failure with an MPI error. */
+    };
+    for (int picked = 0; picked <= 1; picked++) {
+        /* ESP-TLS reports the magnitude; also accept signed library errors. */
+        for (int sign = -1; sign <= 1; sign += 2) {
+            for (size_t i = 0; i < sizeof allocation_errors / sizeof allocation_errors[0]; i++) {
+                reset(); fail_open = true; tls_error_code = sign * allocation_errors[i];
+                CHECK(!poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
+                CHECK(cleanups == 1 && !mutex_taken);
+            }
+        }
+        reset(); fail_open = true; open_error = ESP_ERR_NO_MEM;
+        CHECK(!poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
+        reset(); fail_open = true; tls_failure = ESP_ERR_NO_MEM;
+        CHECK(!poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
+        const int memory_errors[] = { ENOMEM, ENOBUFS };
+        for (size_t i = 0; i < sizeof memory_errors / sizeof memory_errors[0]; i++) {
+            reset(); fail_open = true; socket_error = memory_errors[i];
+            CHECK(!poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
+        }
+    }
 }
 
 static void test_poll_transport_failures(void)
@@ -162,6 +203,7 @@ int main(void)
 {
     const poller_net_host_t host = { .deliver = deliver, .network_worked = network_worked };
     poller_net_start(&host);
+    test_poll_memory_failures();
     test_poll_transport_failures();
     int status;
     reset(); CHECK(fetch(4096, &status)); CHECK(status == 200 && received == HOST_DATA_CHUNK_MAX + 17);

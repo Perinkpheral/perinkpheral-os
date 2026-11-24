@@ -647,24 +647,64 @@ static esp_err_t headers_or_why_not(esp_http_client_handle_t client, request_t *
 #define X509_VERIFY_FAILED  0x2700
 #define X509_NO_ROOT_FOR_IT 0x3000
 
+/* mbedTLS can add a low-level error to a high-level one. An allocation
+ * failure in either layer is local pressure, not a lost connection. */
+#define TLS_HIGH_ERROR_MASK 0x7F80
+#define TLS_LOW_ERROR_MASK  0x007F
+#define SSL_ALLOC_FAILED    0x7F00
+#define X509_ALLOC_FAILED   0x2880
+#define PK_ALLOC_FAILED     0x3F80
+#define PEM_ALLOC_FAILED    0x1180
+#define CIPHER_ALLOC_FAILED 0x6180
+#define MD_ALLOC_FAILED     0x5180
+#define ECP_ALLOC_FAILED    0x4D80
+#define DHM_ALLOC_FAILED    0x3400
+#define MPI_ALLOC_FAILED    0x0010
+#define ASN1_ALLOC_FAILED   0x006A
+
+static bool tls_needs_memory(int tls_code)
+{
+    int low_error = tls_code & TLS_LOW_ERROR_MASK;
+    if (low_error == MPI_ALLOC_FAILED || low_error == ASN1_ALLOC_FAILED) {
+        return true;
+    }
+    switch (tls_code & TLS_HIGH_ERROR_MASK) {
+    case SSL_ALLOC_FAILED:
+    case X509_ALLOC_FAILED:
+    case PK_ALLOC_FAILED:
+    case PEM_ALLOC_FAILED:
+    case CIPHER_ALLOC_FAILED:
+    case MD_ALLOC_FAILED:
+    case ECP_ALLOC_FAILED:
+    case DHM_ALLOC_FAILED:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* Why a request that got no answer got none, as an application is told. */
 static int why_no_answer(esp_http_client_handle_t client, esp_err_t err)
 {
+    int tls_error = 0, certificate_flags = 0;
+    esp_err_t tls_failure = esp_http_client_get_and_clear_last_tls_error(client, &tls_error, &certificate_flags);
+    int tls_code = tls_error < 0 ? -tls_error : tls_error;
+    int socket_error = esp_http_client_get_errno(client);
+    if (err == ESP_ERR_NO_MEM || tls_failure == ESP_ERR_NO_MEM ||
+        socket_error == ENOMEM || socket_error == ENOBUFS || tls_needs_memory(tls_code)) {
+        return HOST_FAILED_NO_MEMORY;
+    }
     if (!wifi_is_online()) {
         return HOST_FAILED_NO_NETWORK;
     }
-    int tls_error = 0, certificate_flags = 0;
-    esp_http_client_get_and_clear_last_tls_error(client, &tls_error, &certificate_flags);
     /* The certificate the server showed was looked at and not accepted:
      * the flags say what was wrong with it, and the set of roots says
      * "fatal" when none of them signed it. Any other failed handshake is a
      * server that does not speak what the device does: no answer. */
-    int tls_code = tls_error < 0 ? -tls_error : tls_error;
     if (certificate_flags != 0 || tls_code == X509_VERIFY_FAILED ||
         tls_code == X509_NO_ROOT_FOR_IT) {
         return HOST_FAILED_NOT_TRUSTED;
     }
-    int socket_error = esp_http_client_get_errno(client);
     if (err == ESP_ERR_TIMEOUT || socket_error == EAGAIN || socket_error == ETIMEDOUT) {
         return HOST_FAILED_TIMEOUT;
     }
@@ -753,7 +793,8 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         tell_failure(app_name, number, wants_values, HOST_FAILED_NOT_ALLOWED);
     } else if (err != ESP_OK || http_status <= 0) {
         int why = why_no_answer(client, err);
-        request->network_failed = why != HOST_FAILED_NOT_TRUSTED;
+        request->network_failed = why == HOST_FAILED_NO_NETWORK ||
+                                  why == HOST_FAILED_NO_ANSWER || why == HOST_FAILED_TIMEOUT;
         /* A poll over a list is one number for every item: which of them did not answer. */
         ESP_LOGW(TAG, "%s/%d%s%s: no answer (%d): %s", app_name, number,
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
