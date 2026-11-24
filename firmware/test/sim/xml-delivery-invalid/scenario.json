@@ -1,0 +1,14 @@
+{
+  "app": "firmware/test/host/apps/xml-delivery",
+  "at": 1795262400,
+  "serial": true,
+  "mocks": "mocks.json",
+  "steps": [
+    "forward 2",
+    "wait 1",
+    "shot invalid"
+  ],
+  "store": {
+    "neg": "1"
+  }
+}

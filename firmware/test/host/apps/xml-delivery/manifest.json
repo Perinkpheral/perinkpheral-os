@@ -1,0 +1,28 @@
+{
+  "name": "xml-delivery",
+  "title": "XML delivery",
+  "version": "0.1.0",
+  "abi": 3,
+  "hosts": [
+    "example.test"
+  ],
+  "polls": [
+    {
+      "url": "https://example.test/poll-get",
+      "every": 300
+    },
+    {
+      "url": "https://example.test/poll-post",
+      "method": "POST",
+      "body": "filter=one",
+      "every": 300
+    },
+    {
+      "url": "https://example.test/pick",
+      "pick": [
+        "value"
+      ],
+      "every": 300
+    }
+  ]
+}

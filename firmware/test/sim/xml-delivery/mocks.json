@@ -1,0 +1,59 @@
+{
+  "https://example.test/poll-get": {
+    "method": "GET",
+    "request_body": "",
+    "file": "get.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/poll-post": {
+    "method": "POST",
+    "request_body": "filter=one",
+    "file": "post.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/get": {
+    "method": "GET",
+    "request_body": "",
+    "file": "get.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/post": {
+    "method": "POST",
+    "request_body": "filter=one",
+    "file": "post.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/again": {
+    "method": "GET",
+    "request_body": "",
+    "file": "again.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/post-bad": {
+    "method": "POST",
+    "request_body": "filter=one",
+    "file": "malformed.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/get-bad": {
+    "method": "GET",
+    "request_body": "",
+    "file": "truncated.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/pick": {
+    "body": "{\"value\":\"json\"}"
+  },
+  "https://example.test/offline": {
+    "status": -2
+  },
+  "https://example.test/http-error": {
+    "method": "POST",
+    "request_body": "filter=one",
+    "status": 503,
+    "body": "<r/>"
+  },
+  "*": {
+    "status": -3
+  }
+}

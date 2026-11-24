@@ -1,0 +1,20 @@
+{
+  "https://example.test/poll-get": {
+    "method": "GET",
+    "request_body": "",
+    "file": "../xml-delivery/truncated.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/poll-post": {
+    "method": "POST",
+    "request_body": "filter=one",
+    "file": "../xml-delivery/malformed.xml",
+    "content_type": "application/xml"
+  },
+  "https://example.test/pick": {
+    "body": "<r value='not-json'/>"
+  },
+  "*": {
+    "status": -3
+  }
+}
