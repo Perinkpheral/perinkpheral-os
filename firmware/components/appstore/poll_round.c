@@ -26,6 +26,16 @@ bool poll_rounds_next(poll_rounds_t *rounds, const poll_entry_t *wanted, poll_tu
     return true;
 }
 
+void poll_rounds_throttled(poll_rounds_t *rounds, int app)
+{
+    if (rounds->current.app == app) {
+        rounds->current.throttled = true;
+    }
+    if (rounds->waiting.app == app) {
+        rounds->waiting.throttled = true;
+    }
+}
+
 bool poll_rounds_answered(poll_rounds_t *rounds, const poll_turn_t *turn, int items)
 {
     bool has_more = turn->item + 1 < items;

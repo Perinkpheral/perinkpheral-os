@@ -17,6 +17,7 @@ typedef struct {
     int poll;
     int item;
     bool is_continuation;
+    bool throttled;
 } poll_turn_t;
 
 /* Two rounds suffice if a third is left wanted until one finishes. A
@@ -31,6 +32,10 @@ bool poll_rounds_pending(const poll_rounds_t *rounds);
 
 /* False when there is no work. The wanted entry is never consumed here. */
 bool poll_rounds_next(poll_rounds_t *rounds, const poll_entry_t *wanted, poll_turn_t *turn);
+
+/* A response throttled the application. Its open rounds cannot continue,
+ * even if the delay expires before the poller next looks at them. */
+void poll_rounds_throttled(poll_rounds_t *rounds, int app);
 
 /* Keeps the next item, if any. True when this poll's round is finished
  * and its next periodic deadline can be set. Zero items cancels a round. */

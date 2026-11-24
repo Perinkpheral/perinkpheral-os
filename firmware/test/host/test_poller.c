@@ -17,7 +17,7 @@ static wifi_plan_t network_plan;
 static wifi_status_t network;
 static bool transport_failure, reconnect_during_request;
 static int round_items, raw_sent, failures_told, notifications, radio_holds;
-static int retry_after, round_poll, sent_item;
+static int retry_after, round_poll, sent_item, response_ms;
 static bool session_memory = true;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
@@ -128,12 +128,13 @@ int poller_net_poll(const char *name, int poll, int item, int *method, bool *net
         NET_HOST.retry_after(retry_after);
         retry_after = 0;
     }
+    clock_ms += response_ms;
     *method = sent_method;
     *network_failed = transport_failure;
     if (reconnect_during_request) poller_network_is_back();
     requests_sent++;
     if (abandon_answer) poller_answer_was_abandoned(name, poll);
-    return poll == round_poll ? round_items : 0;
+    return round_poll < 0 || poll == round_poll ? round_items : 0;
 }
 void poller_net_poll_not_made(const char *name, int poll, int why)
 {
@@ -147,6 +148,7 @@ void poller_net_request(const char *name, const poller_ask_t *ask)
         NET_HOST.retry_after(retry_after);
         retry_after = 0;
     }
+    clock_ms += response_ms;
     raw_sent++;
 }
 void poller_net_tell_failure(const char *name, int number, int why)
@@ -188,7 +190,7 @@ static void reset_poller(void)
     s_is_holding_radio = false;
     transport_failure = reconnect_during_request = false;
     round_items = raw_sent = failures_told = notifications = radio_holds = 0;
-    retry_after = round_poll = 0;
+    retry_after = round_poll = response_ms = 0;
     s_network_generation = 0;
     s_memory_looks = 0;
     session_memory = true;
@@ -612,6 +614,68 @@ static void test_retry_after_stops_list_round(void)
     }
 }
 
+static void test_list_round_stops_when_body_outlasts_retry_after(void)
+{
+    for (int raw = 0; raw <= 1; raw++) {
+        reset_poller();
+        installed_apps[0].poll_every_s[0] = 60;
+        round_items = 3;
+        CHECK(schedule_installed() == 1);
+        advance_to(0);
+        if (raw) {
+            CHECK(run_wanted_poll() && sent_item == 0);
+        }
+        retry_after = 1;
+        response_ms = 1500;
+        if (raw) {
+            CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
+                  HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+            CHECK(run_pending_request(0) && raw_sent == 1);
+        }
+        CHECK(run_wanted_poll() && requests_sent == 1);
+        CHECK(!run_wanted_poll() && requests_sent == 1);
+
+        response_ms = 0;
+        advance_to(61499);
+        CHECK(!run_wanted_poll());
+        advance_to(61500);
+        CHECK(run_wanted_poll() && sent_item == 0 && requests_sent == 2);
+        CHECK(run_wanted_poll() && sent_item == 1);
+        CHECK(run_wanted_poll() && sent_item == 2);
+        CHECK(!run_wanted_poll());
+    }
+}
+
+static void test_expired_retry_after_cancels_suspended_rounds(void)
+{
+    reset_poller();
+    installed_apps[0].poll_count = 2;
+    installed_apps[0].poll_every_s[0] = 60;
+    installed_apps[0].poll_every_s[1] = 60;
+    round_items = 3;
+    round_poll = -1;
+    CHECK(schedule_installed() == 2);
+    advance_to(0);
+    CHECK(run_wanted_poll() && sent_item == 0);
+    advance_to(2000);
+    CHECK(run_wanted_poll() && sent_item == 0);
+
+    retry_after = 1;
+    response_ms = 1500;
+    CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
+          HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+    CHECK(run_pending_request(0));
+    response_ms = 0;
+
+    CHECK(poller_poll_now("probe", 0)); /* A newly requested round is still wanted. */
+    CHECK(run_wanted_poll() && requests_sent == 2);
+    CHECK(run_wanted_poll() && requests_sent == 2);
+    CHECK(run_wanted_poll() && requests_sent == 3 && sent_item == 0);
+    CHECK(run_wanted_poll() && sent_item == 1);
+    CHECK(run_wanted_poll() && sent_item == 2);
+    CHECK(!run_wanted_poll());
+}
+
 static void test_long_retry_after_survives_reload(void)
 {
     reset_poller();
@@ -638,6 +702,8 @@ static void test_long_retry_after_survives_reload(void)
 int main(void)
 {
     test_long_retry_after_survives_reload();
+    test_list_round_stops_when_body_outlasts_retry_after();
+    test_expired_retry_after_cancels_suspended_rounds();
     test_settings_save_during_retry_after();
     test_retry_after_defers_startup_polls();
     test_retry_after_stops_list_round();

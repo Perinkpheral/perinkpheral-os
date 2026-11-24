@@ -124,6 +124,10 @@ typedef struct {
 static uint32_t s_answering_app;
 static bool s_answer_invalidated;
 static bool s_answering_poll;
+static bool s_answer_throttled;
+
+/* List continuations belong to the task alone. */
+static poll_rounds_t s_rounds;
 
 /* The poller lock covers the start and invalidation of the one active request. */
 static void begin_answer_locked(uint32_t app, bool is_poll)
@@ -131,6 +135,7 @@ static void begin_answer_locked(uint32_t app, bool is_poll)
     s_answering_app = app;
     s_answer_invalidated = false;
     s_answering_poll = is_poll;
+    s_answer_throttled = false;
 }
 
 static void deliver_in_host_loop(void *argument)
@@ -184,6 +189,10 @@ static void remember_retry_after(int seconds)
             installed = true;
             break;
         }
+    }
+    if (installed) {
+        s_answer_throttled = true;
+        poll_rounds_throttled(&s_rounds, (int)s_answering_app);
     }
     if (slot >= 0 && installed) {
         int64_t until_ms = now_ms + (int64_t)seconds * MS_PER_SECOND;
@@ -581,9 +590,6 @@ static bool has_waited_for_memory_enough(void)
     return true;
 }
 
-/* List continuations belong to the task alone. */
-static poll_rounds_t s_rounds;
-
 /* Whether anything is waiting for the network now. */
 static bool wants_network(void)
 {
@@ -662,6 +668,17 @@ static bool run_wanted_poll(void)
         poll_schedule_due_soon(&s_schedule, app, poll);
         poll_rounds_answered(&s_rounds, &turn, 0);
     }
+    if (turn.throttled && cooldown_ms == 0) {
+        /* A sibling response stopped this round. Keep an already requested
+         * refresh or deadline, otherwise schedule the next periodic round. */
+        poll_rounds_answered(&s_rounds, &turn, 0);
+        uint32_t pace_ms = poll_schedule_pace_ms(&s_schedule, app, poll);
+        if (pace_ms > 0 && !poll_schedule_is_due_soon(&s_schedule, app, poll)) {
+            deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, pace_ms);
+        }
+        unlock();
+        return true;
+    }
     unlock();
     if (!has_turn) {
         return false;
@@ -717,7 +734,7 @@ static bool run_wanted_poll(void)
      * A later poll starts with the first item of the current list. */
     lock();
     cooldown_ms = cooldown_left_ms((uint32_t)app);
-    if (network_failed || cooldown_ms > 0) {
+    if (network_failed || (is_installed && s_answer_throttled)) {
         items = 0;
     }
     /* More items to ask: the round goes on, between whatever else waits. */
