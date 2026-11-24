@@ -10,6 +10,14 @@ typedef struct {
     uint16_t start, length, index;
 } element_t;
 typedef struct {
+    uint16_t start, end, decoded;
+    uint8_t key_length;
+    bool escaped;
+} selected_field_t;
+typedef struct {
+    const host_xml_field_t *fields;
+    selected_field_t *selected;
+    int field_count;
     const char *key;
     int key_length, node, from, result;
     const char *value, *end;
@@ -195,7 +203,7 @@ static bool scan(const char *doc, int length, query_t *q)
             const char *key = p;
             if (before == p || !name(&p, end))
                 return false;
-            bool wanted = q->attribute && id == q->node && matches(q, key, p);
+            const char *key_end = p;
             spaces(&p, end);
             if (!take(&p, end, '='))
                 return false;
@@ -211,11 +219,25 @@ static bool scan(const char *doc, int length, query_t *q)
             }
             if (p == end)
                 return false;
-            if (wanted) {
-                if (q->value)
-                    return false;
-                q->value = value;
-                q->end = p;
+            if (q->attribute && id == q->node) {
+                if (q->field_count) {
+                    for (int i = 0; i < q->field_count; i++) {
+                        selected_field_t *slot = &q->selected[i];
+                        if (key_end - key == slot->key_length &&
+                            !memcmp(q->fields[i].name, key, (size_t)slot->key_length)) {
+                            if (slot->start)
+                                return false;
+                            slot->start = (uint16_t)(value - doc);
+                            slot->end = (uint16_t)(p - doc);
+                            break;
+                        }
+                    }
+                } else if (matches(q, key, key_end)) {
+                    if (q->value)
+                        return false;
+                    q->value = value;
+                    q->end = p;
+                }
             }
             p++;
         }
@@ -249,42 +271,36 @@ int32_t xml_query_child(const char *doc, int32_t length, int32_t parent, const c
     query_t q = {.key = key, .key_length = keysz, .node = parent, .from = from, .result = -1};
     return scan(doc, length, &q) ? q.result : -2;
 }
-int32_t xml_query_attr(const char *doc, int32_t length, int32_t node, const char *key,
-                       int32_t keysz, char *out, int32_t cap, int32_t label)
+static int decoded_length(const char *value, const char *end, bool *escaped)
 {
-    if (node < 0 || node >= MAX_NODES || !key_valid(key, keysz) || !out || cap < 1 ||
-        (label != 0 && label != 1) || length < 1 || length > MAX_BYTES ||
-        overlaps(out, cap, doc, length) || overlaps(out, cap, key, keysz))
-        return -1;
-    query_t q = {.key = key, .key_length = keysz, .node = node, .attribute = true};
-    if (!scan(doc, length, &q))
-        return -1;
-    if (!q.value)
-        return 0;
     /* Validate even discarded label bytes before changing guest memory. */
-    const char *cursor = q.value;
+    const char *cursor = value;
     int decoded = 0;
-    bool escaped = memchr(cursor, '&', (size_t)(q.end - cursor)) != NULL;
-    if (escaped) {
-        while (cursor < q.end) {
-            if (*cursor++ == '&' && !entity(&cursor, q.end))
+    *escaped = memchr(cursor, '&', (size_t)(end - cursor)) != NULL;
+    if (*escaped) {
+        while (cursor < end) {
+            if (*cursor++ == '&' && !entity(&cursor, end))
                 return -1;
             decoded++;
         }
     } else {
-        decoded = (int)(q.end - cursor);
+        decoded = (int)(end - cursor);
     }
+    return decoded;
+}
+
+static void copy_value(const char *value, const char *end, int decoded, bool escaped, char *out,
+                       int cap)
+{
     bool cut = decoded >= cap;
-    if (cut && !label)
-        return -1;
     int used = cut ? cap - 1 : decoded;
     if (!escaped) {
-        memcpy(out, q.value, (size_t)used);
+        memcpy(out, value, (size_t)used);
     } else {
-        cursor = q.value;
+        const char *cursor = value;
         for (int i = 0; i < used; i++) {
             char c = *cursor++;
-            out[i] = c == '&' ? entity(&cursor, q.end) : c;
+            out[i] = c == '&' ? entity(&cursor, end) : c;
         }
     }
     if (cut) {
@@ -307,5 +323,84 @@ int32_t xml_query_attr(const char *doc, int32_t length, int32_t node, const char
         }
     }
     out[used] = 0;
+}
+
+int32_t xml_query_attr(const char *doc, int32_t length, int32_t node, const char *key,
+                       int32_t keysz, char *out, int32_t cap, int32_t label)
+{
+    if (node < 0 || node >= MAX_NODES || !key_valid(key, keysz) || !out || cap < 1 ||
+        (label != 0 && label != 1) || length < 1 || length > MAX_BYTES ||
+        overlaps(out, cap, doc, length) || overlaps(out, cap, key, keysz))
+        return -1;
+    query_t q = {.key = key, .key_length = keysz, .node = node, .attribute = true};
+    if (!scan(doc, length, &q))
+        return -1;
+    if (!q.value)
+        return 0;
+    bool escaped;
+    int decoded = decoded_length(q.value, q.end, &escaped);
+    if (decoded < 0 || (decoded >= cap && !label))
+        return -1;
+    copy_value(q.value, q.end, decoded, escaped, out, cap);
+
     return 1;
+}
+
+int32_t xml_query_attrs(const char *doc, int32_t length, int32_t node,
+                        const host_xml_field_t *fields, int32_t count, char *out, int32_t capacity)
+{
+    if (!doc || length < 1 || length > MAX_BYTES || node < 0 || node >= MAX_NODES || !fields ||
+        ((uintptr_t)fields % _Alignof(host_xml_field_t)) || count < 1 || count > 16 || !out ||
+        capacity < 1)
+        return -1;
+    int table_bytes = count * (int)sizeof *fields;
+    if (overlaps(out, capacity, doc, length) ||
+        overlaps(out, capacity, (const char *)fields, table_bytes) ||
+        overlaps(doc, length, (const char *)fields, table_bytes))
+        return -1;
+    selected_field_t selected[16] = {0};
+    for (int i = 0; i < count; i++) {
+        const host_xml_field_t *f = fields + i;
+        const char *end = memchr(f->name, 0, sizeof f->name);
+        if (!end || !key_valid(f->name, (int)(end - f->name)) || !f->capacity ||
+            (int)f->offset + f->capacity > capacity ||
+            (f->flags & ~(HOST_XML_LABEL | HOST_XML_REQUIRED)) || f->reserved[0] ||
+            f->reserved[1] || f->reserved[2])
+            return -1;
+        selected[i].key_length = (uint8_t)(end - f->name);
+        for (int j = 0; j < i; j++) {
+            const host_xml_field_t *prior = fields + j;
+            if (!strcmp(f->name, prior->name) ||
+                overlaps(out + f->offset, f->capacity, out + prior->offset, prior->capacity))
+                return -1;
+        }
+    }
+    query_t q = {.fields = fields,
+                 .selected = selected,
+                 .field_count = count,
+                 .node = node,
+                 .attribute = true};
+    if (!scan(doc, length, &q))
+        return -1;
+    int mask = 0;
+    for (int i = 0; i < count; i++) {
+        const host_xml_field_t *f = fields + i;
+        selected_field_t *v = selected + i;
+        if ((f->flags & HOST_XML_REQUIRED) && v->start == v->end)
+            return -1;
+        if (!v->start)
+            continue;
+        int decoded = decoded_length(doc + v->start, doc + v->end, &v->escaped);
+        if (decoded < 0 || (decoded >= f->capacity && !(f->flags & HOST_XML_LABEL)))
+            return -1;
+        v->decoded = (uint16_t)decoded;
+        mask |= 1 << i;
+    }
+    for (int i = 0; i < count; i++) {
+        const selected_field_t *v = selected + i;
+        const host_xml_field_t *f = fields + i;
+        copy_value(doc + v->start, doc + v->end, v->decoded, v->escaped, out + f->offset,
+                   f->capacity);
+    }
+    return mask;
 }

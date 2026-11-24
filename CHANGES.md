@@ -6,7 +6,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.100
 
-- Applications can read elements and attributes from small XML documents using two native SDK calls.
+- Applications can read elements and attributes from small XML documents using native SDK calls, including a single-pass query for several attributes.
 
 ## 0.1.99
 

@@ -3026,3 +3026,9 @@ int32_t xml_attr(const char *doc, int32_t length, int32_t node, const char *name
 {
     return xml_query_attr(doc, length, node, name, name_length, out, capacity, label);
 }
+
+int32_t xml_attrs(const char *doc, int32_t length, int32_t node, const host_xml_field_t *fields,
+                  int32_t count, char *out, int32_t capacity)
+{
+    return xml_query_attrs(doc, length, node, fields, count, out, capacity);
+}

@@ -458,7 +458,11 @@ void app_on_draw(void)
 {
     static const char xml[] = "<r><item a='ok'/></r>";
     char value[3];
-    if (xml_child(xml, sizeof xml - 1, 0, "item", 4, 0) == 1 &&
+    static const host_xml_field_t fields[] = {{"a", 0, 3, HOST_XML_REQUIRED, {0}}};
+    if (xml_attrs(xml, sizeof xml - 1, 1, fields, 1, value, sizeof value) == 1 &&
+        value[0] == 'o' && value[1] == 'k' &&
+        xml_attrs(xml, sizeof xml - 1, 1, (const host_xml_field_t *)0xfffffff0u, 1, value, sizeof value) == -1 &&
+        xml_child(xml, sizeof xml - 1, 0, "item", 4, 0) == 1 &&
         xml_attr(xml, sizeof xml - 1, 1, "a", 1, value, sizeof value, 0) == 1 &&
         value[0] == 'o' && value[1] == 'k' && value[2] == 0 &&
         xml_child((const char *)0xfffffff0u, 32, -1, 0, 0, 0) == -2 &&

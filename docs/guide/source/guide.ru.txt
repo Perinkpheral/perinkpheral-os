@@ -3733,11 +3733,17 @@ xml_child(doc, length, parent, name, name_length, from)
 Find a direct child in the current document, starting at preorder ordinal <code>from</code>. Parent -1 selects the root. A zero-length name matches any child. Returns an ordinal, -1 for absence or -2 on error.
 Ищет прямого потомка в текущем документе начиная с номера <code>from</code> в порядке прямого обхода. Родитель -1 выбирает корень. Имя нулевой длины соответствует любому потомку. Возвращает номер элемента, -1 при отсутствии или -2 при ошибке.
 
+xml_attrs(doc, length, node, fields, count, out, capacity)
+=
+
+Project up to 16 attributes of one element in one scan. Each constant descriptor names a field and its output offset, capacity and flags. Returns a presence bit mask or -1 on failure. The whole output stays unchanged on failure. Optional missing fields produce empty strings.
+Извлекает до 16 атрибутов одного элемента за один проход. Каждый константный дескриптор задаёт имя поля, его смещение в выходном буфере, ёмкость и флаги. Возвращает битовую маску присутствия или -1 при ошибке. При ошибке весь выходной буфер сохраняет своё содержимое. Отсутствующие необязательные поля дают пустые строки.
+
 xml_attr(doc, length, node, name, name_length, out, capacity, label)
 =
 
-Read a named attribute into a NUL-terminated buffer. Returns 1 when found, 0 when absent and -1 on error. A repeated attribute name is ambiguous. Use label 0 for exact identifiers and 1 for UTF-8 labels that may be shortened. Both XML calls require firmware 0.1.100 and validate a complete attribute-only document of up to 12288 bytes, 256 elements and 16 levels on each call.
-Читает именованный атрибут в буфер со строкой с нулевым окончанием. Возвращает 1, если атрибут найден, 0 при отсутствии и -1 при ошибке. Повтор имени атрибута неоднозначен. Для точных идентификаторов укажите label 0, для сокращаемых подписей UTF-8 — 1. Оба вызова XML требуют прошивку 0.1.100 и при каждом обращении проверяют целый документ без текстовых узлов размером до 12288 байт, с максимум 256 элементами и 16 уровнями.
+Read a named attribute into a NUL-terminated buffer. Returns 1 when found, 0 when absent and -1 on error. A repeated attribute name is ambiguous. Use label 0 for exact identifiers and 1 for UTF-8 labels that may be shortened. These XML calls require firmware 0.1.100 and validate a complete attribute-only document of up to 12288 bytes, 256 elements and 16 levels on each call.
+Читает именованный атрибут в буфер со строкой с нулевым окончанием. Возвращает 1, если атрибут найден, 0 при отсутствии и -1 при ошибке. Повтор имени атрибута неоднозначен. Для точных идентификаторов укажите label 0, для сокращаемых подписей UTF-8 — 1. Эти вызовы XML требуют прошивку 0.1.100 и при каждом обращении проверяют целый документ без текстовых узлов размером до 12288 байт, с максимум 256 элементами и 16 уровнями.
 
 answer_value(index, text, capacity)
 =

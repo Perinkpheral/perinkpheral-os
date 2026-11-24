@@ -666,7 +666,7 @@ whether that shortens the wait has to be seen on a phone.
 
 ### XML document queries (ABI 3, firmware 0.1.100)
 
-Applications can query a complete application-owned document with `xml_child` and `xml_attr`. Each call validates the current bytes. Results use preorder ordinals, valid for the same document. The strict attribute-only subset, input limits and status values are specified in `sdk/host/xml.h`. The implementation retains no application data between calls.
+Applications can query a complete application-owned document with `xml_child` and `xml_attr`, or project several attributes of one node with `xml_attrs`. Each call validates the current bytes. Results use preorder ordinals, valid for the same document. The strict attribute-only subset, input limits and status values are specified in `sdk/host/xml.h`. The implementation retains no application data between calls.
 
 ## Continuous integration
 **CI runs on the organization's own runners** (the owner, 2026-11-20, after GitHub's hosted runners kept losing the package mirror): three of them, `perink-1` to `perink-3`, on one machine, labelled `perinkpheral`. A workflow asks for `[self-hosted, perinkpheral]`. The machine carries what the hosted image carried and a job used: a C compiler, Node.js, GitHub's CLI, Docker, Chromium's libraries, poppler-utils, the guide's fallback fonts, ffmpeg and webp; a job installs nothing with `sudo`. wasi-sdk and the Gradle home are kept in the runner's tool cache between runs. A whole run of this repository took 8.5 minutes on them against about 8 on GitHub's. Pull requests from forks wait for approval.

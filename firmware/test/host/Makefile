@@ -61,7 +61,7 @@ test_web_settings_json: test_web_settings_json.c tinytest.h $(MAIN)/web_settings
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(APPCONF)/include -o $@ test_web_settings_json.c $(APPCONF)/appconf.c $(APPSTORE)/catalog.c
 
 test_xml_query: test_xml_query.c tinytest.h $(APPSYS)/xml_query.c $(APPSYS)/include/xml_query.h
-	$(CC) $(CFLAGS) -I$(APPSYS)/include -o $@ test_xml_query.c $(APPSYS)/xml_query.c
+	$(CC) $(CFLAGS) -I$(APPSYS)/include -I$(SDK) -o $@ test_xml_query.c $(APPSYS)/xml_query.c
 
 test_answer_headers: test_answer_headers.c tinytest.h $(APPSYS)/answer_headers.c $(APPSYS)/include/answer_headers.h
 	$(CC) $(CFLAGS) -I$(APPSYS)/include -I$(SDK) -o $@ test_answer_headers.c $(APPSYS)/answer_headers.c

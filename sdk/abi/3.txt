@@ -185,6 +185,8 @@ constant HOST_SINCE_HOST_ICON_PROGRESS	"0.1.84"
 constant HOST_SINCE_HOST_MAP_AEQD	"0.1.94"
 constant HOST_SINCE_HOST_MAP_COASTLINE	"0.1.94"
 constant HOST_SINCE_HOST_MAP_WORLD	"0.1.94"
+constant HOST_SINCE_HOST_XML_LABEL	"0.1.100"
+constant HOST_SINCE_HOST_XML_REQUIRED	"0.1.100"
 constant HOST_SINCE_POLL_METHOD	"0.1.80"
 constant HOST_SINCE_SYS_DO_WIFI_SETUP	"0.1.66"
 constant HOST_SINCE_SYS_WIFI_OFF	"0.1.66"
@@ -194,6 +196,7 @@ constant HOST_SINCE_gfx_draw_map_radius	"0.1.94"
 constant HOST_SINCE_gfx_map_point	"0.1.94"
 constant HOST_SINCE_screen_set_inverted	"0.1.54"
 constant HOST_SINCE_xml_attr	"0.1.100"
+constant HOST_SINCE_xml_attrs	"0.1.100"
 constant HOST_SINCE_xml_child	"0.1.100"
 constant HOST_STATUS_TEXT_MAX	31
 constant HOST_TEXT_ARGUMENTS_MAX	4
@@ -223,6 +226,8 @@ constant HOST_UI_TEXT	0
 constant HOST_UI_TITLE	1
 constant HOST_UI_VALUE	3
 constant HOST_VALUE_MAX	63
+constant HOST_XML_LABEL	1
+constant HOST_XML_REQUIRED	2
 constant MANIFEST_AUTHOR_MAX	63
 constant MANIFEST_CERTIFICATES_MAX	2
 constant MANIFEST_CERTIFICATE_MAX_BYTES	4096
@@ -553,6 +558,21 @@ field host_text_ink_t.end_x type	int32_t
 field host_text_ink_t.first_x offset	0
 field host_text_ink_t.first_x size	4
 field host_text_ink_t.first_x type	int32_t
+field host_xml_field_t.capacity offset	34
+field host_xml_field_t.capacity size	2
+field host_xml_field_t.capacity type	uint16_t
+field host_xml_field_t.flags offset	36
+field host_xml_field_t.flags size	1
+field host_xml_field_t.flags type	uint8_t
+field host_xml_field_t.name offset	0
+field host_xml_field_t.name size	32
+field host_xml_field_t.name type	char[32]
+field host_xml_field_t.offset offset	32
+field host_xml_field_t.offset size	2
+field host_xml_field_t.offset type	uint16_t
+field host_xml_field_t.reserved offset	37
+field host_xml_field_t.reserved size	3
+field host_xml_field_t.reserved type	uint8_t[3]
 field sys_number_t.least offset	4
 field sys_number_t.least size	4
 field sys_number_t.least type	int32_t
@@ -657,6 +677,7 @@ import ui_text_height	i(i) grant=none
 import ui_text_width	i(iii) grant=none
 import ui_value_width	i(iiiii) grant=none
 import xml_attr	i(iiiiiiii) grant=none
+import xml_attrs	i(iiiiiii) grant=none
 import xml_child	i(iiiiii) grant=none
 macro BTN_ACTION_OF	(event) ((event) & 3)
 macro BTN_EVENT	(button, action) ((button) << 2 | (action))
@@ -667,6 +688,7 @@ since gfx_draw_map_radius	0.1.94
 since gfx_map_point	0.1.94
 since screen_set_inverted	0.1.54
 since xml_attr	0.1.100
+since xml_attrs	0.1.100
 since xml_child	0.1.100
 struct host_answer_info_t align	4
 struct host_answer_info_t size	476
@@ -694,5 +716,7 @@ struct host_text_argument_t align	4
 struct host_text_argument_t size	12
 struct host_text_ink_t align	4
 struct host_text_ink_t size	8
+struct host_xml_field_t align	2
+struct host_xml_field_t size	40
 struct sys_number_t align	4
 struct sys_number_t size	12

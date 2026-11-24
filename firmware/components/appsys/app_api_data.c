@@ -450,3 +450,23 @@ HOST_FUNCTION(xml_attr)
     }
     m3ApiReturn(xml_query_attr(text, length, node, name, key_length, out, capacity, label));
 }
+
+HOST_FUNCTION(xml_attrs)
+{
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(uint32_t, document);
+    m3ApiGetArg(int32_t, length);
+    m3ApiGetArg(int32_t, node);
+    m3ApiGetArg(uint32_t, table);
+    m3ApiGetArg(int32_t, count);
+    m3ApiGetArg(uint32_t, output);
+    m3ApiGetArg(int32_t, capacity);
+    if (count < 1 || count > 16 || table % _Alignof(host_xml_field_t)) {
+        m3ApiReturn(-1);
+    }
+    const char *doc = (const char *)app_memory_at(runtime, _mem, document, length);
+    const host_xml_field_t *fields = (const host_xml_field_t *)app_memory_at(
+        runtime, _mem, table, count * (int32_t)sizeof *fields);
+    char *out = (char *)app_memory_to_fill(runtime, _mem, output, capacity);
+    m3ApiReturn(xml_query_attrs(doc, length, node, fields, count, out, capacity));
+}

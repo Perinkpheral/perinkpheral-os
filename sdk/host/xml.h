@@ -31,3 +31,31 @@ HOST_IMPORT(xml_child, int32_t xml_child(const char *doc, int32_t length, int32_
 HOST_IMPORT(xml_attr, int32_t xml_attr(const char *doc, int32_t length, int32_t node,
                                        const char *name, int32_t name_length, char *out,
                                        int32_t capacity, int32_t label));
+
+/* A constant projection, shared by Wasm and native SDK checks. Names must be
+ * NUL-terminated within 32 bytes. Offsets are relative to the output buffer.
+ * Each capacity includes its terminator. Use distinct names and disjoint
+ * output ranges. Reserved bytes must be zero. */
+#define HOST_XML_LABEL 1
+#define HOST_XML_REQUIRED 2
+#define HOST_SINCE_HOST_XML_LABEL "0.1.100"
+#define HOST_SINCE_HOST_XML_REQUIRED "0.1.100"
+typedef struct host_xml_field {
+    char name[32];
+    uint16_t offset;
+    uint16_t capacity;
+    uint8_t flags;
+    uint8_t reserved[3];
+} host_xml_field_t;
+HOST_LAYOUT(host_xml_field_t, 40);
+
+/* Scan once for 1..16 fields of the same node. Returns bit i for every
+ * present field, including an empty value. Missing optional fields produce
+ * empty strings. REQUIRED demands a present nonempty value. LABEL uses the
+ * shortening rule of xml_attr. Document, table and output must be mutually
+ * disjoint; the table must be aligned to 2 bytes. Invalid input, duplicate
+ * keys, or an unsuccessful field leaves the entire output untouched. */
+#define HOST_SINCE_xml_attrs "0.1.100"
+HOST_IMPORT(xml_attrs, int32_t xml_attrs(const char *doc, int32_t length, int32_t node,
+                                         const host_xml_field_t *fields, int32_t count,
+                                         char *out, int32_t capacity));
