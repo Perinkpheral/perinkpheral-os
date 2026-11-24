@@ -17,11 +17,54 @@ import java.nio.file.Files
 object AppCheckTest {
     /** One line of the contract broken in the specimen, and the capability that has to notice. */
     private class Break(val capability: String, val what: String, val edits: List<Pair<String, String>>, val saying: String,
-                        val manifestEdits: List<Pair<String, String>> = emptyList())
+                        val manifestEdits: List<Pair<String, String>> = emptyList(), val checkPatch: Map<String, Any?> = emptyMap())
 
     private val BREAKS = listOf(
+        Break("network", "a streamed protocol parses an unbounded integer",
+            listOf("        arriving[arriving_length] = '\\0';\n        keep_text(\"note\"" to
+                "        arriving[arriving_length] = '\\0';\n" +
+                "        volatile int32_t number = 0;\n" +
+                "        for (int32_t at = 0; at < arriving_length; at++) {\n" +
+                "            if (arriving[at] >= '0' && arriving[at] <= '9') {\n" +
+                "                number = number * 10 + arriving[at] - '0';\n            }\n        }\n" +
+                "        keep_text(\"note\""), "app_on_data"),
+        Break("sessions", "a refused session allocation is ignored",
+            listOf("        log_write(HOST_LOG_ERROR, \"Session error.\", 14);" to ""), "session-refusal:"),
+        Break("store", "a button publishes a value whose save failed",
+            listOf("            count--;" to "            /* ignored refusal */"), "button-save:"),
+        Break("store", "unchanged answers rewrite freshness as time advances",
+            listOf("    rate_limit(http_status);\n    char picked" to
+                "    int64_t seen = time_now();\n    kv_set(\"seen\", 4, &seen, sizeof seen);\n    rate_limit(http_status);\n    char picked"),
+            "unchanged answers with elapsed time"),
+        Break("timers", "alarm allocation refusal is ignored",
+            listOf("schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to
+                "alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0);"), "alarm-refusal:"),
+        Break("notices", "a rejected notice consumes its reservation",
+            listOf("        kv_set(\"told\", 4, &told, sizeof told);" to ""), "notice-queue full then accepting"),
+        Break("notices", "a failed receipt after posting is lost on unload",
+            listOf("if (kv_set(\"told\", 4, &reservation, sizeof reservation) != HOST_OK)" to "if (false)",
+                "    if (notification_post(&notice) != HOST_OK) {\n        kv_set(\"told\", 4, &told, sizeof told);\n        alarm_set(1, 1);\n    }" to
+                "    if (notification_post(&notice) != HOST_OK) {\n        alarm_set(1, 1);\n    } else {\n        kv_set(\"told\", 4, &reservation, sizeof reservation);\n    }"), "notice-receipt refused"),
+        Break("network", "Retry-After does not gate new requests",
+            listOf("    if (time_now() < retry_until) {\n        return;\n    }" to ""), "retry-after:"),
+        Break("network", "wrong scalar types replace a good value",
+            listOf("length < 10 && picked[0] >= '0' && picked[0] <= '9'" to "length <= HOST_VALUE_MAX"), "response wrong-types"),
+        Break("network", "an empty or missing list overwrites good content",
+            listOf("    if (answer_count(1) != 1 || row_length <= 0 || row_length >= HOST_VALUE_MAX) {\n        return;" to
+                "    if (answer_count(1) != 1 || row_length <= 0 || row_length >= HOST_VALUE_MAX) {\n        keep_text(\"value\", value, \"bad\", &value_is_unsaved);\n        return;"), "response empty-lists"),
+        Break("network", "null picked values are displayed literally",
+            listOf("length < 10 && picked[0] >= '0' && picked[0] <= '9'" to "length <= HOST_VALUE_MAX",
+                "    if (is_same(row, \"null\")) {\n        return;\n    }" to ""), "response nulls"),
+        Break("network", "numeric overflow is accepted as data",
+            listOf("length < 10" to "length <= HOST_VALUE_MAX"), "response numeric-overflow"),
+        Break("network", "a picker-truncated name looks complete",
+            listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX"), "response long-values"),
+        Break("clock", "future clock uses the current date's offset",
+            listOf("time_local_at(1806321600LL, &future);" to
+                "time_local_at(1806321600LL, &future);\n    int64_t local_seconds = 1806321600LL + time_zone_offset();\n    future.hour = (int32_t)(local_seconds / 3600 % 24);"), "clock event"),
+
         Break("sessions", "the page is not kept in the session",
-            listOf("    session_set(&page, sizeof page);\n" to ""), "back from the stack"),
+            listOf("    int32_t saved = session_set(&page, sizeof page);" to "    int32_t saved = HOST_OK;"), "back from the stack"),
         Break("sessions", "a handler never returns",
             listOf("void app_on_back(void)\n{\n" to "static volatile int forever = 1;\n\nvoid app_on_back(void)\n{\n    while (forever) { }\n"),
             "did not return in 3 s"),
@@ -33,11 +76,11 @@ object AppCheckTest {
             listOf("    if (is_same(kept, text) && !*is_unsaved) {" to "    if (is_same(kept, text)) {"),
             "not saved when the same answer comes again"),
         Break("timers", "the timer is set by a press and not again in app_on_focus()",
-            listOf("    timer_set(TICK_TIMER, TICK_MS);\n    alarm_set_every" to "    alarm_set_every",
+            listOf("    timer_set(TICK_TIMER, TICK_MS);\n    schedule_failed = alarm_set_every" to "    schedule_failed = alarm_set_every",
                 "    if (page == 0) {\n        page = 1;" to "    timer_set(TICK_TIMER, TICK_MS);\n    if (page == 0) {\n        page = 1;"),
             "set again in app_on_focus()"),
         Break("timers", "app_on_updated() does not set the alarm again",
-            listOf("void app_on_updated(void)\n{\n    alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0);" to "void app_on_updated(void)\n{"),
+            listOf("void app_on_updated(void)\n{\n    schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to "void app_on_updated(void)\n{"),
             "app_on_updated() sets them again"),
         Break("network", "HOST_DATA_FAILED keeps the pieces that came before it",
             listOf("        arriving_length = 0;\n        return;\n    }\n    if ((flags & HOST_DATA_FIRST)" to
@@ -47,7 +90,7 @@ object AppCheckTest {
             listOf("    if ((flags & HOST_DATA_LAST) != 0) {\n        arriving[arriving_length] = '\\0';" to
                 "    {\n        arriving[arriving_length] = '\\0';"), "stops half way"),
         Break("network", "the buffer of a note is shorter than the note",
-            listOf("static char arriving[TEXT_BYTES];" to "static char arriving[16];"), "stopped in app_on_data"),
+            listOf("static char arriving[TEXT_BYTES];" to "static char arriving[16];"), "app_on_data"),
         Break("drawing", "a button's handler draws",
             listOf("    if (event != BTN_OK_PRESSED) {\n        return;\n    }\n" to
                 "    if (event != BTN_OK_PRESSED) {\n        return;\n    }\n    gfx_draw_text(0, 0, HOST_FONT_TEXT, \"x\", 1);\n"),
@@ -143,7 +186,7 @@ object AppCheckTest {
             listOf("void app_on_focus(void)\n{\n" to "void app_on_focus(void)\n{\n    alarm_set_at(1, HOST_TIME_MAX);\n",
                 "void app_on_updated(void)\n{\n" to "void app_on_updated(void)\n{\n    alarm_set_at(1, HOST_TIME_MAX);\n",
                 "void app_on_alarm(int32_t id)\n{\n" to "void app_on_alarm(int32_t id)\n{\n    if (id == 1) {\n        static volatile char *nowhere;\n        nowhere[0] = 1;\n    }\n"),
-            "stopped in app_on_alarm"),
+            "app_on_alarm"),
         Break("drawing", "app_on_draw() draws only the reason of an answer that came, which is nothing",
             listOf("void app_on_draw(void)\n{\n" to "void app_on_draw(void)\n{\n    ui_draw_reason(200);\n    return;\n"),
             "drew nothing"),
@@ -154,8 +197,8 @@ object AppCheckTest {
             listOf("void app_on_draw(void)\n{\n" to "void app_on_draw(void)\n{\n    ui_draw_actions(\"\", 0, \"\", 0);\n    return;\n"),
             "drew nothing"),
         Break("store", "a value larger than the store takes is written",
-            listOf("        count++;\n        kv_set(\"count\", 5, &count, sizeof count);" to
-                "        count++;\n        static char large[HOST_KV_TOTAL_MAX];\n        kv_set(\"count\", 5, large, sizeof large);"),
+            listOf("        count++;" to
+                "        static char large[HOST_KV_TOTAL_MAX];\n        kv_set(\"large\", 5, large, sizeof large);\n        count++;"),
             "over the limits"),
     )
 
@@ -216,6 +259,11 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("timers", "a declared custom visible schedule error",
+            listOf("\"Schedule error.\", 15" to "\"Schedule unavailable.\", 21"), "",
+            checkPatch = mapOf("failure_text" to listOf("Schedule unavailable."))),
+        Break("network", "a documented response-shape exception remains visible in the report", emptyList(), "",
+            checkPatch = mapOf("exceptions" to mapOf("responses.empty-lists" to "Empty is valid for this endpoint."))),
         Break("timers", "a timer as long as one may be", listOf("#define TICK_MS        1000" to "#define TICK_MS        2147483647"), ""),
         Break("timers", "a countdown of three seconds, over by the time a late tick comes",
             listOf("void app_on_timer(int32_t id)\n{\n    if (id == TICK_TIMER) {" to
@@ -256,6 +304,11 @@ object AppCheckTest {
             println("app-check: no wasi-sdk (WASI_SDK_PATH) or no C compiler: the checks themselves were not run")
             return
         }
+        val variants = ResponseMutations.make("{\"value\":21,\"rows\":[{\"name\":\"row\"}]}")
+        check(variants.map { it.kind }.toSet() == setOf("truncated", "wrong-types", "empty-lists", "nulls", "missing-record", "long-values", "numeric-overflow", "picked-null"))
+        check(ResponseMutations.make("ordinary text").isEmpty())
+        check(ResponseMutations.make("COUNT=7").single().body == "COUNT=9223372036854775807")
+        check(variants.filter { it.kind != "truncated" }.all { runCatching { dev.perinkpheral.core.Json.parse(it.body) }.isSuccess })
         pinned(root, wasi)
         val specimen = File(root, "sdk/check/apps/specimen")
         val said = ArrayList<String>()
@@ -295,6 +348,19 @@ object AppCheckTest {
                     if (mockCase == "missing") check(report.failed.any { line -> line.details.any { "answers.json" in it } })
                 }
             }
+            val invalidDeclarations = listOf(
+                "{\"exceptions\":{\"responses.empty-lists\":\"\"}}",
+                "{\"exceptions\":{\"unknown\":\"reason\"}}",
+                "{\"exceptions\":false}",
+                "{\"failure_text\":[\"\"]}",
+                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}"
+            )
+            invalidDeclarations.forEachIndexed { index, declaration ->
+                val copy = File(scratch, "declaration-$index/specimen")
+                specimen.copyRecursively(copy)
+                File(copy, "test/check.json").writeText(declaration)
+                check(checker.run(copy, only = "network").failed.isNotEmpty()) { "accepted invalid declaration: $declaration" }
+            }
             val system = File(scratch, "system/specimen")
             specimen.copyRecursively(system)
             val manifest = File(system, "manifest.json")
@@ -313,6 +379,13 @@ object AppCheckTest {
                     code = code.replace(from, to)
                 }
                 source.writeText(code)
+                if (broken.checkPatch.isNotEmpty()) {
+                    val checkFile = File(copy, "test/check.json")
+                    val kept = (dev.perinkpheral.core.Json.parse(checkFile.readText()) as Map<*, *>).entries
+                        .associate { it.key.toString() to it.value }.toMutableMap()
+                    kept.putAll(broken.checkPatch)
+                    checkFile.writeText(dev.perinkpheral.core.Json.write(kept))
+                }
                 val manifest = File(copy, "manifest.json")
                 var described = manifest.readText()
                 for ((from, to) in broken.manifestEdits) {
@@ -334,6 +407,9 @@ object AppCheckTest {
                 val report = checker.run(copied(BREAKS.size + number, fine).parentFile, only = fine.capability)
                 val line = report.lines.single()
                 check(line.state == AppCheck.State.OK) { "${fine.what}: ${line.details.joinToString("\n")}" }
+                if (fine.checkPatch.containsKey("exceptions")) {
+                    check(line.details.any { "exception responses.empty-lists" in it }) { "exception was not reported" }
+                }
             }
         } finally {
             scratch.deleteRecursively()

@@ -26,8 +26,11 @@
 
 static const char NOTE_URL[] = "https://example.test/note";
 
+static bool schedule_failed;
 static int32_t page;                /* the session */
 static int32_t count;               /* the store, "count" */
+static char row_name[HOST_VALUE_MAX + 1];
+static bool row_is_unsaved;
 static char value[HOST_VALUE_MAX + 1]; /* the store, "value" */
 static char note[TEXT_BYTES];       /* the store, "note" */
 static char arriving[TEXT_BYTES];   /* a note not whole yet */
@@ -69,14 +72,31 @@ static void keep_text(const char *key, char *kept, const char *text, bool *is_un
     screen_redraw(HOST_REDRAW_NORMAL);
 }
 
+static int64_t retry_until;
+
+static void rate_limit(int32_t status)
+{
+    if (status == 429) {
+        host_answer_info_t info = { 0 };
+        answer_info(&info, sizeof info);
+        retry_until = time_now() + info.retry_after;
+        kv_set("retry", 5, &retry_until, sizeof retry_until);
+    }
+}
+
 static void ask_note(void)
 {
+    if (time_now() < retry_until) {
+        return;
+    }
     http_send(NOTE_REQUEST, HOST_HTTP_GET, NOTE_URL, length_of(NOTE_URL), NULL, 0, NULL, 0);
 }
 
 void app_on_load(void)
 {
+    kv_get("retry", 5, &retry_until, sizeof retry_until);
     kv_get("count", 5, &count, sizeof count);
+    read_text("row", row_name, sizeof row_name);
     read_text("value", value, sizeof value);
     read_text("note", note, sizeof note);
 }
@@ -85,22 +105,48 @@ void app_on_focus(void)
 {
     session_get(&page, sizeof page);
     timer_set(TICK_TIMER, TICK_MS);
-    alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0);
+    schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;
     ask_note();
 }
 
 void app_on_blur(void)
 {
-    session_set(&page, sizeof page);
+    int32_t saved = session_set(&page, sizeof page);
+    if (saved != HOST_OK) {
+        log_write(HOST_LOG_ERROR, "Session error.", 14);
+    }
 }
 
 void app_on_updated(void)
 {
-    alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0);
+    schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;
+}
+
+static void post_due_notice(void)
+{
+    int32_t told = 0;
+    kv_get("told", 4, &told, sizeof told);
+    if (told != 0) {
+        return;
+    }
+    int32_t reservation = 1;
+    if (kv_set("told", 4, &reservation, sizeof reservation) != HOST_OK) {
+        alarm_set(1, 1);
+        return;
+    }
+    host_notice_t notice = { .icon = HOST_ICON_NONE };
+    notice.first[0] = 'S';
+    if (notification_post(&notice) != HOST_OK) {
+        kv_set("told", 4, &told, sizeof told);
+        alarm_set(1, 1);
+    }
 }
 
 void app_on_alarm(int32_t id)
 {
+    if (id == 1 || id == ASK_ALARM) {
+        post_due_notice();
+    }
     if (id == ASK_ALARM) {
         ask_note();
     }
@@ -122,7 +168,9 @@ void app_on_button(int32_t event)
         page = 1;
     } else {
         count++;
-        kv_set("count", 5, &count, sizeof count);
+        if (kv_set("count", 5, &count, sizeof count) != HOST_OK) {
+            count--;
+        }
     }
     screen_redraw(HOST_REDRAW_NORMAL);
 }
@@ -139,19 +187,31 @@ void app_on_back(void)
 
 void app_on_picked(int32_t request, int32_t http_status)
 {
+    rate_limit(http_status);
     char picked[HOST_VALUE_MAX + 1];
     if (request != 0 || http_status != 200) {
         return; /* what it shows stays until an answer comes whole */
     }
+    char row[HOST_VALUE_MAX + 1];
+    int32_t row_length = answer_element(1, 0, row, sizeof row - 1);
+    if (answer_count(1) != 1 || row_length <= 0 || row_length >= HOST_VALUE_MAX) {
+        return;
+    }
+    row[row_length] = '\0';
+    if (is_same(row, "null")) {
+        return;
+    }
     int32_t length = answer_value(0, picked, sizeof picked - 1);
-    if (length > 0) {
+    if (length > 0 && length < 10 && picked[0] >= '0' && picked[0] <= '9') {
         picked[length] = '\0';
         keep_text("value", value, picked, &value_is_unsaved);
+        keep_text("row", row_name, row, &row_is_unsaved);
     }
 }
 
 void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t http_status)
 {
+    rate_limit(http_status);
     if (request != NOTE_REQUEST) {
         return;
     }
@@ -175,8 +235,17 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
 void app_on_draw(void)
 {
     int32_t line_height = gfx_font_height(HOST_FONT_TEXT);
+    if (schedule_failed) {
+        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, "Schedule error.", 15);
+    }
+    host_local_time_t future;
+    time_local_at(1806321600LL, &future);
+    char future_text[6] = { (char)('0' + future.hour / 10), (char)('0' + future.hour % 10), ':',
+                           (char)('0' + future.minute / 10), (char)('0' + future.minute % 10), '\0' };
+    gfx_draw_text(MARGIN, 220, HOST_FONT_SMALL, future_text, 5);
     if (page == 0) {
         gfx_draw_text(MARGIN, MARGIN, HOST_FONT_TEXT, value, length_of(value));
+        gfx_draw_text(MARGIN, 160, HOST_FONT_SMALL, row_name, length_of(row_name));
         gfx_draw_text(MARGIN, MARGIN + line_height, HOST_FONT_TEXT, note, length_of(note));
         /* A frame that shows something before any answer came: a blank one is a fault. */
         gfx_draw_text(MARGIN, MARGIN + 2 * line_height, HOST_FONT_SMALL, "Specimen", 8);

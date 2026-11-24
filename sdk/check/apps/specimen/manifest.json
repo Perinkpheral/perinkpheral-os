@@ -7,7 +7,7 @@
   "abi": 3,
   "fullscreen": false,
   "polls": [
-    { "url": "https://example.test/now?place={{place}}", "every": 60, "pick": ["value"] }
+    { "url": "https://example.test/now?place={{place}}", "every": 60, "pick": ["value", "rows[*].name"] }
   ],
   "hosts": ["example.test"],
   "settings": [

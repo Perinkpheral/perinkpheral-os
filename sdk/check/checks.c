@@ -8,7 +8,7 @@
  * standin_subject: the manifest, and the answers and the store kept beside
  * the application for its checks.
  *
- *     checks <capability>...      sessions store timers network drawing
+ *     checks <capability>...      sessions store timers network drawing notices clock
  *
  * How "the same" is told without knowing the application: by the picture -
  * what app_on_draw() asked the host to draw - and by how many presses of
@@ -34,18 +34,19 @@
 /* Made by the tools: the application's handlers into standin_handlers. */
 extern void standin_subject_handlers(void);
 
-typedef enum { SESSIONS, STORE, TIMERS, NETWORK, DRAWING, CAPABILITY_COUNT } capability_t;
-static const char *const CAPABILITY_NAMES[CAPABILITY_COUNT] = { "sessions", "store", "timers", "network", "drawing" };
+typedef enum { SESSIONS, STORE, TIMERS, NETWORK, DRAWING, NOTICES, CLOCK, CAPABILITY_COUNT } capability_t;
+static const char *const CAPABILITY_NAMES[CAPABILITY_COUNT] = { "sessions", "store", "timers", "network", "drawing", "notices", "clock" };
 
-#define PROBLEMS_MAX  10
+#define PROBLEMS_MAX  40
 #define PROBLEM_BYTES 480
+#define NOTES_MAX     16
 
 static struct {
     bool is_asked;
     int  checks;
     int  problem_count, problems_unsaid;
     char problems[PROBLEMS_MAX][PROBLEM_BYTES];
-    char notes[4][PROBLEM_BYTES];
+    char notes[NOTES_MAX][PROBLEM_BYTES];
     int  note_count;
 } results[CAPABILITY_COUNT];
 
@@ -87,9 +88,41 @@ static void note(capability_t capability, const char *format, ...)
             return;
         }
     }
-    if (results[capability].note_count < 4) {
+    if (results[capability].note_count < NOTES_MAX) {
         strcpy(results[capability].notes[results[capability].note_count++], text);
     }
+}
+
+/* Exceptions are declared beside the application, with a reason printed in the report. */
+static bool excepted(const char *name)
+{
+    for (int32_t index = 0; index < standin_subject.exception_count; index++) {
+        const standin_pair_t *exception = &standin_subject.exceptions[index];
+        if (strcmp(exception->key, name) == 0) {
+            note(checking, "exception %s: %s", name, exception->value);
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool visible_failure(void)
+{
+    standin_t *host = standin();
+    if (host->visible_failure) {
+        return true;
+    }
+    static const char *const STANDARD[] = { "Storage error.", "Not enough space.", "Could not save.", "Schedule error." };
+    for (int32_t index = 0; index < (int32_t)(sizeof STANDARD / sizeof STANDARD[0]) + standin_subject.failure_text_count; index++) {
+        const char *text = index < (int32_t)(sizeof STANDARD / sizeof STANDARD[0]) ? STANDARD[index]
+            : standin_subject.failure_text[index - (int32_t)(sizeof STANDARD / sizeof STANDARD[0])];
+        if (strstr(host->draw_text, text) != NULL || strstr(host->status_text[0], text) != NULL ||
+            strstr(host->status_text[1], text) != NULL || strstr(host->header_text[0], text) != NULL ||
+            strstr(host->header_text[1], text) != NULL) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* ---- Answers kept beside the application ---- */
@@ -98,6 +131,7 @@ typedef struct {
     int32_t        status;
     const uint8_t *body;
     int32_t        length;
+    const char    *headers;
 } answer_t;
 
 static bool is_answered_by(const char *address, const char *url)
@@ -128,6 +162,7 @@ static bool answer_for(const char *url, answer_t *answer)
             lengths[index] = (int32_t)fread(bodies[index], 1, HOST_ANSWER_MAX, file);
             fclose(file);
         }
+        answer->headers = kept->headers;
         answer->status = kept->status;
         answer->body = kept->file != NULL ? bodies[index] : (const uint8_t *)kept->body;
         answer->length = kept->file != NULL ? lengths[index] : (int32_t)strlen(kept->body);
@@ -145,6 +180,9 @@ typedef enum {
     ROUND_CUT,         /* every streamed answer stops half way: no LAST, no FAILED */
     ROUND_FAILED_LATE, /* half of every streamed answer, then HOST_DATA_FAILED */
     ROUND_STATUS,      /* every request fails with the HOST_FAILED_* in `size` */
+    ROUND_CACHE,
+    ROUND_MUTATION,
+    ROUND_TARGET_FAILURE,
     ROUND_HTTP,        /* every request is answered with the HTTP status in `size` and no data of use */
 } round_kind_t;
 
@@ -170,6 +208,9 @@ typedef struct {
     bool           has_alarms;     /* every alarm that waits comes */
     int64_t        alarms_late_ms; /* so much after their time */
     clock_change_t clock;
+    int32_t        refuse_after_press; /* 1-based: a refusal of writes begins before this press */
+    bool           retry_events;
+    bool           recover_alarms;
     int32_t        refusal;        /* a HOST_ERR_*: what every write answers while the first round arrives */
     round_t        rounds[ROUNDS_MAX];
 } scene_t;
@@ -191,7 +232,8 @@ enum {
     MARK_UNANSWERED,    /* requests no answer is kept for */
     MARK_DRAWN_NOW,     /* what the instance would draw at its end, drawn where nothing of it is kept */
     MARK_ROUND_PICTURE, /* and the three after it: after each round */
-    MARK_COUNT = MARK_ROUND_PICTURE + ROUNDS_MAX
+    MARK_VISIBLE_FAILURE = MARK_ROUND_PICTURE + ROUNDS_MAX,
+    MARK_COUNT
 };
 
 #define DEPTH_MAX        12
@@ -268,6 +310,9 @@ static void back_out(void *context)
     host->marks[MARK_DEPTH] = host->is_leaving ? (uint64_t)presses : NEVER_LEAVES;
 }
 
+static int32_t backoff_seconds = 120;
+static const standin_mutation_t *mutation;
+
 static void deliver(int32_t request, int32_t item, bool is_picked, const char *url, bool is_ready, bool is_permitted,
                     const round_t *round, bool is_head)
 {
@@ -282,7 +327,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         status = HOST_FAILED_NOT_ALLOWED;
     } else if (round->kind == ROUND_HTTP) {
         static const char UNAVAILABLE[] = "Service Unavailable";
-        answer = (answer_t){ round->size, (const uint8_t *)UNAVAILABLE, (int32_t)sizeof UNAVAILABLE - 1 };
+        answer = (answer_t){ round->size, (const uint8_t *)UNAVAILABLE, (int32_t)sizeof UNAVAILABLE - 1, NULL };
         status = round->size;
     } else if (answer_for(url, &answer)) {
         status = answer.status;
@@ -290,6 +335,35 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         host->marks[MARK_UNANSWERED]++;
         standin_note("no answer is kept for %s", url);
         status = HOST_FAILED_NO_ANSWER;
+    }
+    host->retry_after = 0;
+    snprintf(host->response_headers, sizeof host->response_headers, "%s", answer.headers != NULL ? answer.headers : "");
+    if (round->kind == ROUND_CACHE) {
+        snprintf(host->response_headers, sizeof host->response_headers, "Cache-Control: max-age=60");
+    }
+    if (round->kind == ROUND_HTTP && status == 429) {
+        host->retry_after = backoff_seconds;
+        host->saw_rate_limit = true;
+        host->retry_until_ms = host->uptime_ms + (int64_t)backoff_seconds * 1000;
+        snprintf(host->response_headers, sizeof host->response_headers, "Retry-After: %d", backoff_seconds);
+    }
+    if (mutation != NULL && (round->kind == ROUND_MUTATION || round->kind == ROUND_TARGET_FAILURE) &&
+        is_answered_by(mutation->address, url)) {
+        host->mutation_deliveries++;
+        if (round->kind == ROUND_TARGET_FAILURE) {
+            status = HOST_FAILED_NO_ANSWER;
+        } else {
+            static uint8_t bytes[HOST_ANSWER_MAX];
+            FILE *file = fopen(mutation->file, "rb");
+            if (file == NULL) {
+                fprintf(stderr, "checks: cannot read %s\n", mutation->file);
+                exit(2);
+            }
+            answer.length = (int32_t)fread(bytes, 1, sizeof bytes, file);
+            fclose(file);
+            answer.body = bytes;
+            status = 200;
+        }
     }
     /* An answer that stops is some pieces and then nothing: of a request that
      * failed there are no pieces, and Perinkpheral OS reads an answer it picks
@@ -473,7 +547,11 @@ static void scene_run(void *context)
     if (scene->has_data) {
         answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });
     }
+    int32_t press_number = 0;
     for (const char *key = scene->presses; key != NULL && *key != '\0' && !host->is_leaving; key++) {
+        if (++press_number == scene->refuse_after_press) {
+            host->refuse_writes = scene->refusal;
+        }
         press(*key);
     }
     /* The presses are shown before anything else comes, as the panel shows them. */
@@ -505,8 +583,9 @@ static void scene_run(void *context)
                       : host->now + (scene->clock == CLOCK_FORWARD ? SECONDS_PER_DAY : -SECONDS_PER_DAY));
         standin_intent(HOST_INTENT_TIME_CHANGED);
     }
+    uint32_t initial_alarms = standin_alarms();
     for (int32_t id = 0; scene->has_alarms && id < HOST_ALARM_COUNT; id++) {
-        if (standin_alarm_left(id) > 0) {
+        if ((initial_alarms & (1u << id)) != 0 && standin_alarm_left(id) > 0) {
             standin_pass((int64_t)standin_alarm_left(id) * 1000 + scene->alarms_late_ms);
             hand(&(delivery_t){ .alarm = id });
         }
@@ -528,6 +607,34 @@ static void scene_run(void *context)
             host->marks[MARK_ROUND_PICTURE + index] = show();
         }
     }
+    if (scene->retry_events || scene->recover_alarms) {
+        bool warned_before_recovery = visible_failure();
+        host->refuse_alarms = HOST_OK;
+        host->refuse_notices = HOST_OK;
+        host->refuse_receipts = false;
+        host->refuse_writes = HOST_OK;
+        static const int32_t STEPS[] = { 0, 1, 1, 2, 4, 8, 16, 28 };
+        for (size_t step = 0; step < sizeof STEPS / sizeof STEPS[0]; step++) {
+            standin_pass((int64_t)STEPS[step] * 1000);
+            for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
+                if (host->timer_due_ms[id] != 0 && host->timer_due_ms[id] <= host->uptime_ms) {
+                    standin_timer(id);
+                }
+            }
+            for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+                if (standin_alarm_due(id)) {
+                    hand(&(delivery_t){ .alarm = id });
+                }
+            }
+            if (scene->retry_events) {
+                hand(&(delivery_t){ .alarm = -1, .intent = HOST_INTENT_TIME_CHANGED });
+            }
+            if (!scene->is_off_screen) {
+                show();
+            }
+        }
+        host->marks[MARK_VISIBLE_FAILURE] = warned_before_recovery;
+    }
     host->marks[MARK_TIMERS] = standin_timers();
     for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
         if ((uint64_t)standin_timer_left(id) > host->marks[MARK_LONGEST_TIMER]) {
@@ -543,6 +650,7 @@ static void scene_run(void *context)
         return;
     }
     host->marks[MARK_PICTURE] = show();
+    host->marks[MARK_VISIBLE_FAILURE] = host->marks[MARK_VISIBLE_FAILURE] || visible_failure();
     if (standin_handlers.on_draw != NULL && !standin_try(draw_now, NULL)) {
         standin_note("drawing it again: %s", standin_fault());
     }
@@ -560,6 +668,9 @@ static const char *round_words(const round_t *round)
 {
     static char words[64];
     switch (round->kind) {
+    case ROUND_CACHE: snprintf(words, sizeof words, "unchanged with Cache-Control: max-age=60"); break;
+    case ROUND_MUTATION: snprintf(words, sizeof words, "mutated HTTP 200"); break;
+    case ROUND_TARGET_FAILURE: snprintf(words, sizeof words, "target request failed"); break;
     case ROUND_WHOLE: snprintf(words, sizeof words, "a whole answer"); break;
     case ROUND_PIECES: snprintf(words, sizeof words, "an answer in pieces of %d", round->size); break;
     case ROUND_CUT: snprintf(words, sizeof words, "an answer that stops half way"); break;
@@ -766,9 +877,12 @@ static void check_return(const char *way, fire_t fire)
     }
 }
 
+static void check_session_refusal(void);
+
 static void check_sessions(void)
 {
     checking = SESSIONS;
+    check_session_refusal();
     for (int way = 0; way < WAY_COUNT; way++) {
         check_return(WAYS[way], FIRE_NONE);
         check_return(WAYS[way], FIRE_ON_TIME);
@@ -903,6 +1017,10 @@ static void check_refused(int32_t refusal)
     }
 }
 
+static void check_button_refusal(void);
+
+static void check_elapsed_answers(void);
+
 static void check_store(void)
 {
     checking = STORE;
@@ -913,9 +1031,11 @@ static void check_store(void)
         play(&used);
     }
     check_unchanged();
+    check_elapsed_answers();
     check_longest_settings();
     check_refused(HOST_ERR_NO_SPACE);
     check_refused(HOST_ERR_FAILED);
+    check_button_refusal();
 }
 
 /* ---- Timers and alarms ---- */
@@ -1042,10 +1162,13 @@ static void check_alarms(const char *way)
     }
 }
 
+static void check_alarm_refusal(void);
+
 static void check_timers(void)
 {
     checking = TIMERS;
     check_first_time();
+    check_alarm_refusal();
     for (int way = 0; way < WAY_COUNT; way++) {
         check_timers_return(WAYS[way], FIRE_NONE);
         check_timers_return(WAYS[way], FIRE_ON_TIME);
@@ -1057,9 +1180,15 @@ static void check_timers(void)
 
 /* ---- Network: an answer however it arrives ---- */
 
+static void check_responses(void);
+static void check_backoff(void);
+
 static void check_network(void)
 {
     checking = NETWORK;
+    bool deferred_recovery = excepted("network.recovery");
+    check_responses();
+    check_backoff();
     standin_reset();
     scene_t whole = { .rounds = { { ROUND_WHOLE, 0, 0 } } };
     if (!play(&whole)) {
@@ -1101,7 +1230,7 @@ static void check_network(void)
         expect(NETWORK, mark(MARK_ROUND_PICTURE) == after_failure,
                "%s: after the failure it shows another picture than after a request that failed with no pieces",
                told(&failed_late));
-        expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered,
+        expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered || deferred_recovery,
                "%s: after the whole answer it shows another picture than after a whole answer alone", told(&failed_late));
     }
     standin_reset();
@@ -1120,7 +1249,7 @@ static void check_network(void)
         standin_reset();
         scene_t refused = { .rounds = { { ROUND_STATUS, status, 0 }, { ROUND_WHOLE, 0, 0 } } };
         if (play(&refused)) {
-            expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered,
+            expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered || deferred_recovery,
                    "%s: after the whole answer it shows another picture than after a whole answer alone", told(&refused));
         }
     }
@@ -1129,7 +1258,7 @@ static void check_network(void)
         standin_reset();
         scene_t unwell = { .rounds = { { ROUND_HTTP, UNWELL[index], 0 }, { ROUND_WHOLE, 0, 0 } } };
         if (play(&unwell)) {
-            expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered,
+            expect(NETWORK, mark(MARK_ROUND_PICTURE + 1) == answered || deferred_recovery,
                    "%s: after the whole answer it shows another picture than after a whole answer alone", told(&unwell));
         }
     }
@@ -1180,7 +1309,7 @@ static void check_network(void)
         standin_reset();
         scene_t then = { .is_off_screen = true, .rounds = { { ROUND_WHOLE, 0, 0 } } };
         if (play(&ON_SCREEN) && play(&away) && play(&then) && play(&ON_SCREEN)) {
-            expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive,
+            expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive || deferred_recovery,
                    "%s, then a whole answer off the screen, then on the screen: it shows another picture than "
                    "after the whole answer alone", told(&away));
         }
@@ -1204,10 +1333,451 @@ static void check_drawing(void)
     }
 }
 
+static void session_refusal_run(void *context)
+{
+    const char *way = context;
+    standin_load();
+    standin_focus();
+    if (has_polls_or_requests) {
+        answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });
+    }
+    for (const char *key = way; *key != '\0' && !standin()->is_leaving; key++) {
+        press(*key);
+    }
+    shown.is_shown = false;
+    standin()->marks[MARK_PICTURE] = show();
+    standin_refuse_session(HOST_ERR_NO_SPACE);
+    standin_leave();
+    standin()->marks[MARK_TIMERS_BEFORE] = (uint64_t)standin_refused_sessions();
+    standin()->marks[MARK_VISIBLE_FAILURE] = standin_session_failure_reported();
+    standin()->marks[MARK_LEFT] = standin()->is_leaving;
+}
+
+static void check_session_refusal(void)
+{
+    for (int way = 0; way < WAY_COUNT; way++) {
+        standin_reset();
+        results[SESSIONS].checks++;
+        if (!standin_live(session_refusal_run, (void *)WAYS[way])) {
+            problem(SESSIONS, "session-refusal: buttons %s: %s", WAYS[way], standin_fault());
+            stop_if_hung(standin_fault());
+            continue;
+        }
+        if (mark(MARK_TIMERS_BEFORE) == 0 || mark(MARK_LEFT)) {
+            continue;
+        }
+        uint64_t picture = mark(MARK_PICTURE);
+        bool reported = mark(MARK_VISIBLE_FAILURE) != 0;
+        if (play(&ON_SCREEN)) {
+            expect(SESSIONS, reported || mark(MARK_PICTURE) == picture,
+                   "session-refusal: buttons %s, session_set answered HOST_ERR_NO_SPACE: "
+                   "resume state lost without reporting the allocation failure", WAYS[way]);
+        }
+    }
+}
+
+static void elapsed_answers(void *context)
+{
+    (void)context;
+    standin_load();
+    standin_focus();
+    answer_round(&(round_t){ ROUND_CACHE, 0, 0 });
+    ask_again();
+    answer_round(&(round_t){ ROUND_CACHE, 0, 0 });
+    int32_t before = flash_writes();
+    for (int repeat = 0; repeat < 3; repeat++) {
+        standin_pass(60000);
+        ask_again();
+        answer_round(&(round_t){ ROUND_CACHE, 0, 0 });
+    }
+    standin()->marks[MARK_WRITES_AGAIN] = (uint64_t)(flash_writes() - before);
+    standin_leave();
+}
+
+static void check_elapsed_answers(void)
+{
+    if (!has_polls_or_requests) {
+        return;
+    }
+    standin_reset();
+    results[STORE].checks++;
+    if (!standin_live(elapsed_answers, NULL)) {
+        problem(STORE, "unchanged answers with elapsed time: %s", standin_fault());
+        stop_if_hung(standin_fault());
+        return;
+    }
+    expect(STORE, mark(MARK_WRITES_AGAIN) == 0,
+           "unchanged answers with elapsed time and Cache-Control: max-age=60: %d flash writes in three minutes",
+           (int)mark(MARK_WRITES_AGAIN));
+}
+
+/* Refuse only the final press of each path, so Stop/Reset sees a previously saved Start. */
+static void check_button_refusal(void)
+{
+    if (excepted("store.button")) {
+        return;
+    }
+    static const char KEYS[] = "UODBuodb";
+    for (int path = 0; path < WAY_COUNT + 64; path++) {
+        char generated[3] = { 0 };
+        if (path >= WAY_COUNT) {
+            generated[0] = KEYS[(path - WAY_COUNT) / 8];
+            generated[1] = KEYS[(path - WAY_COUNT) % 8];
+        }
+        const char *way = path < WAY_COUNT ? WAYS[path] : generated;
+        if (*way == '\0') {
+            continue;
+        }
+        for (int refusal = 0; refusal < 2; refusal++) {
+            standin_reset();
+            scene_t used = { .has_data = has_polls_or_requests, .presses = way,
+                            .refuse_after_press = (int32_t)strlen(way),
+                            .refusal = refusal == 0 ? HOST_ERR_NO_SPACE : HOST_ERR_FAILED };
+            if (!play(&used) || mark(MARK_LEFT) || standin()->refused_writes == 0) {
+                continue;
+            }
+            uint64_t picture = mark(MARK_PICTURE);
+            bool warned = mark(MARK_VISIBLE_FAILURE) != 0;
+            standin()->refuse_writes = HOST_OK;
+            if (play(&ON_SCREEN)) {
+                expect(STORE, warned || mark(MARK_VISIBLE_FAILURE) || mark(MARK_PICTURE) == picture,
+                       "button-save: %s, last press writes answered %d: after unload the picture silently reverts "
+                       "(no visible failure; declare failure_text for custom copy)", way, used.refusal);
+            }
+        }
+    }
+}
+
+static void check_alarm_refusal(void)
+{
+    if (excepted("timers.refusal")) {
+        return;
+    }
+    for (int way = 0; way < WAY_COUNT; way++) {
+        standin_reset();
+        scene_t used = { .has_data = has_polls_or_requests, .presses = WAYS[way], .recover_alarms = true };
+        if (!play(&used)) {
+            continue;
+        }
+        uint64_t alarms = mark(MARK_ALARMS);
+        standin_reset();
+        standin()->refuse_alarms = HOST_ERR_NO_SPACE;
+        if (!play(&used) || standin()->refused_alarms == 0 || mark(MARK_LEFT)) {
+            continue;
+        }
+        expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || (mark(MARK_ALARMS) & alarms) == alarms,
+               "alarm-refusal: buttons %s, alarm_set* answered HOST_ERR_NO_SPACE: schedule lost after 60 seconds "
+               "of timer retries, with no visible failure", WAYS[way]);
+    }
+}
+
+static bool notice_due(const scene_t *due, bool away, const char *way)
+{
+    if (away) {
+        scene_t setup = { .has_data = has_polls_or_requests, .presses = way };
+        if (!play(&setup) || mark(MARK_LEFT)) {
+            return false;
+        }
+    }
+    return play(due);
+}
+
+static void check_notices(void)
+{
+    checking = NOTICES;
+    int exercised = 0;
+    for (int way = 0; way < WAY_COUNT; way++) {
+        for (int variant = 0; variant < 4; variant++) {
+            int receipt = variant % 2;
+            bool away = variant >= 2;
+            if (excepted(receipt ? "notices.receipt" : "notices.retry")) {
+                continue;
+            }
+            scene_t due = { .has_data = !away && has_polls_or_requests, .presses = away ? NULL : WAYS[way],
+                            .is_off_screen = away, .has_alarms = true, .fire = away ? FIRE_NONE : FIRE_ON_TIME,
+                            .retry_events = true };
+            standin_reset();
+            if (!notice_due(&due, away, WAYS[way])) {
+                continue;
+            }
+            int32_t expected = standin()->notices;
+            /* Lifecycle/data replays at the same moment must not repeat the accepted notice. */
+            scene_t repeat = { .has_data = has_polls_or_requests, .intent = HOST_INTENT_TIME_CHANGED };
+            if (!play(&repeat)) {
+                continue;
+            }
+            int32_t healthy_repeats = standin()->notices - expected;
+            expect(NOTICES, healthy_repeats == 0, "notice-duplicate: unchanged replay after buttons %s posted %d notices", WAYS[way], healthy_repeats);
+            standin_reset();
+            standin()->refuse_notices = receipt ? HOST_OK : HOST_ERR_NO_SPACE;
+            standin()->refuse_receipts = receipt != 0;
+            if (!notice_due(&due, away, WAYS[way])) {
+                continue;
+            }
+            int32_t refused = receipt ? standin()->refused_writes : standin()->refused_notices;
+            if (refused == 0 || expected == 0) {
+                continue;
+            }
+            exercised++;
+            standin()->refuse_notices = HOST_OK;
+            standin()->refuse_receipts = false;
+            standin()->refuse_writes = HOST_OK;
+            if (!play(&repeat)) {
+                continue;
+            }
+            /* Both worlds reach the same time and deliveries. A scheduled new event is not a duplicate. */
+            expect(NOTICES, standin()->notices == expected + healthy_repeats,
+                   "%s %s: buttons %s, %d accepted instead of %d after retry and unload: a due notice was lost or duplicated",
+                   receipt ? "notice-receipt refused" : "notice-queue full then accepting", away ? "off screen" : "on screen", WAYS[way],
+                   standin()->notices, expected + healthy_repeats);
+            int32_t before = standin()->notices;
+            if (play(&repeat)) {
+                expect(NOTICES, standin()->notices - before <= healthy_repeats,
+                       "notice-duplicate: buttons %s, replay after failed %s posted %d more notices", WAYS[way],
+                       receipt ? "receipt write" : "queue admission", standin()->notices - before);
+            }
+        }
+    }
+    if (exercised == 0) {
+        note(NOTICES, "no due notification reached by these inputs: supply a due time, settings and answers in test/check.json");
+    }
+}
+
+static void check_responses(void)
+{
+    int exercised = 0;
+    for (int32_t index = 0; index < standin_subject.mutation_count; index++) {
+        mutation = &standin_subject.mutations[index];
+        char exception[80];
+        snprintf(exception, sizeof exception, "responses.%s", mutation->kind);
+        if (excepted(exception)) {
+            continue;
+        }
+        scene_t bad = { .has_data = true, .rounds = { { ROUND_MUTATION, 0, 0 } } };
+        scene_t failed = bad;
+        failed.rounds[0].kind = ROUND_TARGET_FAILURE;
+        standin_reset();
+        standin()->mutation_deliveries = 0;
+        if (!play(&failed) || standin()->mutation_deliveries == 0) {
+            continue;
+        }
+        uint64_t failure = mark(MARK_PICTURE);
+        standin_reset();
+        scene_t good = { .has_data = true };
+        if (!play(&good)) {
+            continue;
+        }
+        uint64_t picture = mark(MARK_PICTURE);
+        standin_reset();
+        standin()->mutation_deliveries = 0;
+        if (!play(&bad) || standin()->mutation_deliveries == 0) {
+            continue;
+        }
+        exercised++;
+        if (strcmp(mutation->kind, "numeric-tokens") == 0) {
+            continue; /* Raw protocol numbers may validly change the picture: sanitizer safety only. */
+        }
+        /* Long valid strings need not be rejected, but a displayed picker limit must be marked. */
+        if (strcmp(mutation->kind, "long-values") == 0) {
+            char truncated[64];
+            memset(truncated, 'W', sizeof truncated - 1);
+            truncated[sizeof truncated - 1] = '\0';
+            expect(NETWORK, strstr(standin()->draw_text, truncated) == NULL ||
+                   strstr(standin()->draw_text, "...") != NULL || strstr(standin()->draw_text, "\xe2\x80\xa6") != NULL,
+                   "response long-values at %s: a picked 63-byte string is displayed without a truncation marker", mutation->address);
+            continue;
+        }
+        expect(NETWORK, mark(MARK_PICTURE) == picture || mark(MARK_PICTURE) == failure,
+               "response %s at %s (mutation %d): malformed HTTP 200 replaced a good picture; "
+               "neither the retained picture nor its failed-answer picture", mutation->kind, mutation->address, index);
+        /* Check the durable cache too: memory alone must not hide a poisoned saved answer. */
+        if (play(&ON_SCREEN)) {
+            expect(NETWORK, mark(MARK_PICTURE) == picture || mark(MARK_PICTURE) == failure,
+                   "response %s at %s (mutation %d): after unload the good cache was replaced", mutation->kind,
+                   mutation->address, index);
+        }
+    }
+    mutation = NULL;
+    if (exercised == 0) {
+        note(NETWORK, "no generated malformed response reached: supply a matching HTTP 200 mock in test/check.json");
+    }
+}
+
+/* Queue admission is observed, rather than refused by the host: a violating application must fail. */
+static int32_t requests_made(void)
+{
+    int32_t total = standin()->sends;
+    for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+        total += standin()->polls_run[poll];
+    }
+    return total;
+}
+
+static void during_backoff(void *context)
+{
+    (void)context;
+    standin_t *host = standin();
+    standin_load();
+    standin_focus();
+    shown.is_shown = false;
+    show();
+    for (int chain = 0; chain < 2; chain++) {
+        answer_round(&(round_t){ ROUND_HTTP, 429, 0 });
+        standin_intent(HOST_INTENT_NETWORK_UP);
+        standin_intent(HOST_INTENT_TIME_CHANGED);
+        standin_settings();
+        standin_press(BTN_OK);
+        for (int32_t step = 0; step < backoff_seconds - 1; step++) {
+            standin_pass(1000);
+            for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
+                if (host->timer_due_ms[id] != 0 && host->timer_due_ms[id] <= host->uptime_ms) {
+                    standin_timer(id);
+                }
+            }
+            for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+                if (standin_alarm_due(id)) {
+                    standin_alarm(id);
+                }
+            }
+        }
+        if (chain == 0) {
+            standin_pass(1000);
+        }
+    }
+    host->marks[MARK_WRITES_AGAIN] = (uint64_t)host->early_requests;
+    standin_leave();
+}
+
+static void check_backoff(void)
+{
+    static const int32_t DELAYS[] = { 120, 300 };
+    for (size_t delay = 0; delay < sizeof DELAYS / sizeof DELAYS[0]; delay++) {
+        backoff_seconds = DELAYS[delay];
+        standin_reset();
+        standin()->monitor_backoff = true;
+        results[NETWORK].checks++;
+        if (!standin_live(during_backoff, NULL)) {
+            problem(NETWORK, "retry-after: %s", standin_fault());
+            stop_if_hung(standin_fault());
+            continue;
+        }
+        if (!standin()->saw_rate_limit) {
+            note(NETWORK, "no request ready for Retry-After: supply the required settings");
+            continue;
+        }
+        expect(NETWORK, mark(MARK_WRITES_AGAIN) == 0,
+               "retry-after: two HTTP 429s with Retry-After: %d, %d requests queued during cooldown "
+               "by reconnect, clock/settings changes, OK, timers or alarms", backoff_seconds,
+               (int)mark(MARK_WRITES_AGAIN));
+        int32_t before = requests_made();
+        if (play(&ON_SCREEN)) {
+            expect(NETWORK, requests_made() == before,
+                   "retry-after: unload/focus queued %d requests one second before a %d-second cooldown ends",
+                   requests_made() - before, backoff_seconds);
+        }
+    }
+    backoff_seconds = 120;
+}
+
+typedef struct {
+    int64_t boundary;
+    const char *presses;
+} clock_crossing_t;
+
+static void clock_crossing(void *context)
+{
+    const clock_crossing_t *crossing = context;
+    int64_t boundary = crossing->boundary;
+    standin_load();
+    standin_focus();
+    if (has_polls_or_requests) {
+        answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });
+    }
+    for (const char *key = crossing->presses; *key != '\0' && !standin()->is_leaving; key++) {
+        press(*key);
+    }
+    standin()->marks[MARK_LEFT] = standin()->is_leaving;
+    standin_pass(2000);
+    standin_clock(boundary + 1);
+    standin_intent(HOST_INTENT_TIME_CHANGED);
+    for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
+        if (standin()->timer_due_ms[id] != 0 && standin()->timer_due_ms[id] <= standin()->uptime_ms) {
+            standin_timer(id);
+        }
+    }
+    shown.is_shown = false;
+    standin()->marks[MARK_PICTURE] = show();
+    standin_leave();
+}
+
+static void check_clock_crossing(int64_t boundary, int32_t zone, const char *name)
+{
+    static const char *const MENU_WAYS[] = { "DDO", "DDDO", "DDOO", "DDDOO" };
+    int32_t menu_count = (int32_t)(sizeof MENU_WAYS / sizeof MENU_WAYS[0]);
+    for (int32_t way = 0; way < WAY_COUNT + menu_count; way++) {
+        const char *presses = way < WAY_COUNT ? WAYS[way] : MENU_WAYS[way - WAY_COUNT];
+        standin_reset();
+        standin()->active_zone = zone;
+        standin_clock(boundary - 1);
+        clock_crossing_t crossing = { boundary, presses };
+        results[CLOCK].checks++;
+        if (!standin_live(clock_crossing, &crossing)) {
+            problem(CLOCK, "clock boundary %s at %lld, buttons %s: %s", name, (long long)boundary, presses, standin_fault());
+            stop_if_hung(standin_fault());
+            continue;
+        }
+        uint64_t picture = mark(MARK_PICTURE);
+        if (!mark(MARK_LEFT) && play(&ON_SCREEN)) {
+            expect(CLOCK, mark(MARK_PICTURE) == picture,
+                   "clock boundary %s at %lld, buttons %s: live picture differs after reload", name,
+                   (long long)boundary, presses);
+        }
+    }
+}
+
+static void check_clock_boundaries(void)
+{
+    checking = CLOCK;
+    for (int32_t zone = 0; zone < standin_subject.zone_count; zone++) {
+        const standin_zone_t *rules = &standin_subject.zones[zone];
+        /* Both transition directions, including Lord Howe's half-hour change. */
+        for (int32_t index = 0; index < rules->count; index++) {
+            int64_t boundary = rules->changes[index].at;
+            if (boundary < time_known || boundary > time_known + 366LL * SECONDS_PER_DAY) {
+                continue;
+            }
+            check_clock_crossing(boundary, zone + 1, rules->name);
+        }
+        for (int32_t index = 0; index < standin_subject.clock_probe_count; index++) {
+            const standin_clock_probe_t *probe = &standin_subject.clock_probes[index];
+            standin_reset();
+            standin()->active_zone = zone + 1;
+            standin_clock(probe->now);
+            scene_t scene = { .has_data = has_polls_or_requests, .presses = probe->presses };
+            if (play(&scene)) {
+                host_local_time_t local;
+                time_local_at(probe->event, &local);
+                char expected[16];
+                snprintf(expected, sizeof expected, "%02d:%02d", local.hour, local.minute);
+                expect(CLOCK, strstr(standin()->draw_text, expected) != NULL,
+                       "clock event %lld in %s: draw records omit per-date local time %s",
+                       (long long)probe->event, rules->name, expected);
+            }
+        }
+    }
+    static const int64_t YEARS[] = { 1798761600LL, 3786912000LL }; /* 2027 and 2090, UTC */
+    for (size_t index = 0; index < sizeof YEARS / sizeof YEARS[0]; index++) {
+        check_clock_crossing(YEARS[index], 0, "year rollover");
+    }
+    if (standin_subject.clock_probe_count == 0) {
+        note(CLOCK, "no clock_probes declared: transitions/rollover checked for survival and reload equality; event-time content needs an event probe");
+    }
+}
+
 int main(int count, char **arguments)
 {
     static void (*const CHECKS[CAPABILITY_COUNT])(void) = { check_sessions, check_store, check_timers, check_network,
-                                                            check_drawing };
+                                                            check_drawing, check_notices, check_clock_boundaries };
     standin_subject_handlers();
     for (int argument = 1; argument < count; argument++) {
         bool is_known = false;

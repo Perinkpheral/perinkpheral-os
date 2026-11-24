@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -23,6 +24,7 @@
 standin_handlers_t standin_handlers;
 
 static standin_t *world;
+static int32_t session_refusal, session_refused, session_logs_before;
 
 /* memcpy(), of nothing when the length is 0: an application may pass NULL with it, which the
  * C library's memcpy() does not take (glibc declares both pointers never null). */
@@ -66,6 +68,8 @@ static uint32_t next_boot_id(uint32_t previous)
 void standin_reset(void)
 {
     standin_t *host = standin();
+    session_refusal = HOST_OK;
+    session_refused = 0;
     uint32_t boot_id = next_boot_id(host->boot_id);
     memset(host, 0, sizeof *host);
     host->boot_id = boot_id;
@@ -182,12 +186,34 @@ void log_write(int32_t level, const char *text, int32_t length)
 
 /* ---- Session ---- */
 
+void standin_refuse_session(int32_t error)
+{
+    session_refusal = error;
+    session_refused = 0;
+}
+
+int32_t standin_refused_sessions(void)
+{
+    return session_refused;
+}
+
+bool standin_session_failure_reported(void)
+{
+    return session_refused > 0 && standin()->logs > session_logs_before;
+}
+
 int32_t session_set(const void *data, int32_t length)
 {
     standin_t *host = standin();
     /* Attached after app_on_load() returns, and an instance off the screen only reads it. */
     if (data == NULL || length < 0 || length > HOST_SESSION_MAX || host->is_loading || !host->is_session_writable) {
         return HOST_ERR_ARGUMENT;
+    }
+    if (session_refusal != HOST_OK) {
+        if (session_refused++ == 0) {
+            session_logs_before = host->logs;
+        }
+        return session_refusal;
     }
     copy(host->session, data, (size_t)length);
     host->session_length = length;
@@ -659,11 +685,17 @@ static int64_t days_of(int64_t year, int64_t month, int64_t day)
 static int32_t offset_at(int64_t unix_time)
 {
     int32_t offset = world->zone_offset;
-    for (int32_t index = 0; index < standin_subject.zone_change_count; index++) {
-        if (standin_subject.zone_changes[index].at > unix_time) {
+    const standin_zone_t *zone = world->active_zone > 0 ? &standin_subject.zones[world->active_zone - 1] : NULL;
+    const standin_zone_change_t *changes = zone != NULL ? zone->changes : standin_subject.zone_changes;
+    int32_t count = zone != NULL ? zone->count : standin_subject.zone_change_count;
+    if (zone != NULL) {
+        offset = zone->offset;
+    }
+    for (int32_t index = 0; index < count; index++) {
+        if (changes[index].at > unix_time) {
             break;
         }
-        offset = standin_subject.zone_changes[index].offset;
+        offset = changes[index].offset;
     }
     return offset;
 }
@@ -827,6 +859,11 @@ int32_t alarm_set(int32_t id, int32_t seconds)
     if (id < 0 || id >= HOST_ALARM_COUNT || seconds < 0) {
         return refused_timer("alarm_set", id);
     }
+    host->alarm_attempts++;
+    if (seconds > 0 && host->refuse_alarms != HOST_OK) {
+        host->refused_alarms++;
+        return host->refuse_alarms;
+    }
     host->alarms[id] = (standin_alarm_t){ .kind = seconds > 0 ? STANDIN_ALARM_IN : STANDIN_ALARM_NONE,
                                            .due_uptime_ms = host->uptime_ms + (int64_t)seconds * MS_PER_SECOND };
     return HOST_OK;
@@ -838,6 +875,11 @@ int32_t alarm_set_at(int32_t id, int64_t unix_time)
     if (id < 0 || id >= HOST_ALARM_COUNT || !is_moment(unix_time)) {
         return refused_timer("alarm_set_at", id);
     }
+    host->alarm_attempts++;
+    if (true && host->refuse_alarms != HOST_OK) {
+        host->refused_alarms++;
+        return host->refuse_alarms;
+    }
     host->alarms[id] = (standin_alarm_t){ .kind = STANDIN_ALARM_AT, .at = unix_time };
     return HOST_OK;
 }
@@ -848,6 +890,11 @@ int32_t alarm_set_every(int32_t id, int32_t seconds, int32_t first_in)
     if (id < 0 || id >= HOST_ALARM_COUNT || seconds < HOST_ALARM_EVERY_MIN || seconds > HOST_ALARM_EVERY_MAX ||
         first_in < 0 || first_in > HOST_ALARM_EVERY_MAX) {
         return refused_timer("alarm_set_every", id);
+    }
+    host->alarm_attempts++;
+    if (true && host->refuse_alarms != HOST_OK) {
+        host->refused_alarms++;
+        return host->refuse_alarms;
     }
     host->alarms[id] = (standin_alarm_t){
         .kind = STANDIN_ALARM_EVERY, .every = seconds, .first_in = first_in,
@@ -993,6 +1040,14 @@ int32_t notification_post(const host_notice_t *notice)
     if (notice == NULL) {
         return HOST_ERR_ARGUMENT;
     }
+    world->notice_attempts++;
+    if (world->refuse_notices != HOST_OK) {
+        world->refused_notices++;
+        return world->refuse_notices;
+    }
+    if (world->refuse_receipts) {
+        world->refuse_writes = HOST_ERR_NO_SPACE;
+    }
     world->last_notice = *notice;
     world->notices++;
     return HOST_OK;
@@ -1061,8 +1116,8 @@ int32_t answer_info(host_answer_info_t *response, int32_t capacity)
     if (!world->is_delivering) {
         return HOST_ERR_NOT_FOUND;
     }
-    /* No headers are stood in for: the status, and every other field absent. */
-    host_answer_info_t info = { .status = answer_status, .length = -1 };
+    /* Retry-After is available in metadata as well as the raw mocked headers. */
+    host_answer_info_t info = { .status = answer_status, .length = -1, .retry_after = world->retry_after };
     int32_t length = capacity < (int32_t)sizeof info ? capacity : (int32_t)sizeof info;
     copy(response, &info, (size_t)length);
     return length;
@@ -1074,6 +1129,29 @@ int32_t answer_header(const char *name, int32_t name_length, int32_t occurrence,
     if (name == NULL || name_length < 1 || name_length > 63 || occurrence < 0 || value == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
     }
+    if (!world->is_delivering) {
+        return HOST_ERR_NOT_FOUND;
+    }
+    for (const char *line = world->response_headers; *line != '\0';) {
+        const char *end = strchr(line, '\n');
+        if (end == NULL) {
+            end = line + strlen(line);
+        }
+        const char *colon = memchr(line, ':', (size_t)(end - line));
+        if (colon != NULL && colon - line == name_length && strncasecmp(line, name, (size_t)name_length) == 0 && occurrence-- == 0) {
+            const char *begin = colon + 1;
+            while (begin < end && *begin == ' ') {
+                begin++;
+            }
+            int32_t length = (int32_t)(end - begin);
+            if (length > capacity) {
+                return HOST_ERR_NO_SPACE;
+            }
+            copy(value, begin, (size_t)length);
+            return length;
+        }
+        line = *end == '\0' ? end : end + 1;
+    }
     return HOST_ERR_NOT_FOUND;
 }
 
@@ -1082,6 +1160,9 @@ int32_t poll_run(int32_t poll)
     standin();
     if (poll < 0 || poll >= standin_subject.poll_count) {
         return HOST_ERR_ARGUMENT;
+    }
+    if (world->monitor_backoff && world->uptime_ms < world->retry_until_ms) {
+        world->early_requests++;
     }
     world->polls_run[poll]++;
     return HOST_OK;
@@ -1199,6 +1280,9 @@ int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_leng
     }
     if (!standin_url_allowed(filled)) {
         return refused_request(HOST_ERR_ARGUMENT, "a host the manifest's \"hosts\" does not list");
+    }
+    if (host->monitor_backoff && host->uptime_ms < host->retry_until_ms) {
+        host->early_requests++;
     }
     host->sends++;
     if (host->refuse_requests != HOST_OK) {
@@ -1614,14 +1698,35 @@ static int32_t text_shown(const char *text, int32_t length)
     return text != NULL && length > 0 ? (int32_t)strnlen(text, (size_t)(length < HOST_TEXT_MAX ? length : HOST_TEXT_MAX)) : 0;
 }
 
+static void record_text(const char *text, int32_t length)
+{
+    if (!world->is_drawing || text == NULL || length <= 0) {
+        return;
+    }
+    size_t used = strlen(world->draw_text);
+    if (used >= sizeof world->draw_text - 2) {
+        return;
+    }
+    size_t room = sizeof world->draw_text - used - 2;
+    size_t take = strnlen(text, (size_t)length);
+    if (take > room) {
+        take = room;
+    }
+    copy(world->draw_text + used, text, take);
+    world->draw_text[used + take] = '\n';
+    world->draw_text[used + take + 1] = '\0';
+}
+
 static void mix_text(const char *text, int32_t length)
 {
+    record_text(text, text_shown(text, length));
     mix(text != NULL ? text : "", (size_t)text_shown(text, length));
 }
 
 /* A fixed text field of a struct: up to its terminator, for what follows it is not text. */
 static void mix_field(const char *field, size_t size)
 {
+    record_text(field, (int32_t)strnlen(field, size));
     mix(field, strnlen(field, size));
     mix_number((int32_t)size);
 }
@@ -2152,6 +2257,7 @@ int32_t ui_draw_text(int32_t x, int32_t y, int32_t style, const char *text, int3
                                        : fit(STYLE_FONTS[style], text, length, COORDINATE_LIMIT * HOST_TEXT_MAX, cut);
     int32_t numbers[] = { x, y, style };
     mix(numbers, sizeof numbers);
+    record_text(cut, cut_length);
     mix(cut, (size_t)cut_length);
     if (cut_length == 0) {
         world->draw_calls--; /* a text of no letters sets no pixel */
@@ -2378,6 +2484,7 @@ int32_t ui_draw_reason(int32_t status)
         world->draw_calls--;
         return 0;
     }
+    world->visible_failure = world->visible_failure || status < 0 || status >= 400;
     return 1;
 }
 
@@ -2698,6 +2805,8 @@ uint64_t standin_draw(void)
     standin_t *host = standin();
     host->picture = 0xcbf29ce484222325u;
     host->draw_calls = 0;
+    host->draw_text[0] = '\0';
+    host->visible_failure = false;
     host->is_drawing = true;
     CALL(on_draw);
     host->is_drawing = false;

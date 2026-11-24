@@ -31,3 +31,63 @@ defect of the checks:
   application's requests; a picked answer is broken off only before its last closing bracket;
   polls come when the checks give them, not at their pace.
 - The system API (`sys_*`) is not stood in for.
+
+## Failure-path checks
+
+The SDK checks invariants, using draw records and the same clock in the compared runs.
+It never reads an application's statics. Coverage is bounded; a successful run does not
+prove every possible input or button sequence. A coverage note identifies missing inputs.
+
+| Capability | Failure paths |
+| --- | --- |
+| `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic is required. |
+| `store` | Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Unload and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
+| `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The healthy schedule must recover or the app must display failure. |
+| `notices` | Reach alarms/timers through the standard paths; compare accepted counts with queue rejection followed by acceptance and with writes refused immediately after acceptance. Retry for 60 seconds, then unload/replay; also deliver alarms into fresh background instances. No due notice reached is a coverage note. |
+| `network` | Derive malformed responses from good JSON mocks, compare the good/normal failed-response pictures and reloaded cache; observe new HTTP/poll requests during Retry-After, including lifecycle changes and chains of two refusals, with both 120- and 300-second deadlines. |
+| `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |
+
+`headers` in a mock is an object of response headers. `answer_header()` exposes them
+case-insensitively. Injected 429s additionally expose `retry_after` in `answer_info()`.
+The stand-in observes early requests instead of refusing them, so an ignored deadline fails.
+Host-scheduled polling and real HTTP pacing remain simulator concerns.
+
+`clock_probes` is an array of `{ "now": <epoch>, "event": <epoch>, "presses": "O" }`.
+The fixtures must make the named event visible after those presses (`UODB` short,
+`uodb` long). Every probe runs in each of the four zones. Its expected HH:MM comes
+from that zone's rules at **event**, not at **now**. This declaration identifies data,
+not an application: no provider, app name or parser format is built into the checker.
+
+`failure_text` lists nonempty strings identifying a custom visible error in draw/header
+records. The standard `Storage error.`, `Not enough space.`, `Could not save.` and
+`Schedule error.` and a drawn `ui_draw_reason()` are recognized without declarations.
+A log line is not a visible error.
+
+`exceptions` is an object mapping check keys to nonempty reasons. Each is printed:
+
+- `store.button`: changes in this view deliberately do not survive an unload.
+- `timers.refusal`: this schedule has another recovery policy.
+- `notices.retry`, `notices.receipt`: a different declared delivery policy.
+- `network.recovery`: backoff legitimately postpones the old immediate-recovery
+  picture assertions; sanitizer, drawing and other network checks still run.
+- `responses.truncated`, `responses.wrong-types`, `responses.empty-lists`,
+  `responses.nulls`, `responses.missing-record`, `responses.long-values`,
+  `responses.numeric-overflow`, `responses.picked-null`, `responses.numeric-tokens`: the shape mutation is valid
+  for this application. An empty feed may legitimately clear the view, for example.
+
+Unknown keys and blank reasons fail. Do not use an exception to bless a defect.
+JSON mutations include nulling individual object members (at most 64 variants, using
+the first record in nested arrays), as well as changing all leaves. Optional nulls
+can legitimately change fallback text: declare that difference. For non-JSON protocols,
+up to 64 decimal tokens are replaced independently with an
+oversized integer; only sanitizer safety is asserted because another number can be valid
+data. Semantic validation still needs application tests: truncating arbitrary text can
+itself be a valid answer.
+The long-string check flags an unmarked displayed 63-byte generated string; it does
+not infer every possible wrapping or truncation convention.
+
+The notice comparison does not prove power-cut atomicity. A fresh instance and refused
+receipt writes model unloads, not a crash between a reservation and posting. Event
+identity, escalation rules, pagination completeness and truthful statistics require
+application-supplied fixtures and logic tests. Layout, languages, fonts and refresh
+quality still need simulator pictures and panel verification.

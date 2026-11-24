@@ -1,7 +1,17 @@
 {
   "at": 1795262400,
   "mocks": {
-    "https://example.test/now*": { "body": "{\"value\": \"21\"}" },
-    "https://example.test/note": { "body": "A note long enough to come in more than one piece when it is cut." }
-  }
+    "https://example.test/now*": {
+      "body": "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}"
+    },
+    "https://example.test/note": {
+      "body": "A note long enough to come in more than one piece when it is cut. Marker: 7."
+    }
+  },
+  "clock_probes": [
+    {
+      "now": 1795262400,
+      "event": 1806321600
+    }
+  ]
 }
