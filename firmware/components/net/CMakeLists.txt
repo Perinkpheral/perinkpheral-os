@@ -1,4 +1,4 @@
-idf_component_register(SRCS "wifi_plan.c" "wifi_credentials.c" "wifi_networks.c" "wifi_search.c" "wifi.c" "net_time.c" "ota_stream.c" "ota_health.c"
+idf_component_register(SRCS "wifi_plan.c" "wifi_status.c" "wifi_credentials.c" "wifi_networks.c" "wifi_search.c" "wifi.c" "net_time.c" "ota_stream.c" "ota_health.c"
                             "captive_dns.c" "captive_dns_task.c" "captive_portal.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "../../../sdk"

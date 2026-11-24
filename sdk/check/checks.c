@@ -132,7 +132,8 @@ typedef struct {
     int32_t        status;
     const uint8_t *body;
     int32_t        length;
-    const char    *headers;
+    const standin_pair_t *headers;
+    int32_t header_count;
 } answer_t;
 
 static bool is_answered_by(const char *address, const char *url)
@@ -164,6 +165,7 @@ static bool answer_for(const char *url, answer_t *answer)
             fclose(file);
         }
         answer->headers = kept->headers;
+        answer->header_count = kept->header_count;
         answer->status = kept->status;
         answer->body = kept->file != NULL ? bodies[index] : (const uint8_t *)kept->body;
         answer->length = kept->file != NULL ? lengths[index] : (int32_t)strlen(kept->body);
@@ -331,7 +333,8 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         status = HOST_FAILED_NOT_ALLOWED;
     } else if (round->kind == ROUND_HTTP) {
         static const char UNAVAILABLE[] = "Service Unavailable";
-        answer = (answer_t){ round->size, (const uint8_t *)UNAVAILABLE, (int32_t)sizeof UNAVAILABLE - 1, NULL };
+        answer = (answer_t){ .status = round->size, .body = (const uint8_t *)UNAVAILABLE,
+                             .length = (int32_t)sizeof UNAVAILABLE - 1 };
         status = round->size;
     } else if (answer_for(url, &answer)) {
         status = answer.status;
@@ -340,16 +343,19 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         standin_note("no answer is kept for %s", url);
         status = HOST_FAILED_NO_ANSWER;
     }
-    host->retry_after = 0;
-    snprintf(host->response_headers, sizeof host->response_headers, "%s", answer.headers != NULL ? answer.headers : "");
+    const standin_pair_t cache_headers[] = { { "Cache-Control", "max-age=60" } };
+    char retry_after[16];
+    const standin_pair_t backoff_headers[] = { { "Retry-After", retry_after } };
     if (round->kind == ROUND_CACHE) {
-        snprintf(host->response_headers, sizeof host->response_headers, "Cache-Control: max-age=60");
+        answer.headers = cache_headers;
+        answer.header_count = 1;
     }
     if (round->kind == ROUND_HTTP && status == 429) {
-        host->retry_after = backoff_seconds;
         host->rate_limits++;
         host->retry_until_ms = host->uptime_ms + (int64_t)backoff_seconds * 1000;
-        snprintf(host->response_headers, sizeof host->response_headers, "Retry-After: %d", backoff_seconds);
+        snprintf(retry_after, sizeof retry_after, "%d", backoff_seconds);
+        answer.headers = backoff_headers;
+        answer.header_count = 1;
     }
     if (mutation != NULL && (round->kind == ROUND_MUTATION || round->kind == ROUND_TARGET_FAILURE) &&
         is_answered_by(mutation->address, url)) {
@@ -381,6 +387,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     if (is_head) {
         answer.length = 0; /* poller_net.c: HEAD has no response body, with either delivery mode */
     }
+    standin_answer_headers(answer.headers, answer.header_count);
     if (is_picked) {
         /* One that fails late is, for the application, one that failed - with what the picker
          * read before it broke off: here all of it before its last closing bracket, so that every

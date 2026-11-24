@@ -9,13 +9,16 @@ import java.nio.file.StandardCopyOption
 import java.time.Instant
 
 /** Read-only observation of a fixed firmware image. Never repairs or restarts the device. */
-class Endurance(private val client: DeviceClient, private val directory: File, private val image: String) {
+class Endurance(private val client: DeviceClient, private val directory: File, private val image: String,
+                private val now: () -> Long = System::currentTimeMillis,
+                private val sleep: (Long) -> Unit = Thread::sleep) {
     data class LogCursor(val boot: String, val end: Long)
 
     companion object {
         private const val STATUS_MS = 60_000L
         private const val LOG_MS = 2_000L
-        private const val AWAY_MS = 30_000L
+        private const val SLEEP_MS = 30_000L
+        private const val REQUEST_MS = 3_000
         private const val COUNTER_MASK = 0xffff_ffffL
 
         fun missingBytes(previous: LogCursor?, current: LogCursor, received: Int): Long =
@@ -40,6 +43,55 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
         }
     }
 
+    /** Each endpoint has its own outage: a working status route does not prove log delivery. */
+    internal class Observation {
+        var lastSuccessAt: Long? = null
+        var failureStartedAt: Long? = null
+        var failureAt: Long? = null
+        var lastFailureAt: Long? = null
+        var recoveryAt: Long? = null
+        var failures = 0
+
+        fun failed(started: Long, at: Long) {
+            if (failures == 0) {
+                failureStartedAt = started
+                failureAt = at
+                recoveryAt = null
+            }
+            lastFailureAt = at
+            if (failures < Int.MAX_VALUE) failures++
+        }
+
+        fun succeeded(at: Long) {
+            if (failures > 0) recoveryAt = at
+            failures = 0
+            lastSuccessAt = at
+        }
+
+        fun retryMs(): Long = when (failures) { 1 -> 2_000L; 2 -> 4_000L; else -> 5_000L }
+
+        fun record(): Map<String, Any?> {
+            fun instant(at: Long?) = at?.let { Instant.ofEpochMilli(it).toString() }
+            return mapOf("last_success_at" to instant(lastSuccessAt),
+                "failure_request_started_at" to instant(failureStartedAt),
+                "failure_at" to instant(failureAt), "last_failure_at" to instant(lastFailureAt),
+                "recovery_at" to instant(recoveryAt), "failures" to failures)
+        }
+
+        fun restore(record: Map<*, *>) {
+            fun time(key: String) = (record[key] as? String)?.let { Instant.parse(it).toEpochMilli() }
+            lastSuccessAt = time("last_success_at")
+            failureStartedAt = time("failure_request_started_at")
+            failureAt = time("failure_at")
+            lastFailureAt = time("last_failure_at")
+            recoveryAt = time("recovery_at")
+            failures = (record["failures"] as? Number)?.toInt() ?: 0
+        }
+    }
+
+    private val observations = mapOf("log" to Observation(), "status" to Observation())
+    private fun instant() = Instant.ofEpochMilli(now()).toString()
+
     private val progressFile = File(directory, "progress.json")
     private var cursor: LogCursor? = null
     private var previousStatus: Map<*, *>? = null
@@ -49,19 +101,17 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
     private var missingLogBytes = 0L
     private var lastLoopAt = 0L
     private var phase = "powered"
-    private var away = false
-    private var activeErrors = mutableSetOf<String>()
     private var deadline = 0L
     private var phaseDue = 0L
     private var phaseReminderSent = false
 
     private fun append(name: String, value: Map<String, Any?>) {
-        File(directory, name).appendText(Json.write(mapOf("at" to Instant.now().toString(), "phase" to phase) + value) + "\n")
+        File(directory, name).appendText(Json.write(mapOf("at" to instant(), "phase" to phase) + value) + "\n")
     }
 
     private fun event(kind: String, detail: Any? = null) {
         append("events.jsonl", mapOf("event" to kind, "detail" to detail))
-        println("${Instant.now()} $kind${if (detail == null) "" else ": $detail"}")
+        println("${instant()} $kind${if (detail == null) "" else ": $detail"}")
     }
 
     private fun atomic(file: File, value: Any?) {
@@ -73,16 +123,17 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
     private fun json(file: File): Map<*, *> = Json.parse(file.readText()) as Map<*, *>
 
     private fun save(state: String = "observing") {
-        atomic(progressFile, mapOf("state" to state, "updated_at" to Instant.now().toString(),
+        atomic(progressFile, mapOf("state" to state, "updated_at" to instant(),
             "host" to client.host, "image_id" to image, "deadline" to Instant.ofEpochMilli(deadline).toString(),
             "phase" to phase, "samples" to samples, "log_bytes" to logBytes,
             "missing_log_bytes" to missingLogBytes, "last_loop_ms" to lastLoopAt,
             "last_status_at" to lastStatusAt, "last_status" to previousStatus,
-            "log_boot" to cursor?.boot, "log_end" to cursor?.end))
+            "log_boot" to cursor?.boot, "log_end" to cursor?.end,
+            "observations" to observations.mapValues { it.value.record() }))
     }
 
     private fun request(path: String): DeviceClient.Answer {
-        val answer = client.raw(path)
+        val answer = client.raw(path, timeoutMs = REQUEST_MS)
         if (answer.status !in 200..299) throw IOException("HTTP ${answer.status} from $path")
         return answer
     }
@@ -95,7 +146,7 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
         append("status.jsonl", mapOf("status" to current))
         statusEvents(previousStatus, current, image).forEach { event(it, current) }
         previousStatus = current
-        lastStatusAt = Instant.now().toString()
+        lastStatusAt = instant()
         samples++
     }
 
@@ -122,14 +173,28 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
         cursor = next
     }
 
-    private fun observe(name: String, action: () -> Unit): Boolean = try {
-        action()
-        if (activeErrors.remove(name)) event("observation_restored", name)
-        true
-    } catch (error: Exception) {
-        if (error is InterruptedException) throw error
-        if (activeErrors.add(name)) event("observation_unavailable", mapOf("source" to name, "error" to error.toString()))
-        false
+    private fun observe(name: String, action: () -> Unit): Boolean {
+        val observation = observations.getValue(name)
+        val started = now()
+        return try {
+            action()
+            val recovered = now()
+            if (observation.failures > 0) {
+                observation.recoveryAt = recovered
+                event("observation_restored", observation.record() + mapOf("source" to name,
+                    "unavailable_ms" to (recovered - observation.failureAt!!),
+                    "outage_upper_bound_ms" to observation.lastSuccessAt?.let { recovered - it }))
+            }
+            observation.succeeded(recovered)
+            true
+        } catch (error: Exception) {
+            if (error is InterruptedException) throw error
+            val first = observation.failures == 0
+            observation.failed(started, now())
+            if (first) event("observation_unavailable", observation.record() +
+                mapOf("source" to name, "error" to error.toString()))
+            false
+        }
     }
 
     /** The existing run's deadline is retained on resume; gaps are evidence, not covered time. */
@@ -157,6 +222,10 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
                         val boot = progress["log_boot"] as? String
                         val end = (progress["log_end"] as? Number)?.toLong()
                         if (boot != null && end != null) cursor = LogCursor(boot, end)
+                        val records = progress["observations"] as? Map<*, *>
+                        observations.forEach { (name, observation) ->
+                            (records?.get(name) as? Map<*, *>)?.let { observation.restore(it) }
+                        }
                     }
                     event("observer_resumed")
                 } else {
@@ -165,42 +234,52 @@ class Endurance(private val client: DeviceClient, private val directory: File, p
                         "the expected firmware must be running with completed probation"
                     }
                     require(status["dev_tools"] != true) { "use the published release image" }
-                    deadline = System.currentTimeMillis() + (hours * 3_600_000).toLong()
-                    phaseDue = System.currentTimeMillis() + 86_400_000L
+                    deadline = now() + (hours * 3_600_000).toLong()
+                    phaseDue = now() + 86_400_000L
                     atomic(runFile, mapOf("host" to client.host, "image_id" to image, "hours" to hours,
-                        "started_at" to Instant.now().toString(), "deadline" to Instant.ofEpochMilli(deadline).toString(),
+                        "started_at" to instant(), "deadline" to Instant.ofEpochMilli(deadline).toString(),
                         "status_interval_s" to STATUS_MS / 1000, "log_interval_s" to LOG_MS / 1000,
                         "baseline" to status))
                     previousStatus = status
+                    observations.getValue("status").succeeded(now())
                     event("observer_started")
                 }
                 var nextStatus = 0L
+                var nextLog = 0L
                 try {
-                    while (System.currentTimeMillis() < deadline) {
-                        val now = System.currentTimeMillis()
-                        if (lastLoopAt != 0L && now - lastLoopAt > 90_000L)
-                            event("observer_gap", mapOf("from_ms" to lastLoopAt, "to_ms" to now))
-                        lastLoopAt = now
+                    while (now() < deadline) {
+                        val loopAt = now()
+                        if (lastLoopAt != 0L && loopAt - lastLoopAt > 90_000L)
+                            event("observer_gap", mapOf("from_ms" to lastLoopAt, "to_ms" to loopAt))
+                        lastLoopAt = loopAt
                         val phaseFile = File(directory, "phase.txt")
                         val selected = if (phaseFile.exists()) phaseFile.readText().trim() else "powered"
                         if (selected != phase) { phase = selected; event("phase_changed") }
-                        if (phase == "powered" && now >= phaseDue && !phaseReminderSent) {
+                        if (phase == "powered" && loopAt >= phaseDue && !phaseReminderSent) {
                             event("phase_action_due", "24 hours reached: arrange the physical sleep test; observation alone does not change power mode.")
                             phaseReminderSent = true
                         }
-                        val logOk = observe("log") { log() }
-                        if (now >= nextStatus || (away && logOk)) {
-                            observe("status") { status() }
-                            nextStatus = now + STATUS_MS
-                            save()
+                        val logObservation = observations.getValue("log")
+                        val wasAway = logObservation.failures > 0
+                        if (now() >= nextLog) {
+                            val logOk = observe("log") { log() }
+                            nextLog = now() + if (!logOk) logObservation.retryMs()
+                                else if (phase == "sleep") SLEEP_MS else LOG_MS
+                            if (wasAway && logOk) nextStatus = 0L
                         }
-                        away = !logOk
-                        Thread.sleep(if (away || phase == "sleep") AWAY_MS else LOG_MS)
+                        if (now() >= nextStatus) {
+                            val statusOk = observe("status") { status() }
+                            nextStatus = now() + if (statusOk) STATUS_MS
+                                else observations.getValue("status").retryMs()
+                        }
+                        save()
+                        val remaining = minOf(nextLog, nextStatus, deadline) - now()
+                        if (remaining > 0) sleep(remaining)
                     }
                     event("observation_window_ended", "Manual checks and recorded gaps still require review; this is not a pass.")
                     save("awaiting_review")
                 } finally {
-                    save(if (System.currentTimeMillis() >= deadline) "awaiting_review" else "interrupted")
+                    save(if (now() >= deadline) "awaiting_review" else "interrupted")
                 }
             }
         }

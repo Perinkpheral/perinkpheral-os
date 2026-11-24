@@ -264,6 +264,122 @@ static void test_answers(void)
     standin_handlers.on_picked = app_on_picked;
 }
 
+static int header_mode;
+static int expected_header_status;
+static int header_callbacks;
+
+static void check_response_headers(void)
+{
+    header_callbacks++;
+    host_answer_info_t info;
+    memset(&info, 0x5a, sizeof info);
+    assert(answer_info(&info, sizeof info) == sizeof info);
+    assert(info.status == expected_header_status);
+    assert(answer_info(NULL, 0) == 0);
+    assert(answer_info(NULL, 1) == HOST_ERR_ARGUMENT);
+    assert(answer_info(&info, -1) == HOST_ERR_ARGUMENT);
+    struct { int32_t status; unsigned char later[8]; } prefix;
+    memset(&prefix, 0x5a, sizeof prefix);
+    assert(answer_info((host_answer_info_t *)&prefix, sizeof prefix.status) == sizeof prefix.status);
+    assert(prefix.status == expected_header_status && prefix.later[0] == 0x5a);
+    char text[64] = "unchanged";
+    assert(answer_header("Bad Name", 8, 0, text, sizeof text) == HOST_ERR_ARGUMENT);
+    assert(answer_header("a:b", 3, 0, text, sizeof text) == HOST_ERR_ARGUMENT);
+    assert(answer_header("a\0b", 3, 0, text, sizeof text) == HOST_ERR_ARGUMENT);
+    assert(answer_header("x", 1, -1, text, sizeof text) == HOST_ERR_ARGUMENT);
+    assert(answer_header("x", 1, 0, NULL, 1) == HOST_ERR_ARGUMENT);
+    assert(answer_header("x", 1, 0, text, -1) == HOST_ERR_ARGUMENT);
+    if (header_mode == 1) {
+        assert(info.length == 15 && info.retry_after == 30);
+        assert(strcmp(info.etag, "v1") == 0 && strcmp(info.content_type, "application/json") == 0);
+        assert(strcmp(info.last_modified, "yesterday") == 0);
+        assert(strcmp(info.location, "https://example.test/next") == 0);
+        assert(strcmp(info.link, "<next>; rel=next") == 0);
+        assert(answer_header("SET-cookie", 10, 0, text, sizeof text) == 11);
+        assert(memcmp(text, "session=one", 11) == 0);
+        assert(answer_header("set-cookie", 10, 1, text, sizeof text) == 11);
+        assert(memcmp(text, "session=two", 11) == 0);
+        assert(answer_header("set-cookie", 10, 2, text, sizeof text) == HOST_ERR_NOT_FOUND);
+        strcpy(text, "unchanged");
+        assert(answer_header("ETag", 4, 0, text, 2) == HOST_ERR_NO_SPACE);
+        assert(strcmp(text, "unchanged") == 0);
+        assert(answer_header("Empty", 5, 0, NULL, 0) == 0);
+    } else if (header_mode == 3) {
+        assert(info.retry_after == 120);
+        assert(answer_header("retry-after", 11, 0, text, sizeof text) == 3 && memcmp(text, "120", 3) == 0);
+        assert(answer_header("Retry-After", 11, 1, text, sizeof text) == HOST_ERR_NOT_FOUND);
+        assert(answer_header("Retry-After", 11, 0, text, 2) == HOST_ERR_NO_SPACE);
+        assert(answer_header("Cache-Control", 13, 0, text, sizeof text) == 10 && memcmp(text, "max-age=60", 10) == 0);
+    } else if (header_mode == 2) {
+        assert(answer_header("set-cookie", 10, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
+        assert(answer_header("absent", 6, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
+        assert(strcmp(info.etag, "kept") == 0); /* Independent of aggregate overflow. */
+        assert(strcmp(text, "unchanged") == 0);
+    } else {
+        assert(info.length == -1 && info.retry_after == 0 && info.etag[0] == '\0');
+        assert(answer_header("set-cookie", 10, 0, text, sizeof text) == HOST_ERR_NOT_FOUND);
+    }
+}
+
+static void headers_in_data(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t status)
+{
+    (void)request; (void)data; (void)length;
+    expected_header_status = status;
+    if ((flags & HOST_DATA_FAILED) != 0) {
+        int previous = header_mode;
+        header_mode = 0;
+        check_response_headers();
+        header_mode = previous;
+    } else {
+        check_response_headers();
+    }
+}
+
+static void headers_in_picked(int32_t request, int32_t status)
+{
+    (void)request;
+    expected_header_status = status;
+    check_response_headers();
+}
+
+static void test_response_headers(void)
+{
+    standin_reset();
+    standin_handlers.on_data = headers_in_data;
+    standin_handlers.on_picked = headers_in_picked;
+    header_callbacks = 0;
+    const standin_answer_t *mock = &standin_subject.answers[0];
+    assert(mock->header_count > 0); /* From AppCheck's generator. */
+    header_mode = 1;
+    standin_answer_headers(mock->headers, mock->header_count);
+    standin_data(16, -1, 200, "12345", 5, 1, STANDIN_WHOLE, 0);
+    assert(header_callbacks == 5);
+    standin_answer_headers(mock->headers, mock->header_count);
+    standin_picked(0, -1, 401, "<html>", 6); /* Refusals preserve status and headers. */
+    standin_answer_headers(mock->headers, mock->header_count);
+    standin_picked(0, -1, 200, "<html>", 6); /* Failed extraction still exposes metadata. */
+    standin_answer_headers(mock->headers, mock->header_count);
+    standin_data(16, -1, 200, "12345", 5, 1, STANDIN_FAILED, HOST_FAILED_NO_ANSWER);
+    header_mode = 0;
+    standin_picked(0, -1, 200, "{}", 2); /* No headers leak into the next answer. */
+    standin_answer_headers(mock->headers, mock->header_count);
+    standin_data(16, -1, HOST_FAILED_NO_NETWORK, NULL, 0, 1, STANDIN_WHOLE, 0);
+    char large[1025];
+    memset(large, 'x', sizeof large - 1);
+    large[sizeof large - 1] = '\0';
+    const standin_pair_t overflow[] = { { "Set-Cookie", "earlier" }, { "X-Fill", large }, { "ETag", "kept" } };
+    header_mode = 2;
+    standin_answer_headers(overflow, 3);
+    standin_picked(0, -1, 200, "{}", 2);
+    const standin_pair_t invalid[] = { { "Bad Name", "invalid" }, { "ETag", "kept" } };
+    standin_answer_headers(invalid, 2);
+    standin_data(16, -1, 200, "", 0, 1, STANDIN_WHOLE, 0);
+    host_answer_info_t info;
+    assert(answer_info(&info, sizeof info) == HOST_ERR_NOT_FOUND);
+    assert(answer_header("ETag", 4, 0, large, sizeof large) == HOST_ERR_NOT_FOUND);
+    assert(answer_header("Bad Name", 8, 0, large, sizeof large) == HOST_ERR_ARGUMENT);
+}
+
 static void test_drawing(void)
 {
     char fitted[16];
@@ -337,21 +453,16 @@ static void test_refusals_and_metadata(void)
     assert(kv_set("receipt", 7, &kept, sizeof kept) == HOST_ERR_NO_SPACE);
     assert(standin()->refused_notices == 1);
 
-    standin()->is_delivering = true;
-    standin()->retry_after = 120;
-    snprintf(standin()->response_headers, sizeof standin()->response_headers,
-             "Retry-After: 120\nCache-Control: max-age=60");
+    const standin_pair_t headers[] = { { "Retry-After", "120" }, { "Cache-Control", "max-age=60" } };
+    standin_handlers.on_data = headers_in_data;
+    header_mode = 3;
+    standin_answer_headers(headers, 2);
+    standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    const standin_pair_t date_header[] = { { "Retry-After", "Wed, 25 Nov 2026 12:00:00 GMT" } };
+    header_mode = 0;
+    standin_answer_headers(date_header, 1);
+    standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
     char header[64];
-    assert(answer_header("retry-after", 11, 0, header, sizeof header) == 3 && memcmp(header, "120", 3) == 0);
-    assert(answer_header("Retry-After", 11, 1, header, sizeof header) == HOST_ERR_NOT_FOUND);
-    assert(answer_header("Retry-After", 11, 0, header, 2) == HOST_ERR_NO_SPACE);
-    host_answer_info_t info;
-    assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 120);
-    standin()->retry_after = 0;
-    assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 120);
-    snprintf(standin()->response_headers, sizeof standin()->response_headers, "Retry-After: Wed, 25 Nov 2026 12:00:00 GMT");
-    assert(answer_info(&info, sizeof info) == sizeof info && info.retry_after == 0);
-    standin()->is_delivering = false;
     assert(answer_header("retry-after", 11, 0, header, sizeof header) == HOST_ERR_NOT_FOUND);
 
     standin_reset();
@@ -375,6 +486,7 @@ int main(void)
     test_answers();
     test_drawing();
     test_refusals_and_metadata();
+    test_response_headers();
     puts("the stand-in host: store, session, time, timers and alarms, answers, drawing");
     return 0;
 }

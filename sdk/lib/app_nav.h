@@ -84,7 +84,20 @@ int32_t app_nav_view(const app_nav_t *nav);
  * `screens` of them, the one shown and the views inside their bounds. */
 void app_nav_check(app_nav_t *nav, int32_t screens);
 
+/* Sets the left header to "2/4" followed by `left_text`, separated by a space.
+ * NULL or "" supplies no app text; " " keeps the side empty without a count.
+ * The count is omitted when hidden, on one screen or in a view. Text is capped at
+ * HOST_HEADER_TEXT_MAX bytes between UTF-8 characters; Perinkpheral OS cuts it
+ * with "..." to the header's available width, in its own font and size.
+ * Call on focus (headers are cleared on leaving the screen), and when the count,
+ * view or app text changes, before requesting a redraw. Use this instead of
+ * header_set_text(HOST_HEADER_LEFT, ...) when the count belongs in the header.
+ * Returns header_set_text()'s result. No drawing call; no retained state. */
+int32_t app_nav_set_header(const app_nav_t *nav, const char *left_text, bool show_count);
+
 /* The screen's title at the top left of the surface and, when `show_count` and there is
- * more than one screen, "2/4" at the right, small. `title` may be NULL or "" for the count
- * alone; with neither nothing is drawn and the room is not taken. Returns the y below. */
+ * more than one screen, "2/4" at the right, small, on the title's baseline.
+ * With NULL or "" nothing is drawn and 0 is returned: content starts at the top.
+ * For these untitled screens, use app_nav_set_header() in the handlers above.
+ * Otherwise returns the y below the title. */
 int32_t app_nav_draw_title(const app_nav_t *nav, const char *title, bool show_count);

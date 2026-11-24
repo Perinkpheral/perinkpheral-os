@@ -25,6 +25,8 @@ dependencies {
 // One jar with the core and Kotlin's library in it: build/libs/perinkpheral.jar.
 tasks.register<Jar>("cli") {
     archiveFileName.set("perinkpheral.jar")
+    // The launcher publishes this directory's completed archive with an atomic rename.
+    providers.gradleProperty("cliJarDirectory").orNull?.let { destinationDirectory.set(file(it)) }
     manifest {
         attributes("Main-Class" to "dev.perinkpheral.cli.MainKt")
     }
@@ -54,4 +56,10 @@ val simTestMocksTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.cli.SimTestMocksTest")
 }
 tasks.check { dependsOn(simTestMocksTest) }
+val launcherTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.LauncherTest")
+}
+tasks.check { dependsOn(launcherTest) }
 tasks.test { failOnNoDiscoveredTests.set(false) }

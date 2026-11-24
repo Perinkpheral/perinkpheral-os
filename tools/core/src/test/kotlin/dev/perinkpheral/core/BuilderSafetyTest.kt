@@ -133,6 +133,14 @@ object BuilderSafetyTest {
                 defaultsFile.writeText(Json.pretty(defaultsManifest))
                 ManifestCheck(Sdk(root)).check(defaults)
             }
+            val corpus = Json.parse(File(root, "firmware/test/host/manifest_defaults.json").readText()) as List<*>
+            for (entry in corpus) {
+                entry as Map<*, *>
+                defaultsManifest["settings"] = listOf(entry["setting"])
+                defaultsFile.writeText(Json.pretty(defaultsManifest))
+                val accepted = try { ManifestCheck(Sdk(root)).check(defaults); true } catch (_: BuildError) { false }
+                check(accepted == entry["valid"]) { "Default validation differs from firmware corpus: $entry" }
+            }
             val pbm = File(scratch, "raster.pbm")
             for (pixel in listOf(0x23, 0x20, 0x09, 0x0a, 0x0d, 0x00, 0xff)) {
                 pbm.writeBytes("P4\n# header comment\n8 1\n".toByteArray() + byteArrayOf(pixel.toByte()))
@@ -150,18 +158,27 @@ object BuilderSafetyTest {
                 val arenaSource = File(scratch, "arena/sizing").apply { mkdirs() }
                 File(arenaSource, "manifest.json").writeText("""{"name":"sizing","title":"Sizing","abi":3}""")
                 val arenaOutput = File(scratch, "arena-built")
-                for (codeNops in listOf(16_000, 18_000)) {
+                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 18_000 to null,
+                    16_000 to "0.1.94", 16_000 to "0.1.95")) {
+                    File(arenaSource, "manifest.json").writeText(Json.write(mapOf(
+                        "name" to "sizing", "title" to "Sizing", "abi" to 3) +
+                        (firmware?.let { mapOf("firmware" to it) } ?: emptyMap())))
                     File(arenaSource, "main.c").writeText(
                         "/* SPDX-License-Identifier: MIT */\n#include \"host_api.h\"\n" +
                         "void app_on_load(void) { __asm__ volatile(\"" + "nop\\n".repeat(codeNops) + "\"); }\n")
                     val messages = ArrayList<String>()
                     AppBuilder(Sdk(root), File(wasi), messages::add).build(arenaSource, arenaOutput)
                     val estimate = 11 * 1024 + 4 * Wasm(File(arenaOutput, "app.wasm")).codeBytes
-                    check(estimate > 64 * 1024)
+                    val needsLargerArena = estimate > 64 * 1024
+                    check(needsLargerArena == (codeNops > 100))
                     val overBudget = codeNops == 18_000
                     check((estimate > 80 * 1024) == overBudget)
                     check(messages.any { "interpreter's 80.0 KB" in it })
                     check(messages.any { "warning: this much code" in it } == overBudget)
+                    check(messages.any { "declare \"firmware\": \"0.1.95\"" in it } ==
+                        (needsLargerArena && firmware != "0.1.95"))
+                    val packaged = Json.parse(File(arenaOutput, "manifest.json").readText()) as Map<*, *>
+                    check(packaged["firmware"] == (firmware ?: "0.1.30")) // Advisory, never an automatic bump.
                     check(File(arenaOutput, "app.wasm").isFile)
                 }
                 val realBuilder = AppBuilder(Sdk(root), File(wasi)) {}

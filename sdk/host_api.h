@@ -12,7 +12,14 @@
  * behavior in 0.1.66. After the public release, existing names, signatures,
  * privileges, layouts, values and meanings must remain compatible;
  * incompatible changes require a new ABI. Additions after the 0.1.30 floor
- * carry HOST_SINCE_<name> introduction stamps. ABI 2 is unsupported.
+ * carry valid HOST_SINCE_<name> introduction stamps before snapshot recording;
+ * established baseline entries need none and recorded stamps stay fixed.
+ * Only host_answer_info_t may append fields beyond its old extent, preserving
+ * alignment and every existing field type, offset and size. Other recorded
+ * layouts stay fixed. ABI 2 is unsupported.
+ * The interpreter arena is 80 KB since firmware 0.1.95, previously 64 KB.
+ * Applications needing more than 64 KB must declare "firmware": "0.1.95";
+ * the build estimate is advisory and does not prove peak use.
  * Commands use subject then verb (gfx_draw_text); queries name what is
  * asked (gfx_width); events called by Perinkpheral OS are app_on_<what happened>.
  *

@@ -4,6 +4,7 @@
  */
 #include "tinytest.h"
 #include "../../main/poller.c"
+#include "wifi_status.h"
 
 static app_manifest_t installed_apps[3];
 static int installed_count;
@@ -12,6 +13,11 @@ static deadline_table_t test_deadlines;
 static int64_t clock_ms;
 static int sent_method, requests_sent;
 static bool abandon_answer, saving_power;
+static wifi_plan_t network_plan;
+static wifi_status_t network;
+static bool transport_failure, reconnect_during_request;
+static int round_items, raw_sent, failures_told, notifications, radio_holds;
+static bool session_memory = true;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
 const app_manifest_t *launcher_installed(int *count)
@@ -42,20 +48,30 @@ BaseType_t xTaskCreate(void (*task)(void *), const char *name, unsigned stack,
     *handle = NULL;
     return pdPASS;
 }
-void xTaskNotifyGive(TaskHandle_t task) { (void)task; }
+void xTaskNotifyGive(TaskHandle_t task) { (void)task; notifications++; }
 unsigned ulTaskNotifyTake(int clear, TickType_t timeout)
 {
     (void)clear; (void)timeout;
     return 0;
 }
 int64_t esp_timer_get_time(void) { return clock_ms * US_PER_MS; }
-bool memory_has(memory_need_t need) { (void)need; return true; }
-bool wifi_is_online(void) { return true; }
-void wifi_get_status(wifi_status_t *status) { status->phase = WIFI_PHASE_ONLINE; }
+bool memory_has(memory_need_t need) { return need != MEMORY_FOR_A_SESSION || session_memory; }
+bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
+void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }
-void power_hold_radio(void) { }
-void power_release_radio(void) { }
-void status_check(void) { }
+void power_hold_radio(void)
+{
+    radio_holds++;
+    if (network.is_radio_off) {
+        wifi_plan_init(&network_plan, true, false);
+        wifi_plan_step(&network_plan, WIFI_EVENT_STARTED, clock_ms);
+        wifi_status_update(&network, network_plan.phase, false);
+    }
+}
+void power_release_radio(void)
+{
+    wifi_status_update(&network, network_plan.phase, true);
+}
 void settings_watch(settings_watch_fn watcher) { (void)watcher; }
 bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
@@ -104,27 +120,36 @@ bool poller_net_setting_of(void *context, const char *key, char *value, size_t s
     (void)context; (void)key; (void)value; (void)size;
     return false;
 }
-int poller_net_poll(const char *name, int poll, int item, int *method)
+int poller_net_poll(const char *name, int poll, int item, int *method, bool *network_failed)
 {
     (void)item;
     *method = sent_method;
+    *network_failed = transport_failure;
+    if (reconnect_during_request) poller_network_is_back();
     requests_sent++;
     if (abandon_answer) poller_answer_was_abandoned(name, poll);
-    return 0;
+    return round_items;
 }
 void poller_net_poll_not_made(const char *name, int poll, int why)
 {
     (void)name; (void)poll; (void)why;
 }
-void poller_net_request(const char *name, const poller_ask_t *ask) { (void)name; (void)ask; }
+void poller_net_request(const char *name, const poller_ask_t *ask) { (void)name; (void)ask; raw_sent++; }
 void poller_net_tell_failure(const char *name, int number, int why)
 {
-    (void)name; (void)number; (void)why;
+    (void)name; (void)number; (void)why; failures_told++;
 }
 bool poller_net_fetch(const char *url, size_t max_bytes, poller_net_take_fn take, void *context, int *status)
 {
     (void)url; (void)max_bytes; (void)take; (void)context; (void)status;
     return false;
+}
+
+static void set_network_online(bool online)
+{
+    network_plan.phase = online ? WIFI_PHASE_ONLINE : WIFI_PHASE_CONNECTING;
+    wifi_status_update(&network, network_plan.phase, false);
+    if (online) strcpy(network.address, "192.0.2.1");
 }
 
 static void reset_poller(void)
@@ -144,6 +169,15 @@ static void reset_poller(void)
     requests_sent = 0;
     abandon_answer = false;
     saving_power = false;
+    set_network_online(true);
+    s_is_holding_radio = false;
+    transport_failure = reconnect_during_request = false;
+    round_items = raw_sent = failures_told = notifications = radio_holds = 0;
+    s_network_generation = 0;
+    s_memory_looks = 0;
+    session_memory = true;
+    s_polled_now_at_ms = -POLL_NOW_EVERY_MS;
+    sent_method = HOST_HTTP_GET;
     s_lock = xSemaphoreCreateMutex();
 }
 
@@ -208,6 +242,7 @@ static void test_incompatible_apps(void)
     CHECK(poll_schedule_has(&s_schedule, 3, 0));
     CHECK(!deadlines_has(DEADLINE_POLL, 2, 0));
     CHECK(!poller_poll_now("future", 0));
+    advance_to(2000);
     poller_network_is_back();
     sent_method = HOST_HTTP_GET;
     while (run_wanted_poll()) { }
@@ -220,7 +255,7 @@ static void test_incompatible_apps(void)
     CHECK(!deadlines_has(DEADLINE_POLL, 1, 0));
     poller_network_is_back();
     while (run_wanted_poll()) { }
-    CHECK(requests_sent == 3);
+    CHECK(requests_sent == 2);
 }
 
 static void test_interval_below_saving_floor(void)
@@ -243,10 +278,257 @@ static void test_interval_below_saving_floor(void)
     CHECK(deadline_table_when(&test_deadlines, poll) == 301000);
 }
 
+static void test_wake_without_address(void)
+{
+    reset_poller();
+    power_release_radio();
+    saving_power = true;
+    sent_method = HOST_HTTP_GET;
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    wifi_plan_step(&network_plan, WIFI_EVENT_CONNECTED, 1000);
+    strcpy(network.address, "192.0.2.1");
+    wifi_status_update(&network, network_plan.phase, false);
+    CHECK(run_wanted_poll());
+    keep_radio_for_work();
+    CHECK(!s_is_holding_radio);
+    CHECK(network.is_radio_off && network.was_reached);
+
+    clock_ms = 300000;
+    CHECK(poller_poll_now("probe", 0));
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    CHECK(!network.is_radio_off);
+    /* Association alone supplies neither an address nor a disconnect event. */
+    CHECK(network_plan.phase == WIFI_PHASE_CONNECTING);
+    CHECK(network_plan.failed_attempts == 0);
+    CHECK(network.address[0] == '\0');
+    clock_ms += RADIO_WAIT_MS;
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio);
+    clock_ms++;
+    keep_radio_for_work();
+    CHECK(!s_is_holding_radio);
+    CHECK(network.is_radio_off);
+    CHECK(!network.was_reached);
+    CHECK(requests_sent == 1);
+    CHECK(run_wanted_poll());
+    /* The user brought the radio up during its retry pause. Work on this
+     * existing connection must retain it beyond the user-access window. */
+    clock_ms++;
+    set_network_online(true);
+    poller_network_is_back();
+    keep_radio_for_work();
+    CHECK(s_is_holding_radio && radio_holds == 3);
+    CHECK(run_wanted_poll());
+    keep_radio_for_work();
+    CHECK(!s_is_holding_radio);
+    CHECK(network.is_radio_off && network.was_reached);
+}
+
+static void test_reconnect_offline_poll(void)
+{
+    for (int saving = 0; saving <= 1; saving++) {
+        reset_poller();
+        saving_power = saving;
+        CHECK(schedule_installed() == 1);
+        set_network_online(false);
+        advance_to(0);
+        CHECK(run_wanted_poll());
+        CHECK(requests_sent == 0);
+        clock_ms = 9000;
+        set_network_online(true);
+        poller_network_is_back();
+        CHECK(run_wanted_poll());
+        CHECK(requests_sent == 1);
+        CHECK(!run_wanted_poll());
+    }
+}
+
+static void test_reconnect_keeps_normal_pace(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    CHECK(run_wanted_poll());
+    clock_ms = 9000;
+    poller_network_is_back();
+    CHECK(!run_wanted_poll());
+    CHECK(requests_sent == 1);
+}
+
+static void test_reconnect_transport_and_races(void)
+{
+    for (int saving = 0; saving <= 1; saving++) {
+        for (int during = 0; during <= 1; during++) {
+            reset_poller();
+            saving_power = saving;
+            CHECK(schedule_installed() == 1);
+            advance_to(0);
+            transport_failure = true;
+            reconnect_during_request = during;
+            CHECK(run_wanted_poll());
+            CHECK(network.phase == WIFI_PHASE_ONLINE && network.was_reached);
+            CHECK_STR(network.address, "192.0.2.1");
+            reconnect_during_request = false;
+            poller_network_is_back();
+            poller_network_is_back();
+            transport_failure = false;
+            CHECK(run_wanted_poll());
+            CHECK(!run_wanted_poll());
+            CHECK(requests_sent == 2);
+            /* A later connection cannot replay the recovered poll. */
+            poller_network_is_back();
+            CHECK(!run_wanted_poll());
+            CHECK(radio_holds == 0);
+        }
+    }
+}
+
+static void test_reconnect_due_and_cooldown(void)
+{
+    for (int saving = 0; saving <= 1; saving++) {
+        reset_poller();
+        saving_power = saving;
+        CHECK(schedule_installed() == 1);
+        advance_to(0);
+        CHECK(run_wanted_poll());
+        /* HTTP errors, including 429, are answers rather than transport failures.
+         * An application can extend its interval and the connection must honor it. */
+        CHECK(poller_set_interval("probe", 0, 7200) == HOST_OK);
+        set_network_online(false);
+        advance_to(3600000);
+        set_network_online(true);
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        set_network_online(false);
+        advance_to(7200000);
+        set_network_online(true);
+        poller_network_is_back();
+        poller_network_is_back();
+        CHECK(run_wanted_poll());
+        CHECK(!run_wanted_poll());
+        CHECK(requests_sent == 2);
+    }
+}
+
+static void test_reconnect_each_and_deferred_poll(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    round_items = 100;
+    transport_failure = true;
+    CHECK(run_wanted_poll());
+    CHECK(!poll_rounds_pending(&s_rounds));
+    CHECK(!run_wanted_poll());
+    /* A deferred explicit request already promises a retry; reconnect does
+     * not bypass that limiter or add a second list round. */
+    clock_ms = 100;
+    s_polled_now_at_ms = 0;
+    CHECK(poller_poll_now("probe", 0));
+    poller_network_is_back();
+    CHECK(!run_wanted_poll());
+    advance_to(1000);
+    poller_network_is_back();
+    transport_failure = false;
+    for (int item = 0; item < round_items; item++) CHECK(run_wanted_poll());
+    CHECK(requests_sent == 101);
+    CHECK(!run_wanted_poll());
+}
+
+static void test_each_cooldown_survives_transport_failure(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    advance_to(0);
+    round_items = 5;
+    CHECK(run_wanted_poll());
+    /* One item returned 429 and its application extended the interval.
+     * A later item loses its connection before the round can finish. */
+    clock_ms = 100;
+    CHECK(poller_set_interval("probe", 0, 7200) == HOST_OK);
+    clock_ms = 200;
+    transport_failure = true;
+    CHECK(run_wanted_poll());
+    poller_network_is_back();
+    CHECK(!run_wanted_poll());
+    CHECK(deadline_table_when(&test_deadlines, (deadline_id_t){ DEADLINE_POLL, 1, 0 }) == 7200100);
+    transport_failure = false;
+    advance_to(7200100);
+    for (int item = 0; item < round_items; item++) CHECK(run_wanted_poll());
+    CHECK(!run_wanted_poll());
+    CHECK(requests_sent == 7);
+}
+
+static void test_local_failure_keeps_pace(void)
+{
+    for (int saving = 0; saving <= 1; saving++) {
+        reset_poller();
+        saving_power = saving;
+        CHECK(schedule_installed() == 1);
+        advance_to(0);
+        session_memory = false;
+        for (int look = 1; look < MEMORY_LOOKS_MAX; look++) CHECK(!run_wanted_poll());
+        CHECK(run_wanted_poll());
+        CHECK(network.phase == WIFI_PHASE_ONLINE && network.was_reached);
+        session_memory = true;
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        CHECK(requests_sent == 0);
+        advance_to(3600000);
+        CHECK(run_wanted_poll());
+        CHECK(requests_sent == 1);
+    }
+}
+
+static void test_reconnect_raw_queue(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    set_network_online(false);
+    for (int tag = 0; tag < HOST_HTTP_PENDING_MAX; tag++) {
+        CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST + tag,
+              HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+    }
+    CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST + HOST_HTTP_PENDING_MAX,
+          HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) != REQUEST_QUEUE_ADDED);
+    clock_ms = 9000;
+    CHECK(!fail_request_without_network());
+    set_network_online(true);
+    s_task = &network;
+    poller_network_is_back();
+    CHECK(notifications > 0);
+    while (run_pending_request(0)) { }
+    CHECK(raw_sent == HOST_HTTP_PENDING_MAX && failures_told == 0);
+    CHECK(!has_pending_request());
+    s_task = NULL;
+    set_network_online(false);
+    CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
+          HOST_HTTP_POST, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+    clock_ms += RADIO_WAIT_MS + 1;
+    CHECK(fail_request_without_network());
+    set_network_online(true);
+    poller_network_is_back();
+    CHECK(!run_pending_request(0));
+    CHECK(failures_told == 1);
+}
+
 int main(void)
 {
+    test_reconnect_offline_poll();
+    test_reconnect_keeps_normal_pace();
+    test_reconnect_transport_and_races();
+    test_reconnect_due_and_cooldown();
+    test_reconnect_each_and_deferred_poll();
+    test_reconnect_raw_queue();
+    test_local_failure_keeps_pace();
+    test_each_cooldown_survives_transport_failure();
     test_abandoned_methods();
     test_incompatible_apps();
     test_interval_below_saving_floor();
+    test_wake_without_address();
     REPORT();
 }

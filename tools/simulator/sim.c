@@ -396,7 +396,7 @@ typedef struct job {
     answer_headers_t response_headers;
 } job_t;
 
-static bool            s_last_use_failed; /* what the header's icon says */
+static bool            s_network_connected = true;
 static pthread_mutex_t s_jobs_lock = PTHREAD_MUTEX_INITIALIZER;
 static int             s_requests_waiting; /* of the application's own: HOST_HTTP_PENDING_MAX */
 static pthread_cond_t  s_jobs_waiting = PTHREAD_COND_INITIALIZER;
@@ -892,11 +892,14 @@ static void hand_over(job_t *job)
     if (job->status == HOST_FAILED_NOT_ALLOWED) {
         say('W', "sim", "%s: a request to a host its manifest does not list", s_options.app);
     }
-    bool failed = job->status == HOST_FAILED_NO_NETWORK || job->status == HOST_FAILED_NO_ANSWER ||
-                  job->status == HOST_FAILED_TIMEOUT;
-    if (failed != s_last_use_failed && job->status != HOST_FAILED_NOT_READY) {
-        s_last_use_failed = failed;
-        wm_invalidate(&s_wm, WM_CHANGED_BY_DATA);
+    /* Only an explicit network loss simulates losing Wi-Fi. A server's
+     * failure leaves the connection alone; any HTTP answer proves it is back. */
+    if (job->status == HOST_FAILED_NO_NETWORK || job->status > 0) {
+        bool connected = job->status > 0;
+        if (connected != s_network_connected) {
+            s_network_connected = connected;
+            wm_invalidate(&s_wm, WM_CHANGED_BY_DATA);
+        }
     }
     const char *kind = job->is_poll ? "poll" : "request";
     char        item[16] = "";
@@ -1423,8 +1426,7 @@ static void draw_header(gfx_t *surface, const scene_t *scene, void *context)
     (void)context;
     time_t       now = (time_t)unix_now();
     header_now_t header_now = {
-        /* As on the device: whether the last use of the network worked. */
-        .network_ok = !s_last_use_failed,
+        .network_ok = s_network_connected,
         .time_known = true,
         .shows_clock = s_options.clock,
         .scene_left = scene->header_left,

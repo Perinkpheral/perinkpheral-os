@@ -20,12 +20,16 @@
 #include "json_pick.h"
 #include "manifest_limits.h"
 #include "map_geo.h"
+#include "answer_headers.h"
+#include <strings.h>
 
 standin_handlers_t standin_handlers;
 
 static standin_t *world;
 static int32_t session_refusal, session_refused;
 static uint64_t session_diagnostics_before;
+static const standin_pair_t *pending_headers;
+static int32_t pending_header_count;
 
 /* memcpy(), of nothing when the length is 0: an application may pass NULL with it, which the
  * C library's memcpy() does not take (glibc declares both pointers never null). */
@@ -78,6 +82,8 @@ void standin_reset(void)
     host->now = standin_subject.at != 0 ? standin_subject.at : DEFAULT_TIME;
     host->zone_offset = standin_subject.zone_offset;
     host->answer_item = -1;
+    pending_headers = NULL;
+    pending_header_count = 0;
     host->is_new = true;
     host->status_icon[0] = host->status_icon[1] = HOST_ICON_NONE;
     for (int32_t index = 0; index < standin_subject.file_count; index++) {
@@ -1065,7 +1071,31 @@ int32_t notification_post(const host_notice_t *notice)
 static json_pick_t picked;   /* of the answer being delivered */
 static bool has_picked;
 static char picked_lists[HOST_LIST_BYTES];
-static int32_t answer_status;
+static host_answer_info_t response_info;
+static answer_headers_t response_headers;
+
+void standin_answer_headers(const standin_pair_t *headers, int32_t count)
+{
+    pending_headers = headers;
+    pending_header_count = headers != NULL ? count : 0;
+}
+
+static void prepare_answer(int32_t status)
+{
+    response_info = (host_answer_info_t){ .status = status, .length = -1 };
+    answer_headers_reset(&response_headers);
+    for (int32_t index = 0; status >= 0 && index < pending_header_count; index++) {
+        const standin_pair_t *field = &pending_headers[index];
+        answer_headers_add(&response_headers, field->key, field->value);
+        answer_info_header(&response_info, field->key, field->value);
+        if (strcasecmp(field->key, "Content-Length") == 0) {
+            long long length = strtoll(field->value, NULL, 10);
+            response_info.length = length >= 0 && length <= INT32_MAX ? (int32_t)length : -1;
+        }
+    }
+    pending_headers = NULL;
+    pending_header_count = 0;
+}
 
 int32_t answer_value(int32_t index, char *text, int32_t capacity)
 {
@@ -1117,58 +1147,25 @@ int32_t answer_item(void)
 int32_t answer_info(host_answer_info_t *response, int32_t capacity)
 {
     standin();
-    if (response == NULL || capacity < 0) {
+    if ((response == NULL && capacity > 0) || capacity < 0) {
         return HOST_ERR_ARGUMENT;
     }
     if (!world->is_delivering) {
         return HOST_ERR_NOT_FOUND;
     }
-    /* Retry-After is available in metadata as well as the raw mocked headers. */
-    host_answer_info_t info = { .status = answer_status, .length = -1, .retry_after = world->retry_after };
-    if (info.retry_after == 0) {
-        char header[64];
-        int32_t header_length = answer_header("Retry-After", 11, 0, header, sizeof header - 1);
-        if (header_length > 0) {
-            header[header_length] = '\0';
-            long seconds = strtol(header, NULL, 10);
-            info.retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
-        }
-    }
-    int32_t length = capacity < (int32_t)sizeof info ? capacity : (int32_t)sizeof info;
-    copy(response, &info, (size_t)length);
+    int32_t length = capacity < (int32_t)sizeof response_info ? capacity : (int32_t)sizeof response_info;
+    copy(response, &response_info, (size_t)length);
     return length;
 }
 
 int32_t answer_header(const char *name, int32_t name_length, int32_t occurrence, char *value, int32_t capacity)
 {
     standin();
-    if (name == NULL || name_length < 1 || name_length > 63 || occurrence < 0 || value == NULL || capacity < 0) {
+    if (name_length < 0) {
         return HOST_ERR_ARGUMENT;
     }
-    if (!world->is_delivering) {
-        return HOST_ERR_NOT_FOUND;
-    }
-    for (const char *line = world->response_headers; *line != '\0';) {
-        const char *end = strchr(line, '\n');
-        if (end == NULL) {
-            end = line + strlen(line);
-        }
-        const char *colon = memchr(line, ':', (size_t)(end - line));
-        if (colon != NULL && colon - line == name_length && strncasecmp(line, name, (size_t)name_length) == 0 && occurrence-- == 0) {
-            const char *begin = colon + 1;
-            while (begin < end && *begin == ' ') {
-                begin++;
-            }
-            int32_t length = (int32_t)(end - begin);
-            if (length > capacity) {
-                return HOST_ERR_NO_SPACE;
-            }
-            copy(value, begin, (size_t)length);
-            return length;
-        }
-        line = *end == '\0' ? end : end + 1;
-    }
-    return HOST_ERR_NOT_FOUND;
+    return answer_headers_get(world->is_delivering ? &response_headers : NULL, name, (size_t)name_length,
+                              occurrence, value, capacity);
 }
 
 int32_t poll_run(int32_t poll)
@@ -2857,12 +2854,13 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
                   int32_t piece, int32_t ending, int32_t failure)
 {
     standin_t *host = standin();
+    prepare_answer(status);
     if (standin_handlers.on_data == NULL) {
         return;
     }
     host->is_delivering = true;
     host->answer_item = item;
-    answer_status = status;
+    response_info.status = status;
     has_picked = false;
     if (status < 0) {
         CALL(on_data, request, NULL, 0, HOST_DATA_FAILED, status);
@@ -2892,7 +2890,7 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
         at += taken;
     } while (at < given);
     if (ending == STANDIN_FAILED) {
-        answer_status = failure;
+        prepare_answer(failure);
         CALL(on_data, request, NULL, 0, HOST_DATA_FAILED, failure);
     }
     host->is_delivering = false;
@@ -2902,6 +2900,7 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
 {
     standin_t *host = standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
+    prepare_answer(status);
     if (standin_handlers.on_picked == NULL) {
         return;
     }
@@ -2926,7 +2925,7 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
     }
     host->is_delivering = true;
     host->answer_item = item;
-    answer_status = status;
+    response_info.status = status;
     CALL(on_picked, poll, status);
     host->is_delivering = false;
     has_picked = false;

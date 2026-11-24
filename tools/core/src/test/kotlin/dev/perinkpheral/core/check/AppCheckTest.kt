@@ -390,6 +390,33 @@ object AppCheckTest {
 
         val scratch = Files.createTempDirectory("perinkpheral-app-check-test").toFile()
         try {
+            // Actual capability delivery must carry mock headers in both delivery modes.
+            val headersApp = File(scratch, "response-headers/specimen")
+            specimen.copyRecursively(headersApp)
+            val headerSource = File(headersApp, "specimen.c")
+            headerSource.writeText(headerSource.readText().replace(
+                "    int32_t length = answer_value(0, picked, sizeof picked - 1);",
+                """
+                    int32_t length = answer_value(0, picked, sizeof picked - 1);
+                    if (length > 0) {
+                        char etag[8];
+                        host_answer_info_t info;
+                        if (answer_header("etag", 4, 1, etag, sizeof etag) != 2 ||
+                            etag[0] != 'v' || etag[1] != '1' ||
+                            answer_info(&info, sizeof info) != sizeof info || info.retry_after != 30) __builtin_trap();
+                    }
+                """.trimIndent()
+            ).replace(
+                "    if ((flags & HOST_DATA_FIRST) != 0) {",
+                """
+                    if ((flags & HOST_DATA_FIRST) != 0) {
+                        char etag[8];
+                        if (answer_header("etag", 4, 0, etag, sizeof etag) != 4 ||
+                            etag[0] != 'n' || etag[3] != 'e') __builtin_trap();
+                """.trimIndent()
+            ))
+            val headersReport = checker.run(headersApp, only = "network")
+            check(headersReport.failed.isEmpty()) { headersReport.lines.flatMap { it.details }.joinToString("\n") }
             val mockCases = listOf("missing", "malformed", "array", "unmatched")
             for (mockCase in mockCases) {
                 val copy = File(scratch, "mocks/$mockCase/specimen")

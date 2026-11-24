@@ -48,10 +48,19 @@ an unmatched request is logged and delivered as `HOST_FAILED_NO_ANSWER`. An unre
 or invalid mocks file stops the simulator with a non-zero exit status. Omit `--mocks`
 to use the computer's network.
 
+The header starts connected. An explicit `HOST_FAILED_NO_NETWORK` mock crosses
+out its Wi-Fi icon; an HTTP response restores it. Other request failures leave
+the icon unchanged, as a server failure does not mean Wi-Fi was lost.
+
     {
       "https://api.open-meteo.com/*": { "status": 200, "file": "forecast.json" },
       "https://example.com/api/state": { "status": 401, "body": "{}" }
     }
+
+Wi-Fi loss, address acquisition and power-profile reconnect scheduling are not modeled.
+The `network_up` intent endpoint delivers subscribed news only; it does not simulate
+a connection or request manifest polls. Reconnect scheduling and transport-failure
+classification are covered by `firmware/test/host/test_poller.c` and `test_poller_net.c`.
 
 Not simulated: the menu of several applications, the system API except
 `sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,

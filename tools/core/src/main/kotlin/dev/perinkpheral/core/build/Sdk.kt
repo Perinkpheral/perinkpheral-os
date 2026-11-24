@@ -41,7 +41,9 @@ class Sdk(val root: File) {
     val callSince: Map<String, String> by lazy {
         val calls = (contract.calls.map { it.name } + contract.exports.map { it.name }).toSet()
         contract.namesStartingWith("HOST_SINCE_").associate { call ->
-            val since = contract.string("HOST_SINCE_$call") ?: throw BuildError("sdk/host_api.h: HOST_SINCE_$call is not a version")
+            val since = contract.written("HOST_SINCE_$call")?.let {
+                Regex("\"([^\"]+)\"").matchEntire(it)?.groupValues?.get(1)
+            } ?: throw BuildError("sdk/host_api.h: HOST_SINCE_$call is not a version")
             if (call !in calls && call !in MANIFEST_FEATURES && contract.written(call) == null) throw BuildError("sdk/host_api.h: HOST_SINCE_$call names no contract entry")
             val number = versionNumber(since) ?: throw BuildError("sdk/host_api.h: HOST_SINCE_$call is not a version")
             if (number <= versionNumber(firmwareFirst)!!) {

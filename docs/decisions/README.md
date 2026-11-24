@@ -45,4 +45,7 @@ and exclude machine-specific paths and secrets. KiB means 1,024 bytes; KB means
 | [0004](0004-map-land-data.md) | Lossless one-arc-minute land data; no borders or names | 2026-11-23 | accepted |
 | [0005](0005-installed-app-count.md) | Reduce installed applications to save RAM | 2026-11-24 | rejected |
 | [0006](0006-battery-life.md) | Version 1 has no battery-life promise; ADC may follow in version 2 | 2026-11-24 | accepted |
-| [0007](0007-ram-savings.md) | RAM savings study | 2026-11-24 | open |
+| [0007](0007-ram-savings.md) | RAM savings study | 2026-11-24 | rejected |
+| [0008](0008-moex-tls.md) | MOEX certificate parsing and application trust | 2026-11-24 | accepted |
+| [0009](0009-screen-manager.md) | A screen manager integrated with the scene stack | 2026-11-24 | deferred |
+| [0010](0010-plex-controller.md) | A Plex player controller | 2026-11-24 | deferred |

@@ -2,10 +2,33 @@
   "at": 1795262400,
   "mocks": {
     "https://example.test/now*": {
-      "body": "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}"
+      "body": "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}",
+      "headers": {
+        "Set-Cookie": [
+          "session=one",
+          "session=two"
+        ],
+        "ETag": [
+          "old",
+          "v1"
+        ],
+        "Retry-After": [
+          "Wed, 21 Oct 2030 07:28:00 GMT",
+          "30"
+        ],
+        "Content-Length": "15",
+        "Content-Type": "application/json",
+        "Last-Modified": "yesterday",
+        "Location": "https://example.test/next",
+        "Link": "<next>; rel=next",
+        "Empty": ""
+      }
     },
     "https://example.test/note": {
-      "body": "A note long enough to come in more than one piece when it is cut. Marker: 7."
+      "body": "A note long enough to come in more than one piece when it is cut. Marker: 7.",
+      "headers": {
+        "ETag": "note"
+      }
     }
   },
   "clock_probes": [

@@ -51,6 +51,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
     /** The map's geometry, which the stand-in host answers gfx_map_point() with: the firmware's
      * own source, so the numbers are the device's. */
     private val mapDir = File(sdk.root, "firmware/components/map")
+    private val responseDir = File(sdk.root, "firmware/components/appsys")
     private val compiler = System.getenv("CC")?.takeIf { it.isNotBlank() } ?: "cc"
 
     /**
@@ -109,12 +110,13 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (code != 0) throw BuildError("${source.path} did not compile for this computer:\n$said")
             return made
         }
-        return Host(library.map(::compiled) + compiled(File(mapDir, "map_geo.c")), compiled(File(checkDir, "standin.c")),
-            compiled(File(checkDir, "checks.c")))
+        val shared = library.map(::compiled) + compiled(File(mapDir, "map_geo.c")) +
+            compiled(File(responseDir, "answer_headers.c"))
+        return Host(shared, compiled(File(checkDir, "standin.c")), compiled(File(checkDir, "checks.c")))
     }
 
     private fun includes(vararg more: File): List<String> =
-        (listOf(sdk.sdk, sdk.library, checkDir) + more).map { "-I" + it.path }
+        (listOf(sdk.sdk, sdk.library, checkDir, File(responseDir, "include")) + more).map { "-I" + it.path }
 
     private fun checkOne(appDir: File, scratch: File, host: Host, only: String?): List<Line> {
         val name = appDir.name
@@ -289,8 +291,18 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             }
             val answers = answers()
             if (answers.isNotEmpty()) {
+                answers.forEachIndexed { index, answer ->
+                    if (answer.headers.isNotEmpty()) {
+                        appendLine("static const standin_pair_t ANSWER_HEADERS_$index[] = {")
+                        answer.headers.forEach { (name, value) -> appendLine("    { ${text(name)}, ${text(value)} },") }
+                        appendLine("};")
+                    }
+                }
                 appendLine("static const standin_answer_t ANSWERS[] = {")
-                answers.forEach { (address, status, file) -> appendLine("    { ${text(address)}, $status, ${text(file.path)}, NULL, ${text(answerHeaders[address])} },") }
+                answers.forEachIndexed { index, answer ->
+                    val headers = if (answer.headers.isEmpty()) "NULL" else "ANSWER_HEADERS_$index"
+                    appendLine("    { ${text(answer.address)}, ${answer.status}, ${text(answer.file.path)}, NULL, $headers, ${answer.headers.size} },")
+                }
                 appendLine("};")
             }
             val exceptions = kept["exceptions"]?.let { it as? Map<*, *> ?: throw BuildError("exceptions must be an object") }.orEmpty()
@@ -311,7 +323,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             val validResponses = kept["valid_responses"]?.let {
                 it as? Map<*, *> ?: throw BuildError("valid_responses must be an object")
             }.orEmpty().mapValues { (address, bodies) ->
-                if (address !is String || answers.none { it.first == address }) throw BuildError("unknown valid_responses address: $address")
+                if (address !is String || answers.none { it.address == address }) throw BuildError("unknown valid_responses address: $address")
                 val variants = bodies as? List<*> ?: throw BuildError("valid_responses bodies must be an array")
                 if (variants.isEmpty()) throw BuildError("valid_responses bodies must not be empty")
                 variants.map { body ->
@@ -443,10 +455,8 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             }
         }
 
-        private val answerHeaders = HashMap<String, String>()
-
         /** The answers of check.json, each body in a file. */
-        private fun answers(): List<Triple<String, Long, File>> {
+        private fun answers(): List<MockAnswer> {
             val (mocks, beside) = when (val given = kept["mocks"]) {
                 null -> return emptyList()
                 is String -> File(keptDir, given).let { file ->
@@ -461,12 +471,21 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 val file = (answer["file"] as? String)?.let { File(beside, it) }
                     ?: File(bodies, "$index.body").apply { writeText(answer["body"] as? String ?: "") }
                 if (!file.isFile) throw BuildError("${file.path}: the answer for $address is not there")
-                val headers = answer["headers"] as? Map<*, *>
-                if (headers != null) answerHeaders[address.toString()] = headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
-                Triple(address.toString(), answer["status"] as? Long ?: 200L, file)
+                val headers = (answer["headers"] as? Map<*, *>).orEmpty().flatMap { (name, value) ->
+                    val values = if (value is List<*>) value else listOf(value)
+                    values.map {
+                        if (name !is String || it !is String || '\u0000' in name || '\u0000' in it) {
+                            throw BuildError("response headers for $address must be strings without NUL, or lists of strings")
+                        }
+                        name to it
+                    }
+                }
+                MockAnswer(address.toString(), answer["status"] as? Long ?: 200L, file, headers)
             }
         }
     }
+
+    private data class MockAnswer(val address: String, val status: Long, val file: File, val headers: List<Pair<String, String>>)
 
     companion object {
         const val OWN_TESTS = "logic"

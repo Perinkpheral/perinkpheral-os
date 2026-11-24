@@ -444,7 +444,11 @@ static void in_string(json_pick_t *pick, char character)
         if (character == 'u') {
             pick->unicode_digits = UNICODE_DIGITS;
             pick->unicode_value = 0;
-        } else if (collects) {
+        } else {
+            pick->high_half = 0;
+            if (!collects) {
+                return;
+            }
             bool is_itself = character == '"' || character == '\\' || character == '/';
             collect(pick, is_itself ? character : ' '); /* \n \t and the like: a space */
         }
@@ -454,6 +458,7 @@ static void in_string(json_pick_t *pick, char character)
         pick->escaped = true;
         return;
     }
+    pick->high_half = 0;
     if (character == '"') {
         if (pick->state == JSON_PICK_IN_KEY) {
             pick->state = JSON_PICK_BETWEEN;

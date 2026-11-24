@@ -3,6 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  */
 #include "app_nav.h"
+#include "app_text.h"
 
 #include <stddef.h>
 
@@ -63,30 +64,48 @@ void app_nav_check(app_nav_t *nav, int32_t screens)
     if (nav->depth < 0 || nav->depth > APP_NAV_VIEWS_MAX) { nav->depth = 0; }
 }
 
+/* Two digits on either side of the slash, at most. */
+static int32_t count_text(const app_nav_t *nav, char *count)
+{
+    app_text_t text;
+    app_text_start(&text, count, 6);
+    app_text_add_number(&text, nav->screen + 1);
+    app_text_add(&text, "/");
+    app_text_add_number(&text, count_of(nav));
+    return app_text_length(count);
+}
+
+int32_t app_nav_set_header(const app_nav_t *nav, const char *left_text, bool show_count)
+{
+    char line[HOST_HEADER_TEXT_MAX + 1];
+    app_text_t text;
+    app_text_start(&text, line, sizeof line);
+    bool has_count = show_count && count_of(nav) > 1 && nav->depth == 0;
+    if (has_count) {
+        char count[6];
+        count_text(nav, count);
+        app_text_add(&text, count);
+    }
+    if (left_text != NULL && left_text[0] &&
+        !(has_count && left_text[0] == ' ' && left_text[1] == '\0')) {
+        if (has_count) { app_text_add(&text, " "); }
+        app_text_add(&text, left_text);
+    }
+    return header_set_text(HOST_HEADER_LEFT, line, app_text_length(line));
+}
+
 int32_t app_nav_draw_title(const app_nav_t *nav, const char *title, bool show_count)
 {
-    bool has_title = title != NULL && title[0];
+    if (title == NULL || !title[0]) { return 0; }
     bool has_count = show_count && count_of(nav) > 1;
-    if (!has_title && !has_count) { return 0; }
-    /* "12/12" at most: two digits, a slash, two digits. */
     char count[6];
-    int32_t length = 0;
-    if (has_count) {
-        int32_t shown = nav->screen + 1, total = count_of(nav);
-        if (shown > 9) { count[length++] = (char)('0' + shown / 10 % 10); }
-        count[length++] = (char)('0' + shown % 10);
-        count[length++] = '/';
-        if (total > 9) { count[length++] = (char)('0' + total / 10 % 10); }
-        count[length++] = (char)('0' + total % 10);
-    }
+    int32_t length = has_count ? count_text(nav, count) : 0;
     int32_t count_width = has_count ? ui_text_width(HOST_UI_CAPTION, count, length) : 0;
     int32_t right = gfx_width() - HOST_UI_MARGIN;
-    if (has_title) {
-        int32_t title_length = 0;
-        while (title[title_length]) { title_length++; }
-        int32_t room = right - HOST_UI_MARGIN - (has_count ? count_width + HOST_UI_MARGIN : 0);
-        ui_draw_text(HOST_UI_MARGIN, HOST_UI_MARGIN, HOST_UI_TEXT, title, title_length, room);
-    }
+    int32_t title_length = 0;
+    while (title[title_length]) { title_length++; }
+    int32_t room = right - HOST_UI_MARGIN - (has_count ? count_width + HOST_UI_MARGIN : 0);
+    ui_draw_text(HOST_UI_MARGIN, HOST_UI_MARGIN, HOST_UI_TEXT, title, title_length, room);
     if (has_count) {
         /* On the title's baseline: the caption's line is lower, its top goes down by the difference. */
         int32_t y = HOST_UI_MARGIN + gfx_font_ascent(HOST_FONT_TEXT) - gfx_font_ascent(HOST_FONT_SMALL);

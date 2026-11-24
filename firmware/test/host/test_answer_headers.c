@@ -4,8 +4,38 @@
 #include "host_api.h"
 #include "tinytest.h"
 
+static void test_response_metadata(void)
+{
+    host_answer_info_t info = { .status = 200, .length = -1 };
+    answer_info_header(&info, "cOnTeNt-TyPe", "application/json");
+    answer_info_header(&info, "ETag", "old");
+    answer_info_header(&info, "etag", "new");
+    answer_info_header(&info, "last-modified", "yesterday");
+    answer_info_header(&info, "Location", "next");
+    answer_info_header(&info, "Link", "<next>");
+    answer_info_header(&info, "Retry-After", "30");
+    CHECK_STR(info.content_type, "application/json");
+    CHECK_STR(info.etag, "new");
+    CHECK_STR(info.last_modified, "yesterday");
+    CHECK_STR(info.location, "next");
+    CHECK_STR(info.link, "<next>");
+    CHECK(info.retry_after == 30 && info.status == 200 && info.length == -1);
+    for (unsigned index = 0; index < 4; index++) {
+        static const char *const ABSENT[] = { "Wed, 21 Oct 2030", "-1", "0", "2147483647" };
+        answer_info_header(&info, "retry-after", ABSENT[index]);
+        CHECK(info.retry_after == 0);
+    }
+    char large[128];
+    memset(large, 'x', sizeof large - 1);
+    large[sizeof large - 1] = '\0';
+    answer_info_header(&info, "ETag", large);
+    CHECK(strlen(info.etag) == sizeof info.etag - 1);
+    CHECK(info.etag[sizeof info.etag - 2] == 'x');
+}
+
 int main(void)
 {
+    test_response_metadata();
     answer_headers_t headers;
     answer_headers_reset(&headers);
     answer_headers_add(&headers, "Set-Cookie", "session=one; Path=/; HttpOnly");

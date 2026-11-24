@@ -32,6 +32,28 @@ static void *fetch_on_worker(void *context)
     return NULL;
 }
 
+static void test_network_icon(void)
+{
+    job_t job = { .is_poll = true, .wants_values = true, .item = -1 };
+    const int server_failures[] = { HOST_FAILED_NO_ANSWER, HOST_FAILED_TIMEOUT,
+                                    HOST_FAILED_NOT_TRUSTED, HOST_FAILED_NOT_READY,
+                                    HOST_FAILED_NO_MEMORY, 401, 503 };
+    for (size_t index = 0; index < sizeof server_failures / sizeof server_failures[0]; index++) {
+        job.status = server_failures[index];
+        hand_over(&job);
+        assert(s_network_connected);
+    }
+    job.status = HOST_FAILED_NO_NETWORK;
+    hand_over(&job);
+    assert(!s_network_connected);
+    job.status = HOST_FAILED_NO_ANSWER;
+    hand_over(&job);
+    assert(!s_network_connected);
+    job.status = 503;
+    hand_over(&job);
+    assert(s_network_connected);
+}
+
 static void test_mocks(const char *state)
 {
     char path[PATH_BYTES];
@@ -103,6 +125,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_network_icon();
     test_mocks(state);
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["
                              "{\"key\":\"server\",\"type\":\"url\"},"

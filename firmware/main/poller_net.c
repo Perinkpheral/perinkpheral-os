@@ -135,11 +135,6 @@ static void hand_over(const char *app_name, const app_delivery_t *delivery)
     s_host->deliver(app_name, delivery);
 }
 
-static void note_network_use(bool worked)
-{
-    s_host->network_worked(worked);
-}
-
 /* The item of a list a poll with "each" goes over: -1 for any other. */
 static int s_item = -1;
 
@@ -192,6 +187,7 @@ typedef struct {
      * with "each" stands for. */
     const char *app_name;
     char        item[APP_LIST_ITEM_MAX + 1];
+    bool        network_failed;
 } request_t;
 
 /* A setting for a request's templates: the item, for the key of the list
@@ -226,39 +222,12 @@ static const esp_http_client_method_t METHODS[] = {
     [HOST_HTTP_REPORT] = HTTP_METHOD_REPORT,
 };
 
-/* The headers an application may ask about, and where each goes. */
-static void note_header(host_answer_info_t *response, const char *name, const char *value)
-{
-    const struct {
-        const char *name;
-        char       *text;
-        size_t      size;
-    } KEPT[] = {
-        { "Content-Type", response->content_type, sizeof response->content_type },
-        { "ETag", response->etag, sizeof response->etag },
-        { "Last-Modified", response->last_modified, sizeof response->last_modified },
-        { "Location", response->location, sizeof response->location },
-        { "Link", response->link, sizeof response->link },
-    };
-    for (size_t i = 0; i < sizeof KEPT / sizeof KEPT[0]; i++) {
-        if (strcasecmp(name, KEPT[i].name) == 0) {
-            strlcpy(KEPT[i].text, value, KEPT[i].size);
-            return;
-        }
-    }
-    if (strcasecmp(name, "Retry-After") == 0) {
-        /* Seconds; a date instead of them reads as 0, which is "none". */
-        long seconds = strtol(value, NULL, 10);
-        response->retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
-    }
-}
-
 static esp_err_t on_http_event(esp_http_client_event_t *event)
 {
     request_t *request = event->user_data;
     host_answer_info_t *response = &request->response;
     if (event->event_id == HTTP_EVENT_ON_HEADER) {
-        note_header(response, event->header_key, event->header_value);
+        answer_info_header(response, event->header_key, event->header_value);
         answer_headers_add(&request->headers, event->header_key, event->header_value);
     }
     return ESP_OK;
@@ -466,6 +435,10 @@ static void fetch_values(request_t *request, esp_http_client_handle_t client,
     if (!json_pick_finish(&request->pick)) {
         is_whole = false; /* "{\"price\":123": values, and no document around them */
     }
+    if (length == 0 && !esp_http_client_is_complete_data_received(client)) {
+        length = -1;
+    }
+    request->network_failed = length < 0 && http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
     cut_forget();
     esp_http_client_close(client);
     bool is_ok = http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
@@ -510,6 +483,10 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
             break;
         }
         if (next_length == 0) {
+            if (!esp_http_client_is_complete_data_received(client)) {
+                next_length = -1;
+                break;
+            }
             flags |= HOST_DATA_LAST;
         }
         hand_over_piece(app_name, poll_number, http_status, &request->response, &request->headers, piece,
@@ -524,6 +501,9 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
         length = next_length;
     }
     bool is_too_long = length == READ_TOO_LONG || next_length == READ_TOO_LONG;
+    request->network_failed = (length < 0 || next_length < 0) &&
+                              total <= HOST_ANSWER_PIECES_MAX &&
+                              http_status >= HTTP_OK_FIRST && http_status <= HTTP_OK_LAST;
     if (is_too_long) {
         ESP_LOGW(TAG, "%s/%d: the answer took over %d s", app_name, poll_number,
                  PIECES_WITHIN_MS / MS_PER_SECOND);
@@ -635,24 +615,64 @@ static esp_err_t headers_or_why_not(esp_http_client_handle_t client, request_t *
 #define X509_VERIFY_FAILED  0x2700
 #define X509_NO_ROOT_FOR_IT 0x3000
 
+/* mbedTLS can add a low-level error to a high-level one. An allocation
+ * failure in either layer is local pressure, not a lost connection. */
+#define TLS_HIGH_ERROR_MASK 0x7F80
+#define TLS_LOW_ERROR_MASK  0x007F
+#define SSL_ALLOC_FAILED    0x7F00
+#define X509_ALLOC_FAILED   0x2880
+#define PK_ALLOC_FAILED     0x3F80
+#define PEM_ALLOC_FAILED    0x1180
+#define CIPHER_ALLOC_FAILED 0x6180
+#define MD_ALLOC_FAILED     0x5180
+#define ECP_ALLOC_FAILED    0x4D80
+#define DHM_ALLOC_FAILED    0x3400
+#define MPI_ALLOC_FAILED    0x0010
+#define ASN1_ALLOC_FAILED   0x006A
+
+static bool tls_needs_memory(int tls_code)
+{
+    int low_error = tls_code & TLS_LOW_ERROR_MASK;
+    if (low_error == MPI_ALLOC_FAILED || low_error == ASN1_ALLOC_FAILED) {
+        return true;
+    }
+    switch (tls_code & TLS_HIGH_ERROR_MASK) {
+    case SSL_ALLOC_FAILED:
+    case X509_ALLOC_FAILED:
+    case PK_ALLOC_FAILED:
+    case PEM_ALLOC_FAILED:
+    case CIPHER_ALLOC_FAILED:
+    case MD_ALLOC_FAILED:
+    case ECP_ALLOC_FAILED:
+    case DHM_ALLOC_FAILED:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* Why a request that got no answer got none, as an application is told. */
 static int why_no_answer(esp_http_client_handle_t client, esp_err_t err)
 {
+    int tls_error = 0, certificate_flags = 0;
+    esp_err_t tls_failure = esp_http_client_get_and_clear_last_tls_error(client, &tls_error, &certificate_flags);
+    int tls_code = tls_error < 0 ? -tls_error : tls_error;
+    int socket_error = esp_http_client_get_errno(client);
+    if (err == ESP_ERR_NO_MEM || tls_failure == ESP_ERR_NO_MEM ||
+        socket_error == ENOMEM || socket_error == ENOBUFS || tls_needs_memory(tls_code)) {
+        return HOST_FAILED_NO_MEMORY;
+    }
     if (!wifi_is_online()) {
         return HOST_FAILED_NO_NETWORK;
     }
-    int tls_error = 0, certificate_flags = 0;
-    esp_http_client_get_and_clear_last_tls_error(client, &tls_error, &certificate_flags);
     /* The certificate the server showed was looked at and not accepted:
      * the flags say what was wrong with it, and the set of roots says
      * "fatal" when none of them signed it. Any other failed handshake is a
      * server that does not speak what the device does: no answer. */
-    int tls_code = tls_error < 0 ? -tls_error : tls_error;
     if (certificate_flags != 0 || tls_code == X509_VERIFY_FAILED ||
         tls_code == X509_NO_ROOT_FOR_IT) {
         return HOST_FAILED_NOT_TRUSTED;
     }
-    int socket_error = esp_http_client_get_errno(client);
     if (err == ESP_ERR_TIMEOUT || socket_error == EAGAIN || socket_error == ETIMEDOUT) {
         return HOST_FAILED_TIMEOUT;
     }
@@ -741,14 +761,14 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         tell_failure(app_name, number, wants_values, HOST_FAILED_NOT_ALLOWED);
     } else if (err != ESP_OK || http_status <= 0) {
         int why = why_no_answer(client, err);
+        request->network_failed = why == HOST_FAILED_NO_NETWORK ||
+                                  why == HOST_FAILED_NO_ANSWER || why == HOST_FAILED_TIMEOUT;
         /* A poll over a list is one number for every item: which of them did not answer. */
         ESP_LOGW(TAG, "%s/%d%s%s: no answer (%d): %s", app_name, number,
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
-        note_network_use(false);
         tell_failure(app_name, number, wants_values, why);
     } else {
-        note_network_use(true);
-            request->response.length = esp_http_client_is_chunked_response(client)
+        request->response.length = esp_http_client_is_chunked_response(client)
                                        ? -1
                                        : (int32_t)esp_http_client_get_content_length(client);
         if (method == HOST_HTTP_HEAD) {
@@ -785,9 +805,6 @@ void poller_net_poll_not_made(const char *app_name, int poll_number, int why)
         return;
     }
     if (load_poll(request, app_name, poll_number)) {
-        if (why == HOST_FAILED_NO_NETWORK) {
-            note_network_use(false);
-        }
         tell_failure_to(app_name, poll_number, request->poll.pick_count > 0, why, true);
     }
     free(request);
@@ -817,8 +834,10 @@ static int list_item(const char *app_name, const char *key, int item, char *text
     }
 }
 
-int poller_net_poll(const char *app_name, int poll_number, int item, int *method)
+int poller_net_poll(const char *app_name, int poll_number, int item, int *method,
+                    bool *network_failed)
 {
+    *network_failed = false;
     request_t *request = calloc(1, sizeof *request);
     if (request == NULL) {
         ESP_LOGW(TAG, "%s/%d: no memory for the request", app_name, poll_number);
@@ -848,6 +867,7 @@ int poller_net_poll(const char *app_name, int poll_number, int item, int *method
         }
         *method = request->poll.method;
         perform(request, app_name, poll_number, *method, NULL, 0, false);
+        *network_failed = request->network_failed;
         s_item = -1;
     }
     free(request);

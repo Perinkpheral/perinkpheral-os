@@ -4,6 +4,27 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.97
+
+- Application capability checks cover refused saves, session and alarm allocation, notification retries, malformed response fields, HTTP cooldowns and date-aware event times. Application fixtures can declare exact valid response variants, visible errors and narrowly scoped exceptions.
+
+- The header's Wi-Fi icon shows whether the device has joined a network and obtained an address. A server's TLS or HTTP failure no longer crosses it out. While Wi-Fi sleeps between polls, the icon keeps the last connection attempt's outcome.
+
+- Application capability checks carry mocked response headers into streamed and picked answers. Header lookup and fixed metadata share the firmware implementation, including repeated fields and fail-closed aggregate overflow.
+
+- Companion pages receive effective setting defaults, including list defaults, while preserving stored empty overrides.
+
+- SDK builds reject explicit null defaults and validate URL/link authorities and ports like the firmware. Builds warn when estimated interpreter use exceeds 64 KB with a minimum older than 0.1.95; applications needing that arena must declare the newer minimum.
+
+- Contract snapshots require valid introduction stamps for new imports, exports and constants. Only response metadata may grow by appending fields while preserving its recorded prefix and alignment.
+
+- JSON extraction combines surrogate escapes only when adjacent within one string, including across response chunks. Network documentation clarifies skipped list members, first-path ownership, preparation failures and non-2xx status preservation.
+- Obtaining a Wi-Fi address immediately retries manifest polls that failed in transport or became due offline, including in power-saving profiles. Healthy polls, HTTP refusals such as 429, invalid answers and certificate refusals keep their pace. List retries coalesce into one round; queued raw requests proceed without replaying failed requests.
+- The endurance observer retries failed log and status reads independently after 2, 4 and then at most 5 seconds, with three-second read timeouts. Per-endpoint last success, failure request start, failure detection and recovery timestamps distinguish request latency and retry delay from the observed outage bounds. Existing collectors are unaffected until restarted.
+- Untitled application screens can put their screen count beside the connection icon in Perinkpheral OS header, followed by their own left text. The SDK's `app_nav_set_header()` composes both; `app_nav_draw_title()` with no title draws nothing and leaves all content space available. Titled screens keep their existing count on the title's baseline. The host API and ABI 3 are unchanged.
+
+- HTTPS accepts certificates with NumericString name attributes, including MOEX's current certificate used by Stocks. Chain and hostname verification remain required; Stocks also needs its catalog update with the matching certificate-authority root.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.

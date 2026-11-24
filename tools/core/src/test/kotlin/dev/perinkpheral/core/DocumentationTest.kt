@@ -81,7 +81,16 @@ object DocumentationTest {
             it to "Saving the application's settings also stops a poll stream"
         }.toTypedArray(), read("docs/guide/source/guide.ru.txt") to
             "Сохранение настроек приложения также останавливает поток ответа на опрос")
-        check(findings == 28)
+        finding(29, network to "matching scalars in source order",
+            network to "Missing members and non-scalar values are skipped",
+            network to "first matching path only", network to "Parallel lists cannot safely be zipped",
+            network to "Picked 2xx responses", network to "stored empty values are valid",
+            guide to "Lists contain matching scalar values in source order",
+            guide to "source guarantees corresponding scalars for every record",
+            read("docs/guide/source/guide.ru.txt") to "Сопоставлять параллельные списки по индексам безопасно")
+        check("two lists of one array stay in step" !in network)
+        check("a {{setting}} used by the request is empty" !in network)
+        check(findings == 29)
         println("DocumentationTest: $findings findings checked")
     }
 }
