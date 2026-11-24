@@ -55,7 +55,6 @@ void wifi_get_status(wifi_status_t *status) { status->phase = WIFI_PHASE_ONLINE;
 bool power_is_saving(void) { return saving_power; }
 void power_hold_radio(void) { }
 void power_release_radio(void) { }
-void status_check(void) { }
 void settings_watch(settings_watch_fn watcher) { (void)watcher; }
 bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }

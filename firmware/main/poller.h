@@ -40,10 +40,7 @@ void poller_answer_was_abandoned(const char *app_name, int request);
  * its things again. */
 void poller_look(void);
 
-/* Whether the last time the network was needed it was not there; and the
- * network saying it is there again, which also makes every poll due. For
- * the header's icon. */
-bool poller_last_use_failed(void);
+/* The network is available again: make every poll due. */
 void poller_network_is_back(void);
 
 /* The installed applications changed: the poller takes the new list. What

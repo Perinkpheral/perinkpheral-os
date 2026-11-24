@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.97
+
+- The header's Wi-Fi icon shows whether the device has joined a network and obtained an address. A server's TLS or HTTP failure no longer crosses it out. While Wi-Fi sleeps between polls, the icon keeps the last connection attempt's outcome.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.

@@ -75,6 +75,10 @@ TESTS   += test_app_update_schedule
 TESTS   += test_app_install test_system_settings
 TESTS   += test_wifi_events test_web_connections test_question_press test_launcher
 TESTS   += test_poller_net
+TESTS   += test_status
+
+test_status: test_status.c tinytest.h $(MAIN)/status.c $(MAIN)/status.h $(wildcard event_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -o $@ test_status.c $(MAIN)/status.c
 
 test_poller_net: test_poller_net.c tinytest.h $(MAIN)/poller_net.c $(MAIN)/poller_net.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c $(wildcard net_stubs/*.h net_stubs/*/*.h)
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Inet_stubs -Ipoller_stubs -Iinstall_stubs -I$(UI)/include -I$(GFX)/include -I$(NET)/include -I$(MAIN) -o $@ test_poller_net.c $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c -lm

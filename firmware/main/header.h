@@ -48,7 +48,7 @@ bool header_keep_only(header_kept_t *kept, const uint32_t *app_ids, int count);
 
 /* The host's own part. */
 typedef struct {
-    bool       network_ok;  /* the last use of the network worked */
+    bool       network_ok;  /* has an address, or last joined successfully before radio sleep */
     bool       time_known;  /* false: no date at all */
     bool       shows_clock; /* the time where the date stands */
     struct tm  local;       /* the user's local time */

@@ -15,7 +15,7 @@ extern "C" {
 /* What the header's host part is made of; header_compose() puts it into
  * words. */
 typedef struct {
-    bool      wifi_connected; /* the last use of the network worked */
+    bool      wifi_connected; /* has an address, or last joined successfully before radio sleep */
     bool      date_known;
     bool      shows_clock;    /* the time where the date stands */
     struct tm local;          /* the user's local time, when it is known */

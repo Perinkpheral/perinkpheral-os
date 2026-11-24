@@ -23,8 +23,6 @@ typedef struct {
     /* An answer, or the news that there is none, for the application: the
      * data is only there until this returns. */
     void (*deliver)(const char *app_name, const app_delivery_t *delivery);
-    /* Whether the network, asked just now, was there. */
-    void (*network_worked)(bool worked);
 } poller_net_host_t;
 
 void poller_net_start(const poller_net_host_t *host);

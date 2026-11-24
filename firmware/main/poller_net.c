@@ -135,11 +135,6 @@ static void hand_over(const char *app_name, const app_delivery_t *delivery)
     s_host->deliver(app_name, delivery);
 }
 
-static void note_network_use(bool worked)
-{
-    s_host->network_worked(worked);
-}
-
 /* The item of a list a poll with "each" goes over: -1 for any other. */
 static int s_item = -1;
 
@@ -744,11 +739,9 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         /* A poll over a list is one number for every item: which of them did not answer. */
         ESP_LOGW(TAG, "%s/%d%s%s: no answer (%d): %s", app_name, number,
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
-        note_network_use(false);
         tell_failure(app_name, number, wants_values, why);
     } else {
-        note_network_use(true);
-            request->response.length = esp_http_client_is_chunked_response(client)
+        request->response.length = esp_http_client_is_chunked_response(client)
                                        ? -1
                                        : (int32_t)esp_http_client_get_content_length(client);
         if (method == HOST_HTTP_HEAD) {
@@ -785,9 +778,6 @@ void poller_net_poll_not_made(const char *app_name, int poll_number, int why)
         return;
     }
     if (load_poll(request, app_name, poll_number)) {
-        if (why == HOST_FAILED_NO_NETWORK) {
-            note_network_use(false);
-        }
         tell_failure_to(app_name, poll_number, request->poll.pick_count > 0, why, true);
     }
     free(request);
