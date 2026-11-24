@@ -786,7 +786,7 @@ void app_on_picked(int32_t request, int32_t http_status)
     }
 }</pre>
 <ul>
-  <li>A null element is kept, as a gap in the series, so that two lists of one array stay in step. An element without the rest of the path (<code>items[*].title</code> in an item without a title) is skipped.</li>
+  <li>Lists contain matching scalar values in source order. A null scalar is kept as <code>null</code>, a gap in a series. Missing members and non-scalar values are skipped. Overlapping paths give each scalar to the first matching path only. Parallel lists cannot safely be zipped unless the source guarantees corresponding scalars for every record and the paths do not overlap.</li>
   <li>The elements of one response take up to 8 KB as text (<code>HOST_LIST_BYTES</code>); each costs its length and 2 bytes. Elements beyond that are dropped and the log says so.</li>
   <li>With more elements than the capacity, <code>app_value_series()</code> takes evenly spread elements, the first and the last among them.</li>
   <li>A value goes to the first path that names it: <code>a[*]</code> before <code>a[0]</code> takes the element.</li>
@@ -1449,7 +1449,7 @@ void    app_alloc_release(int32_t mark);
 </pre>
 <p>Allocations are aligned to eight bytes. Call app_alloc_mark() before temporary allocations and app_alloc_release(mark) when finished.</p>
 <h2 id="lib-json">json_pick.h: streaming JSON parser</h2>
-<p>json_pick keeps at most JSON_PICK_VALUE_MAX (63) bytes of a value, cut between UTF-8 characters; short control escapes such as \n and \t become spaces, \uXXXX escapes are decoded.</p>
+<p>json_pick keeps at most JSON_PICK_VALUE_MAX (63) bytes of a value, cut between UTF-8 characters; short control escapes such as \n and \t become spaces, \uXXXX escapes are decoded. Surrogate escapes combine only when adjacent in the same string, even across input chunks; unpaired surrogates are discarded.</p>
 <pre>/* about 1.5 KB: static, not on the stack */
 json_pick_t pick;
 /* up to 16 */

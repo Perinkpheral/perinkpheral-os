@@ -2245,8 +2245,8 @@ which ticker of the list
 hundredths; "null": a gap
 сотые; "null" - пропуск
 
-A null element is kept, as a gap in the series, so that two lists of one array stay in step. An element without the rest of the path (<code>items[*].title</code> in an item without a title) is skipped.
-Элемент null сохраняется как пропуск в ряду, чтобы два списка одного массива шли в ногу. Элемент без остатка пути (<code>items[*].title</code> у пункта без title) пропускается.
+Lists contain matching scalar values in source order. A null scalar is kept as <code>null</code>, a gap in a series. Missing members and non-scalar values are skipped. Overlapping paths give each scalar to the first matching path only. Parallel lists cannot safely be zipped unless the source guarantees corresponding scalars for every record and the paths do not overlap.
+Списки содержат совпавшие скалярные значения в порядке исходного документа. Скаляр null сохраняется как <code>null</code>, пропуск в ряду. Отсутствующие поля и нескалярные значения пропускаются. При пересечении путей каждый скаляр достаётся только первому совпавшему пути. Сопоставлять параллельные списки по индексам безопасно, только если источник гарантирует соответствующие скаляры для каждой записи, а пути не пересекаются.
 
 The elements of one response take up to 8 KB as text (<code>HOST_LIST_BYTES</code>); each costs its length and 2 bytes. Elements beyond that are dropped and the log says so.
 Элементы одного ответа занимают до 8 КБ текстом (<code>HOST_LIST_BYTES</code>); каждый занимает число байт, равное его длине плюс 2. Элементы сверх этого отбрасываются, и об этом сообщается в журнале.
@@ -4564,5 +4564,5 @@ tools/perinkpheral app-check &lt;folder&gt;
 tools/perinkpheral sim-test &lt;folder&gt;
 =
 
-json_pick keeps at most JSON_PICK_VALUE_MAX (63) bytes of a value, cut between UTF-8 characters; short control escapes such as \n and \t become spaces, \uXXXX escapes are decoded.
-json_pick сохраняет не более JSON_PICK_VALUE_MAX (63) байт значения с обрезкой по границе символа UTF-8; краткие управляющие последовательности, например \n и \t, заменяются пробелами, а последовательности \uXXXX декодируются.
+json_pick keeps at most JSON_PICK_VALUE_MAX (63) bytes of a value, cut between UTF-8 characters; short control escapes such as \n and \t become spaces, \uXXXX escapes are decoded. Surrogate escapes combine only when adjacent in the same string, even across input chunks; unpaired surrogates are discarded.
+json_pick сохраняет не более JSON_PICK_VALUE_MAX (63) байт значения с обрезкой по границе символа UTF-8; краткие управляющие последовательности, например \n и \t, заменяются пробелами, а последовательности \uXXXX декодируются. Суррогатные последовательности объединяются, только если стоят подряд в одной строке, в том числе на границе частей ввода; непарные суррогаты отбрасываются.

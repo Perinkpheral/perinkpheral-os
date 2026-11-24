@@ -108,6 +108,40 @@ static void test_strings(void)
     CHECK_STR(value(4), "{[,:]}"); /* punctuation inside a string is text */
 }
 
+static void test_surrogates_only_pair_in_adjacent_escapes(void)
+{
+    static const char *const PATHS[] = { "a", "b" };
+    static const struct {
+        const char *json;
+        const char *first;
+        const char *second;
+    } CASES[] = {
+        { "{\"a\":\"\\uD83D\",\"b\":\"\\uDE00\"}", "", "" },
+        { "{\"a\":\"\\uD83DX\\uDE00\"}", "X", "(none)" },
+        { "{\"a\":\"\\uD83D\\n\\uDE00\"}", " ", "(none)" },
+        { "{\"a\":\"\\uD83D\\\\\\uDE00\"}", "\\", "(none)" },
+        { "{\"a\":\"\\uD83D\\u0041\\uDE00\"}", "A", "(none)" },
+        { "{\"a\":\"\\uD83D\",\"\\uDE00b\":\"\\uDE00\"}", "", "" },
+        { "{\"a\":\"\\uD83D\xc3\xa9\\uDE00\"}", "\xc3\xa9", "(none)" },
+        { "{\"a\":\"\\uD83D\\uDE00\",\"b\":\"\\uD83D\\uDE00\"}", "\xf0\x9f\x98\x80", "\xf0\x9f\x98\x80" },
+        { "{\"a\":\"\\uD83D\\uD83D\\uDE00\"}", "\xf0\x9f\x98\x80", "(none)" },
+    };
+    for (size_t index = 0; index < sizeof CASES / sizeof CASES[0]; index++) {
+        size_t length = strlen(CASES[index].json);
+        for (size_t boundary = 0; boundary <= length; boundary++) {
+            json_pick_init(&pick, PATHS, 2);
+            CHECK(json_pick_feed(&pick, CASES[index].json, boundary));
+            CHECK(json_pick_feed(&pick, CASES[index].json + boundary, length - boundary));
+            CHECK(json_pick_finish(&pick));
+            CHECK_STR(value(0), CASES[index].first);
+            CHECK_STR(value(1), CASES[index].second);
+        }
+        read_in_pieces(PATHS, 2, CASES[index].json, 1);
+        CHECK_STR(value(0), CASES[index].first);
+        CHECK_STR(value(1), CASES[index].second);
+    }
+}
+
 static void test_a_value_is_cut_between_characters(void)
 {
     /* 62 letters and a character of two bytes: the last byte would be the
@@ -297,6 +331,18 @@ static void test_lists(void)
     CHECK_STR(element(0, 2), "3");
     CHECK_STR(element(1, 2), "11");
 
+    /* Missing and non-scalar members do not reserve a position. */
+    static const char *const RECORDS[] = { "items[*].a", "items[*].b", "items[0].a" };
+    read_lists(RECORDS, 3,
+               "{\"items\":[{\"a\":1},{\"b\":2},{\"a\":null,\"b\":3},{\"a\":{},\"b\":[4]}]}",
+               1, sizeof list);
+    CHECK(json_pick_count(&pick, 0) == 2 && json_pick_count(&pick, 1) == 2);
+    CHECK_STR(element(0, 0), "1");
+    CHECK_STR(element(0, 1), "null");
+    CHECK_STR(element(1, 0), "2");
+    CHECK_STR(element(1, 1), "3");
+    CHECK(json_pick_count(&pick, 2) == 0);
+
     /* without a buffer a list has nothing; with a small one, what fits */
     read_lists(SERIES, 2, "{\"t\":[1,2,3]}", 4, 0);
     CHECK(json_pick_count(&pick, 0) == 0 && !json_pick_is_cut(&pick));
@@ -320,6 +366,7 @@ int main(void)
     test_what_has_no_value();
     test_documents_that_are_not_objects();
     test_strings();
+    test_surrogates_only_pair_in_adjacent_escapes();
     test_a_value_is_cut_between_characters();
     test_limits();
     test_broken_documents();

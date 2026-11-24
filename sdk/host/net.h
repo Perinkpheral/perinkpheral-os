@@ -53,7 +53,8 @@
  * with HOST_DATA_FAILED, and in app_on_picked(). */
 #define HOST_FAILED_NO_NETWORK  (-1) /* no network connection */
 #define HOST_FAILED_NO_ANSWER   (-2) /* no answer from the server, or an incomplete answer */
-#define HOST_FAILED_NOT_READY   (-3) /* a {{setting}} used by the request is empty */
+#define HOST_FAILED_NOT_READY   (-3) /* preparation failed: missing/invalid template input
+                                        or expansion limit; stored empty values are valid */
 #define HOST_FAILED_NOT_ALLOWED (-4) /* destination outside the current manifest "hosts" list */
 #define HOST_FAILED_TIMEOUT     (-5) /* timeout after the server was reached */
 #define HOST_FAILED_NOT_TRUSTED (-6) /* HTTPS certificate not trusted: self-signed, expired,
@@ -88,7 +89,8 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * number `index` as text without a terminator and returns its length.
  * Numbers, true, false and null are copied as written; strings are copied
  * without quotes. Escaped quotes, backslashes and slashes are decoded.
- * Unicode escapes become UTF-8; unpaired surrogate escapes are discarded.
+ * Unicode escapes become UTF-8; surrogate escapes combine only when adjacent in the same string,
+ * including across input chunks; unpaired surrogates are discarded.
  * Other escaped characters become spaces. Extracted strings are
  * NUL-terminated internally, so an embedded NUL ends the exposed value.
  * Only ASCII property names are supported reliably; non-ASCII key
@@ -99,11 +101,14 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * HOST_ERR_NO_SPACE if the buffer is too small.
  *
  * A list path has "[*]" in place of one index - "close[*]",
- * "items[*].title" - and gives every element of that array, in order.
+ * "items[*].title" - and gives matching scalars in source order.
  * answer_count() returns the number of elements, answer_element() copies one
  * the way answer_value() copies a value; answer_value() has none for it. Any
- * other path has one element, its value, or none. A null element is kept
- * as "null", so that two lists of one array stay in step. The elements of
+ * other path has one element, its value, or none. A null scalar is kept
+ * as "null". Missing members and non-scalar values are skipped. Overlapping
+ * paths give a scalar to the first matching path only. Parallel lists cannot
+ * safely be zipped unless the source guarantees corresponding scalars for
+ * every record and the paths do not overlap. The elements of
  * one answer take at most HOST_LIST_BYTES as text, each its length plus
  * 2 bytes; elements beyond that are dropped and the log says so.
  * sdk/lib/app_values.h converts values to numbers and text. */
@@ -125,8 +130,9 @@ HOST_IMPORT(answer_item, int32_t answer_item(void));
  * A header that the server did not send is an empty string. A header
  * longer than its field is cut. A terminal HOST_DATA_FAILED callback may
  * have no metadata: status is the failure code, length is -1 and header
- * strings are empty. Picked responses that fail the checks described above
- * are reported as HOST_FAILED_NO_ANSWER even when an HTTP response arrived. */
+ * strings are empty. Picked 2xx responses that fail the checks described above
+ * are reported as HOST_FAILED_NO_ANSWER even when an HTTP response arrived;
+ * non-2xx responses preserve their HTTP status. */
 typedef struct host_answer_info {
     int32_t status;            /* HTTP status, or a HOST_FAILED_* code */
     int32_t length;            /* Content-Length; -1 if absent */

@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.96
+
+- JSON extraction combines surrogate escapes only when adjacent within one string, including across response chunks. Network documentation clarifies skipped list members, first-path ownership, preparation failures and non-2xx status preservation.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.
