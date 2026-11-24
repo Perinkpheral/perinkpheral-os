@@ -1261,8 +1261,8 @@ The application can write any setting with <code>kv_set()</code> but <code>url</
 <code>title</code> is 1 to 31 characters. <code>help</code> is up to 95 characters.
 <code>title</code> - от 1 до 31 символа. <code>help</code> - до 95 символов.
 
-Non-list defaults are nonempty strings, including number and toggle defaults. Secret and place settings cannot have defaults. A list default must contain at least one item.
-Значения по умолчанию, кроме list, задаются непустыми строками, включая number и toggle. Для secret и place они запрещены. Для list нужен хотя бы один элемент.
+Non-list defaults are nonempty strings, including number and toggle defaults. Omit <code>default</code> when none is needed; explicit <code>null</code> is invalid. Secret and place settings cannot have defaults. A list default must contain at least one item. URL and link defaults require an HTTP(S) authority with a nonempty host, no userinfo, and an optional decimal port from 1 to 65535. URL defaults cannot include a path, query or fragment; link defaults may include them and contain no spaces.
+Значения по умолчанию для типов, кроме list, - непустые строки, в том числе для number и toggle. Если значение не нужно, опустите <code>default</code>; явный <code>null</code> недопустим. У secret и place значений по умолчанию нет. Список по умолчанию должен содержать хотя бы один элемент. Значения URL и link по умолчанию требуют HTTP(S)-адрес с непустым хостом, без имени пользователя и пароля, с необязательным десятичным портом от 1 до 65535. У URL не может быть пути, запроса и фрагмента; у link они допустимы, но пробелы запрещены.
 
 Perinkpheral OS validates supplied settings before writing, but writes are not transactional. A storage failure can leave some values changed. If at least one write succeeds, app_on_settings() is delivered and polls are requested again, even after a partially failed save.
 Perinkpheral OS проверяет переданные настройки перед записью, но запись не является транзакцией. Ошибка хранилища может оставить часть значений изменёнными. Если хотя бы одна запись успешна, вызывается app_on_settings() и снова запрашиваются опросы, даже при частичной ошибке сохранения.
@@ -2713,8 +2713,8 @@ Use common words: "Save", "Remove", "Not set up". If a label needs an explanatio
 Minimize code size before data size.
 Сокращайте сначала размер кода, затем размер данных.
 
-Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 64 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting.
-Каждый байт исполненного кода занимает около четырёх байт из 80 КБ интерпретатора. Каждый байт данных занимает один байт страницы 64 КБ. Предпочитайте таблицу цепочке операторов <code>if</code>, Kit - собственной отрисовке, <code>pick</code> - собственному разборщику, <code>time_text()</code> - собственному форматированию дат.
+Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 64 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.
+Каждый байт исполняемого кода занимает примерно четыре байта из 80 КБ интерпретатора. Каждый байт данных занимает один байт страницы 64 КБ. Предпочитайте таблицу цепочке <code>if</code>, готовые элементы собственному рисованию, <code>pick</code> собственному разбору и <code>time_text()</code> собственному форматированию даты. Арена интерпретатора выросла с 64 КБ до 80 КБ в прошивке 0.1.95. Приложения, которым нужно больше прежних 64 КБ, обязаны указать <code>"firmware": "0.1.95"</code>. Сборка предупреждает, если оценка превышает 64 КБ, а итоговая минимальная версия ниже; оценка справочная и не доказывает фактический пик потребления.
 
 Keep shared helpers out of line.
 Не встраивайте общие вспомогательные функции.

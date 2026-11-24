@@ -24,7 +24,10 @@
 
 /* Reads a value into `value`. Returns its length. A setting of the manifest
  * with nothing stored reads as its "default", a list's items with line
- * breaks between them. */
+ * breaks between them. Omit a manifest default when absent; explicit null is
+ * invalid. URL/link defaults need HTTP(S), a nonempty host, no userinfo and
+ * an optional decimal port 1..65535. URL defaults have no path/query/fragment;
+ * link defaults may include them and contain no spaces. */
 HOST_IMPORT(kv_get, int32_t kv_get(const char *key, int32_t key_length, void *value,
                                    int32_t capacity));
 

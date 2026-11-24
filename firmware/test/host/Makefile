@@ -301,7 +301,7 @@ test_recovery_settings: test_recovery_settings.c tinytest.h ../../../recovery/ma
 test_log_ring: test_log_ring.c tinytest.h $(MAIN)/log_ring.c $(MAIN)/log_ring.h
 	$(CC) $(CFLAGS) -I$(MAIN) -o $@ test_log_ring.c $(MAIN)/log_ring.c
 
-test_app_manifest: test_app_manifest.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/include/app_manifest.h
+test_app_manifest: manifest_defaults.json test_app_manifest.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/include/app_manifest.h
 	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -o $@ test_app_manifest.c $(MANIFEST_SRCS) -lm
 
 test_app_update_policy: test_app_update_policy.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/app_update_policy.c $(APPSTORE)/include/app_update_policy.h

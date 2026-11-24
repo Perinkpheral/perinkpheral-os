@@ -433,7 +433,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
   <li><code>title</code> is 1 to 31 characters. <code>help</code> is up to 95 characters.</li>
 </ul>
 
-<p>Non-list defaults are nonempty strings, including number and toggle defaults. Secret and place settings cannot have defaults. A list default must contain at least one item.</p>
+<p>Non-list defaults are nonempty strings, including number and toggle defaults. Omit <code>default</code> when none is needed; explicit <code>null</code> is invalid. Secret and place settings cannot have defaults. A list default must contain at least one item. URL and link defaults require an HTTP(S) authority with a nonempty host, no userinfo, and an optional decimal port from 1 to 65535. URL defaults cannot include a path, query or fragment; link defaults may include them and contain no spaces.</p>
 <p>Perinkpheral OS validates supplied settings before writing, but writes are not transactional. A storage failure can leave some values changed. If at least one write succeeds, app_on_settings() is delivered and polls are requested again, even after a partially failed save.</p>
 <h3>Place with coordinates</h3>
 <pre>"settings": [
@@ -987,7 +987,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <div class="rule"><b>Keep interface text short and standard.</b> Use common words: "Save", "Remove", "Not set up". If a label needs an explanation, change the label.</div>
 
 <h2 id="design-memory">Memory</h2>
-<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 64 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting.</div>
+<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 64 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.</div>
 <div class="rule"><b>Keep shared helpers out of line.</b> Mark a small helper that is called from many places with <code>__attribute__((noinline))</code> and compare the build reports.</div>
 <div class="rule"><b>Store pictures as bits.</b> Put pictures in <code>pictures/</code>. Put large pictures in <code>files/</code>.</div>
 <div class="rule"><b>Process responses as a stream.</b> Process a response as it arrives and keep only the data to display. Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. When finished, call <code>app_alloc_release(mark)</code> to release every allocation made since that mark (section 23).</div>

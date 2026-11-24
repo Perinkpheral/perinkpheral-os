@@ -6,6 +6,8 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.96
 
+- SDK builds reject explicit null defaults and validate URL/link authorities and ports like the firmware. Builds warn when estimated interpreter use exceeds 64 KB with a minimum older than 0.1.95; applications needing that arena must declare the newer minimum.
+
 - Contract snapshots require valid introduction stamps for new imports, exports and constants. Only response metadata may grow by appending fields while preserving its recorded prefix and alignment.
 
 - JSON extraction combines surrogate escapes only when adjacent within one string, including across response chunks. Network documentation clarifies skipped list members, first-path ownership, preparation failures and non-2xx status preservation.
