@@ -43,11 +43,26 @@ object AppCheckTest {
             listOf("schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to
                 "alarm_set(ASK_ALARM, 30);"), "alarm-refusal:"),
 
+        Break("timers", "a retry one-shot cannot replace the repeating schedule",
+            listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
+                "    if (id == TICK_TIMER) {" to
+                    "    if (schedule_failed) schedule_failed = alarm_set(ASK_ALARM, 1) != HOST_OK;\n    if (id == TICK_TIMER) {"),
+            "alarm-refusal:"),
+        Break("timers", "a recovered repeating schedule keeps its original interval",
+            listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
+                "    if (id == TICK_TIMER) {" to
+                    "    if (schedule_failed) schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S * 2, 0) != HOST_OK;\n    if (id == TICK_TIMER) {"),
+            "alarm-refusal:"),
         Break("clock", "a floating future date uses today's offset",
             listOf("    time_from_local(&floating, &floating_at);" to
                 "    floating_at = 1806321600LL - time_zone_offset();"), "clock event"),
         Break("store", "an unsaved answer silently reverts immediately on unload",
             listOf("        gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, \"Storage error.\", 14);" to ""), "response-save:"),
+        Break("store", "an unrelated focus save error does not hide a silent response save failure",
+            listOf("        gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, \"Storage error.\", 14);" to "",
+                "    ask_note();\n}" to
+                    "    schedule_failed |= kv_set(\"focus\", 5, \"seen\", 4) != HOST_OK;\n    ask_note();\n}"),
+            "response-save:"),
         Break("network", "a streamed protocol parses an unbounded integer",
             listOf("        arriving[arriving_length] = '\\0';\n        keep_text(\"note\"" to
                 "        arriving[arriving_length] = '\\0';\n" +
@@ -305,6 +320,23 @@ object AppCheckTest {
                 "Durable request leases prevent duplicate requests after instance replacement."))),
         Break("network", "optional null fields and empty feeds render and persist their fallback",
             OPTIONAL_EDITS, "", checkPatch = OPTIONAL_RESPONSES),
+        Break("store", "lifecycle writes alone do not exercise response save refusal",
+            listOf("    *is_unsaved = kv_set(key, length_of(key), kept, at) != HOST_OK;" to
+                "    (void)key;\n    *is_unsaved = false;",
+                "    session_get(&page, sizeof page);" to
+                    "    session_get(&page, sizeof page);\n    if (kv_set(\"focus\", 5, \"seen\", 4) != HOST_OK) value[0] = 'x';"), ""),
+        Break("timers", "a retry restores the repeating schedule with its original interval",
+            listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
+                "    if (id == TICK_TIMER) {" to
+                    "    if (schedule_failed) schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;\n    if (id == TICK_TIMER) {"), ""),
+        Break("network", "shadowed HTTP 200 mocks and unready polls receive no mutation", emptyList(),
+            "no generated malformed response reached",
+            manifestEdits = listOf("\"every\": 60, \"pick\"" to
+                "\"every\": 60, \"headers\": {\"X-Token\": \"{{server}}\"}, \"pick\""),
+            checkPatch = mapOf("mocks" to linkedMapOf(
+                "https://example.test/not*" to mapOf("body" to "Plain text"),
+                "https://example.test/note" to mapOf("body" to "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}"),
+                "https://example.test/now*" to mapOf("body" to "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}")))),
         Break("timers", "a repeating alarm refusal is diagnosed in the log",
             listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
                 "    ask_note();\n}" to "    if (schedule_failed) log_write(HOST_LOG_WARN, \"Alarm error.\", 12);\n    ask_note();\n}"), ""),
@@ -510,10 +542,34 @@ object AppCheckTest {
                 val report = checker.run(copied(BREAKS.size + number, fine).parentFile, only = fine.capability)
                 val line = report.lines.single()
                 check(line.state == AppCheck.State.OK) { "${fine.what}: ${line.details.joinToString("\n")}" }
+                if (fine.saying.isNotEmpty()) {
+                    check(line.details.any { fine.saying in it }) { "${fine.what}: ${line.details.joinToString("\n")}" }
+                }
                 (fine.checkPatch["exceptions"] as? Map<*, *>).orEmpty().keys.forEach { exception ->
                     check(line.details.any { "exception $exception" in it }) { "exception $exception was not reported" }
                 }
             }
+            val manyNotes = Break("network", "declared exceptions survive the coverage note limit", listOf(
+                "    if (request != NOTE_REQUEST) {" to """
+                    if (request >= 100 && request < 119) {
+                        char url[] = "https://example.test/unanswered-A";
+                        url[sizeof url - 2] = (char)('A' + request - 99);
+                        http_send(request + 1, HOST_HTTP_GET, url, sizeof url - 1, NULL, 0, NULL, 0);
+                    }
+                    if (request != NOTE_REQUEST) {
+                """.trimIndent(),
+                "void app_on_focus(void)\n{" to """
+                    void app_on_focus(void)
+                    {
+                        const char url[] = "https://example.test/unanswered-A";
+                        http_send(100, HOST_HTTP_GET, url, sizeof url - 1, NULL, 0, NULL, 0);
+                """.trimIndent()), "", checkPatch = mapOf("exceptions" to mapOf(
+                    "network.backoff" to "A separately tested request policy.\nIts reason spans two lines.",
+                    "responses.picked-null" to "A declared response policy.")))
+            val details = checker.run(copied(BREAKS.size + FINE.size, manyNotes), only = "network").lines.single().details
+            check(details.count { "no answer is kept" in it } == 16) { details.joinToString("\n") }
+            check("exception network.backoff: A separately tested request policy. Its reason spans two lines." in details)
+            check("exception responses.picked-null: A declared response policy." in details)
             BREAKS.forEachIndexed { number, broken ->
                 val report = checker.run(copied(number, broken).parentFile, only = broken.capability)
                 val line = report.lines.single()

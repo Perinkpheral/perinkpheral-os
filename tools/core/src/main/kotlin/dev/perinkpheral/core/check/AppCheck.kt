@@ -197,6 +197,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             when (words[0]) {
                 "check" -> states[words[1]] = if (words[2].startsWith("ok")) State.OK else State.FAILED
                 "problem" -> details.getOrPut(words[1]) { ArrayList() } += words[2]
+                "exception" -> details.getOrPut(words[1]) { ArrayList() } += "exception " + words[2]
                 "note" -> details.getOrPut(words[1]) { ArrayList() } += "note: " + words[2]
             }
         }
@@ -338,7 +339,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                     val mutated = File(scratch, "answers/$index-$number.body").apply { writeText(mutation.body) }
                     val parsed = runCatching { Json.parse(mutation.body) }.getOrNull()
                     val valid = validResponses[address].orEmpty().any { it == parsed }
-                    "    { ${text(address)}, ${text(mutation.kind)}, ${text(mutated.path)}, $valid },"
+                    "    { $index, ${text(mutation.kind)}, ${text(mutated.path)}, $valid },"
                 }
             }
             if (mutations.isNotEmpty()) {

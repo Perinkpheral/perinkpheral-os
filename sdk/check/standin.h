@@ -70,7 +70,8 @@ typedef struct {
 } standin_answer_t;
 
 typedef struct {
-    const char *address, *kind, *file;
+    int32_t answer_index;
+    const char *kind, *file;
     bool is_valid; /* exact alternate response declared by the application */
 } standin_mutation_t;
 
@@ -222,7 +223,7 @@ typedef struct {
     int32_t mutation_deliveries;
     bool monitor_backoff;
     int32_t rate_limits;
-    uint32_t alarms_delivered;
+    uint32_t oneshots_delivered;
     int64_t retry_until_ms;
     int32_t early_requests;
     char draw_text[STANDIN_DRAW_TEXT_BYTES]; /* visible text, in drawing order, separated by newlines */

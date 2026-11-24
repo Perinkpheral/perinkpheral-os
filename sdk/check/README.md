@@ -54,7 +54,7 @@ prove every possible input or button sequence. A coverage note identifies missin
 | --- | --- |
 | `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic absent from the healthy run is required. |
 | `store` | Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Refuse response saves as well. Unload immediately and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
-| `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The healthy schedule must recover, its one-shot action must be delivered, or the app must display or log failure. Log diagnostics are compared before recovery against the healthy run. |
+| `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The app must recover the healthy schedule or display or log failure. A repeating alarm must still be scheduled at its original interval. A one-shot alarm may be pending or already delivered. Log diagnostics are compared before recovery against the healthy run. |
 | `notices` | Reach alarms/timers through the standard paths; compare accepted counts with queue rejection followed by acceptance and with writes refused immediately after acceptance. Retry for 60 seconds, then unload/replay; also deliver alarms into fresh background instances. No due notice reached is a coverage note. |
 | `network` | Derive malformed responses from good JSON mocks, compare the good/normal failed-response pictures and reloaded cache; observe new HTTP/poll requests during Retry-After, including lifecycle changes and chains of two refusals, with both 120- and 300-second deadlines. |
 | `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |
@@ -83,7 +83,8 @@ manifest-poll deliveries. It observes app-issued requests separately, including
 explicit `poll_run()` calls. The firmware host poller tests cover deadline and
 list rescheduling, including reconnect and delays longer than a day.
 
-`exceptions` is an object mapping check keys to nonempty reasons. Each is printed:
+`exceptions` maps check keys to nonempty reasons. The report lists every declaration for the
+capabilities being checked, independently of coverage notes:
 
 - `store.identical-answers`: durable request leases or equivalent metadata must be written even when successful response data is identical, including as time elapses. Only those write-count assertions are exempted; failed-answer and lifecycle write counts, refused-save recovery and sanitizer checks still run. A nonempty reason is required.
 - `store.response`: a deliberately volatile answer cache.
@@ -100,6 +101,10 @@ list rescheduling, including reconnect and delays longer than a day.
   for this application. An empty feed may legitimately clear the view, for example.
 
 Unknown keys and blank reasons fail. Do not use an exception to bless a defect.
+A mutation can reach only a request ready and permitted to receive the HTTP 200 mock
+that generated it. Mock selection follows the regular first-match order, and HEAD
+responses have no body to mutate.
+
 JSON mutations include individual null, string and number members (at most 64 variants
 of each kind, generated lazily using the first record in nested arrays), as well as changing all leaves.
 String mutations retain up to 24 UTF-8 bytes of the original prefix, so an invalid identity

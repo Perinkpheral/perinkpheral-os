@@ -2774,7 +2774,6 @@ void standin_timer(int32_t id)
 void standin_alarm(int32_t id)
 {
     standin_alarm_t *alarm = &standin()->alarms[id];
-    world->alarms_delivered |= 1u << id;
     if (alarm->kind == STANDIN_ALARM_EVERY) {
         /* As app_host.c keeps it: a period after the time it was due, or a period from now when
          * that is past already or the clock was set meanwhile. */
@@ -2784,7 +2783,8 @@ void standin_alarm(int32_t id)
             next_ms = world->uptime_ms + every_ms;
         }
         alarm->due_uptime_ms = next_ms;
-    } else {
+    } else if (alarm->kind != STANDIN_ALARM_NONE) {
+        world->oneshots_delivered |= 1u << id;
         alarm->kind = STANDIN_ALARM_NONE;
     }
     CALL(on_alarm, id);

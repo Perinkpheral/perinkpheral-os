@@ -23,6 +23,7 @@
  *     check <capability> ok|fail <checks made>
  *     problem <capability> <what was expected and what was seen>
  *     note <capability> <what was not checked, and why>
+ *     exception <capability> <declared check key and reason>
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -94,13 +95,12 @@ static void note(capability_t capability, const char *format, ...)
     }
 }
 
-/* Exceptions are declared beside the application, with a reason printed in the report. */
+/* The report prints declarations independently of whether the relevant scene ran. */
 static bool excepted(const char *name)
 {
     for (int32_t index = 0; index < standin_subject.exception_count; index++) {
         const standin_pair_t *exception = &standin_subject.exceptions[index];
         if (strcmp(exception->key, name) == 0) {
-            note(checking, "exception %s: %s", name, exception->value);
             return true;
         }
     }
@@ -129,9 +129,10 @@ static bool visible_failure(void)
 /* ---- Answers kept beside the application ---- */
 
 typedef struct {
-    int32_t        status;
+    const standin_answer_t *mock;
+    int32_t status;
     const uint8_t *body;
-    int32_t        length;
+    int32_t length;
     const standin_pair_t *headers;
     int32_t header_count;
 } answer_t;
@@ -164,6 +165,7 @@ static bool answer_for(const char *url, answer_t *answer)
             lengths[index] = (int32_t)fread(bodies[index], 1, HOST_ANSWER_MAX, file);
             fclose(file);
         }
+        answer->mock = kept;
         answer->headers = kept->headers;
         answer->header_count = kept->header_count;
         answer->status = kept->status;
@@ -211,6 +213,7 @@ typedef struct {
     bool           has_alarms;     /* every alarm that waits comes */
     int64_t        alarms_late_ms; /* so much after their time */
     clock_change_t clock;
+    int32_t        response_refusal; /* a HOST_ERR_* applied during the answer callbacks */
     int32_t        refuse_after_press; /* 1-based: a refusal of writes begins before this press */
     bool           retry_events;
     bool           recover_alarms;
@@ -238,9 +241,13 @@ enum {
     MARK_VISIBLE_FAILURE = MARK_ROUND_PICTURE + ROUNDS_MAX,
     MARK_MUTATION_PICKED,
     MARK_DIAGNOSTICS,
-    MARK_ALARM_COVERAGE,
-    MARK_COUNT
+    MARK_ONESHOT_COVERAGE,
+    MARK_RESPONSE_REFUSALS,
+    MARK_ALARM_PERIOD, /* one mark per alarm ID, zero for a schedule that does not repeat */
+    MARK_COUNT = MARK_ALARM_PERIOD + HOST_ALARM_COUNT
 };
+
+_Static_assert(MARK_COUNT <= STANDIN_MARKS, "too many scene marks");
 
 #define DEPTH_MAX        12
 #define NEVER_LEAVES     99
@@ -320,7 +327,7 @@ static int32_t backoff_seconds = 120;
 static const standin_mutation_t *mutation;
 
 static void deliver(int32_t request, int32_t item, bool is_picked, const char *url, bool is_ready, bool is_permitted,
-                    const round_t *round, bool is_head)
+                    const round_t *round, bool is_head, int32_t response_refusal)
 {
     standin_t *host = standin();
     answer_t answer = { 0 };
@@ -358,13 +365,14 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         answer.header_count = 1;
     }
     if (mutation != NULL && (round->kind == ROUND_MUTATION || round->kind == ROUND_TARGET_FAILURE) &&
-        is_answered_by(mutation->address, url)) {
+        !is_head && status == 200 && answer.mock == &standin_subject.answers[mutation->answer_index]) {
         host->mutation_deliveries++;
         if (is_picked) {
             host->marks[MARK_MUTATION_PICKED] = 1;
         }
         if (round->kind == ROUND_TARGET_FAILURE) {
             status = HOST_FAILED_NO_ANSWER;
+            answer = (answer_t){ 0 };
         } else {
             static uint8_t bytes[HOST_ANSWER_MAX];
             FILE *file = fopen(mutation->file, "rb");
@@ -375,7 +383,6 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
             answer.length = (int32_t)fread(bytes, 1, sizeof bytes, file);
             fclose(file);
             answer.body = bytes;
-            status = 200;
         }
     }
     /* An answer that stops is some pieces and then nothing: of a request that
@@ -388,6 +395,11 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         answer.length = 0; /* poller_net.c: HEAD has no response body, with either delivery mode */
     }
     standin_answer_headers(answer.headers, answer.header_count);
+    int32_t previous_refusal = host->refuse_writes;
+    int32_t refused_before = host->refused_writes;
+    if (response_refusal != HOST_OK) {
+        host->refuse_writes = response_refusal;
+    }
     if (is_picked) {
         /* One that fails late is, for the application, one that failed - with what the picker
          * read before it broke off: here all of it before its last closing bracket, so that every
@@ -399,15 +411,19 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
             } while (length > 0 && answer.body[length] != '}' && answer.body[length] != ']');
         }
         standin_picked(request, item, status, answer.body, length);
-        return;
+    } else {
+        /* A request with no pieces to give fails the way the round's answers fail. */
+        if (round->kind == ROUND_FAILED_LATE && status < 0) {
+            status = HOST_FAILED_NO_ANSWER;
+        }
+        int32_t piece = round->kind == ROUND_PIECES ? round->size : HOST_DATA_CHUNK_MAX;
+        int32_t ending = round->kind == ROUND_CUT ? STANDIN_CUT : round->kind == ROUND_FAILED_LATE ? STANDIN_FAILED : STANDIN_WHOLE;
+        standin_data(request, item, status, answer.body, answer.length, piece, ending, HOST_FAILED_NO_ANSWER);
     }
-    /* A request with no pieces to give fails the way the round's answers fail. */
-    if (round->kind == ROUND_FAILED_LATE && status < 0) {
-        status = HOST_FAILED_NO_ANSWER;
+    if (response_refusal != HOST_OK) {
+        host->refuse_writes = previous_refusal;
+        host->marks[MARK_RESPONSE_REFUSALS] += (uint64_t)(host->refused_writes - refused_before);
     }
-    int32_t piece = round->kind == ROUND_PIECES ? round->size : HOST_DATA_CHUNK_MAX;
-    int32_t ending = round->kind == ROUND_CUT ? STANDIN_CUT : round->kind == ROUND_FAILED_LATE ? STANDIN_FAILED : STANDIN_WHOLE;
-    standin_data(request, item, status, answer.body, answer.length, piece, ending, HOST_FAILED_NO_ANSWER);
 }
 
 /* One thing the device gives an application. Off the screen each is given to an instance
@@ -422,6 +438,7 @@ typedef struct {
     bool           is_picked, is_ready, is_permitted, is_head;
     char           url[STANDIN_URL_BYTES];
     const round_t *round;
+    int32_t        response_refusal;
 } delivery_t;
 
 static void give(const delivery_t *delivery)
@@ -434,7 +451,7 @@ static void give(const delivery_t *delivery)
         standin_alarm(delivery->alarm);
     } else {
         deliver(delivery->request, delivery->item, delivery->is_picked, delivery->url, delivery->is_ready,
-                delivery->is_permitted, delivery->round, delivery->is_head);
+                delivery->is_permitted, delivery->round, delivery->is_head, delivery->response_refusal);
     }
 }
 
@@ -470,9 +487,8 @@ static void ask_again(void)
     }
 }
 
-/* Every poll of the manifest, an item of its list at a time, then the requests the application
- * made, each sent to the address it was queued with, authorized again and its headers filled. */
-static void answer_manifest_polls(const round_t *round)
+/* Every poll of the manifest, one item of its list at a time. */
+static void answer_manifest_polls(const round_t *round, int32_t response_refusal)
 {
     standin_t *host = standin();
     for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
@@ -486,7 +502,8 @@ static void answer_manifest_polls(const round_t *round)
             }
             delivery_t answer = { .alarm = -1, .request = poll, .item = items < 0 || is_empty ? -1 : standin_poll_item(poll, index),
                                   .is_picked = standin_subject.polls[poll].picks != NULL, .is_permitted = true,
-                                  .is_head = standin_subject.polls[poll].method == HOST_HTTP_HEAD, .round = round };
+                                  .is_head = standin_subject.polls[poll].method == HOST_HTTP_HEAD, .round = round,
+                                  .response_refusal = response_refusal };
             answer.is_ready = !is_empty && standin_poll_url(poll, answer.item, answer.url, sizeof answer.url) &&
                               standin_poll_ready(poll, answer.item);
             hand(&answer);
@@ -494,21 +511,28 @@ static void answer_manifest_polls(const round_t *round)
     }
 }
 
-static void answer_round(const round_t *round)
+/* Send the app's queued requests to their original addresses, with fresh
+ * authorization and filled headers. */
+static void answer_round_with_refusal(const round_t *round, int32_t response_refusal)
 {
     standin_t *host = standin();
-    answer_manifest_polls(round);
+    answer_manifest_polls(round, response_refusal);
     for (int32_t answered = 0; host->request_count > 0 && answered < REQUESTS_A_ROUND && !has_away_failed;
          answered++) {
         standin_request_t request = host->requests[0];
         host->request_count--;
         memmove(&host->requests[0], &host->requests[1], (size_t)host->request_count * sizeof host->requests[0]);
         delivery_t answer = { .alarm = -1, .request = request.tag, .item = -1, .round = round,
-                              .is_head = request.method == HOST_HTTP_HEAD,
+                              .is_head = request.method == HOST_HTTP_HEAD, .response_refusal = response_refusal,
                               .is_ready = standin_headers_ready(&request), .is_permitted = standin_url_allowed(request.url) };
         snprintf(answer.url, sizeof answer.url, "%s", request.url);
         hand(&answer);
     }
+}
+
+static void answer_round(const round_t *round)
+{
+    answer_round_with_refusal(round, HOST_OK);
 }
 
 static int32_t soonest_timer(void)
@@ -570,7 +594,7 @@ static void scene_run(void *context)
         standin_settings();
     }
     if (scene->has_data) {
-        answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });
+        answer_round_with_refusal(&(round_t){ ROUND_WHOLE, 0, 0 }, scene->response_refusal);
     }
     int32_t press_number = 0;
     for (const char *key = scene->presses; key != NULL && *key != '\0' && !host->is_leaving; key++) {
@@ -668,7 +692,15 @@ static void scene_run(void *context)
         }
     }
     host->marks[MARK_ALARMS] = standin_alarms();
-    host->marks[MARK_ALARM_COVERAGE] = standin_alarms() | host->alarms_delivered;
+    host->marks[MARK_ONESHOT_COVERAGE] = host->oneshots_delivered;
+    for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+        const standin_alarm_t *alarm = &host->alarms[id];
+        if (alarm->kind == STANDIN_ALARM_EVERY) {
+            host->marks[MARK_ALARM_PERIOD + id] = (uint64_t)alarm->every;
+        } else if (alarm->kind != STANDIN_ALARM_NONE) {
+            host->marks[MARK_ONESHOT_COVERAGE] |= 1u << id;
+        }
+    }
     if (!scene->recover_alarms && !scene->retry_events) {
         host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
     }
@@ -1057,14 +1089,12 @@ static void check_response_refusal(int32_t refusal)
         return;
     }
     standin_reset();
-    standin()->refuse_writes = refusal;
-    scene_t answered = { .has_data = true };
-    if (!play(&answered) || mark(MARK_LEFT) || standin()->refused_writes == 0) {
+    scene_t answered = { .has_data = true, .response_refusal = refusal };
+    if (!play(&answered) || mark(MARK_LEFT) || mark(MARK_RESPONSE_REFUSALS) == 0) {
         return;
     }
     uint64_t picture = mark(MARK_PICTURE);
     bool warned = mark(MARK_VISIBLE_FAILURE) != 0;
-    standin()->refuse_writes = HOST_OK;
     if (play(&ON_SCREEN)) {
         expect(STORE, warned || mark(MARK_VISIBLE_FAILURE) || mark(MARK_PICTURE) == picture,
                "response-save: writes answered %d: after unload the picture silently reverts "
@@ -1528,15 +1558,22 @@ static void check_alarm_refusal(void)
         if (!play(&used)) {
             continue;
         }
-        uint64_t alarms = mark(MARK_ALARM_COVERAGE);
+        uint64_t one_shots = mark(MARK_ONESHOT_COVERAGE);
+        uint64_t periods[HOST_ALARM_COUNT];
+        for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+            periods[id] = mark(MARK_ALARM_PERIOD + id);
+        }
         uint64_t diagnostics = mark(MARK_DIAGNOSTICS);
         standin_reset();
         standin()->refuse_alarms = HOST_ERR_NO_SPACE;
         if (!play(&used) || standin()->refused_alarms == 0 || mark(MARK_LEFT)) {
             continue;
         }
-        expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || mark(MARK_DIAGNOSTICS) != diagnostics ||
-               (mark(MARK_ALARM_COVERAGE) & alarms) == alarms,
+        bool recovered = (mark(MARK_ONESHOT_COVERAGE) & one_shots) == one_shots;
+        for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+            recovered = recovered && (periods[id] == 0 || mark(MARK_ALARM_PERIOD + id) == periods[id]);
+        }
+        expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || mark(MARK_DIAGNOSTICS) != diagnostics || recovered,
                "alarm-refusal: buttons %s, alarm_set* answered HOST_ERR_NO_SPACE: schedule lost after 60 seconds "
                "of timer retries, with no failure diagnostic", WAYS[way]);
     }
@@ -1650,6 +1687,7 @@ static void check_responses(void)
     int exercised = 0;
     for (int32_t index = 0; index < standin_subject.mutation_count; index++) {
         mutation = &standin_subject.mutations[index];
+        const char *address = standin_subject.answers[mutation->answer_index].address;
         char exception[80];
         snprintf(exception, sizeof exception, "responses.%s", mutation->kind);
         if (excepted(exception)) {
@@ -1685,22 +1723,22 @@ static void check_responses(void)
                 continue; /* Streamed strings are not limited by the picker. */
             }
             expect(NETWORK, truncated_text_is_marked(standin()->draw_text),
-                   "response long-values at %s: a picked 63-byte string is displayed without a truncation marker", mutation->address);
+                   "response long-values at %s: a picked 63-byte string is displayed without a truncation marker", address);
             continue;
         }
         if (mutation->is_valid) {
-            note(NETWORK, "declared valid response %s at %s (mutation %d)", mutation->kind, mutation->address, index);
+            note(NETWORK, "declared valid response %s at %s (mutation %d)", mutation->kind, address, index);
             picture = mark(MARK_PICTURE);
             failure = picture;
         }
         expect(NETWORK, mark(MARK_PICTURE) == picture || mark(MARK_PICTURE) == failure,
                "response %s at %s (mutation %d): malformed HTTP 200 replaced a good picture; "
-               "neither the retained picture nor its failed-answer picture", mutation->kind, mutation->address, index);
+               "neither the retained picture nor its failed-answer picture", mutation->kind, address, index);
         /* Check the durable cache too: memory alone must not hide a poisoned saved answer. */
         if (play(&ON_SCREEN)) {
             expect(NETWORK, mark(MARK_PICTURE) == picture || mark(MARK_PICTURE) == failure,
                    "response %s at %s (mutation %d): after unload the good cache was replaced", mutation->kind,
-                   mutation->address, index);
+                   address, index);
         }
     }
     mutation = NULL;
@@ -1742,7 +1780,7 @@ static void during_backoff(void *context)
     standin_intent(HOST_INTENT_NETWORK_UP);
     standin_intent(HOST_INTENT_TIME_CHANGED);
     standin_settings();
-    answer_manifest_polls(&(round_t){ ROUND_HTTP, 429, 0 });
+    answer_manifest_polls(&(round_t){ ROUND_HTTP, 429, 0 }, HOST_OK);
     standin_press(BTN_OK);
     for (int32_t step = 0; step < backoff_seconds - 1; step++) {
         standin_pass(1000);
@@ -1954,6 +1992,19 @@ static int report(void)
         }
         if (results[capability].problems_unsaid > 0) {
             printf("problem %s and %d more\n", CAPABILITY_NAMES[capability], results[capability].problems_unsaid);
+        }
+        for (int32_t index = 0; index < standin_subject.exception_count; index++) {
+            const standin_pair_t *exception = &standin_subject.exceptions[index];
+            const char *name = CAPABILITY_NAMES[capability];
+            size_t length = strlen(name);
+            if ((strncmp(exception->key, name, length) == 0 && exception->key[length] == '.') ||
+                (capability == NETWORK && strncmp(exception->key, "responses.", sizeof "responses." - 1) == 0)) {
+                printf("exception %s %s: ", name, exception->key);
+                for (const char *at = exception->value; *at != '\0'; at++) {
+                    putchar(*at == '\n' || *at == '\r' ? ' ' : *at);
+                }
+                putchar('\n');
+            }
         }
         for (int index = 0; index < results[capability].note_count; index++) {
             printf("note %s %s\n", CAPABILITY_NAMES[capability], results[capability].notes[index]);
