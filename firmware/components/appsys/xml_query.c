@@ -18,6 +18,7 @@ typedef struct {
     const host_xml_field_t *fields;
     selected_field_t *selected;
     int field_count;
+    uint16_t *name_slots;
     const char *key;
     int key_length, node, from, result;
     const char *value, *end;
@@ -147,6 +148,31 @@ static bool declaration(const char **p, const char *end)
     }
     return false;
 }
+static char entity(const char **p, const char *end);
+/* The complete-document callback rejects duplicate keys even on nodes the
+ * consumer never queries. Hashes select candidates; bytes decide equality. */
+enum { ATTRIBUTE_SLOTS = 128 };
+static bool unique_attribute(uint16_t *slots, const char *doc, const char *key, const char *end)
+{
+    unsigned hash = 0;
+    for (const char *s = key; s < end; s++)
+        hash = hash * 31u + (unsigned char)*s;
+    for (int n = 0; n < ATTRIBUTE_SLOTS; n++) {
+        unsigned at = (hash + (unsigned)n) % ATTRIBUTE_SLOTS;
+        if (!slots[at]) {
+            slots[at] = (uint16_t)(key - doc);
+            return true;
+        }
+        const char *left = doc + slots[at], *right = key;
+        while (right < end && *left == *right) {
+            left++;
+            right++;
+        }
+        if (right == end && !rest(*left))
+            return false;
+    }
+    return false;
+}
 static bool scan(const char *doc, int length, query_t *q)
 {
     if (!doc || length <= 0 || length > MAX_BYTES)
@@ -187,6 +213,9 @@ static bool scan(const char *doc, int length, query_t *q)
         if (!q->attribute && q->result < 0 && parent == q->node && id >= q->from &&
             (!q->key_length || matches(q, tag, p)))
             q->result = id;
+        if (q->name_slots)
+            memset(q->name_slots, 0, ATTRIBUTE_SLOTS * sizeof q->name_slots[0]);
+        unsigned attribute_count = 0;
         for (;;) {
             const char *before = p;
             spaces(&p, end);
@@ -204,6 +233,9 @@ static bool scan(const char *doc, int length, query_t *q)
             if (before == p || !name(&p, end))
                 return false;
             const char *key_end = p;
+            if (q->name_slots && (++attribute_count > ATTRIBUTE_SLOTS / 2 ||
+                                  !unique_attribute(q->name_slots, doc, key, p)))
+                return false;
             spaces(&p, end);
             if (!take(&p, end, '='))
                 return false;
@@ -215,7 +247,12 @@ static bool scan(const char *doc, int length, query_t *q)
             while (p < end && *p != quote) {
                 if (*p == '<' || (unsigned char)*p < 32)
                     return false;
-                p++;
+                if (q->name_slots && *p == '&') {
+                    p++;
+                    if (!entity(&p, end))
+                        return false;
+                } else
+                    p++;
             }
             if (p == end)
                 return false;
@@ -261,6 +298,12 @@ static char entity(const char **p, const char *end)
         }
     }
     return 0;
+}
+bool xml_document_valid(const char *doc, int32_t length)
+{
+    uint16_t names[ATTRIBUTE_SLOTS];
+    query_t q = {.name_slots = names};
+    return scan(doc, length, &q);
 }
 int32_t xml_query_child(const char *doc, int32_t length, int32_t parent, const char *key,
                         int32_t keysz, int32_t from)

@@ -303,3 +303,35 @@ HOST_IMPORT(http_send,
  * 10 s to 20 s resets it even when both run at the 300 s floor. Returns
  * HOST_OK, or HOST_ERR_FAILED if the override could not be kept or forgotten. */
 HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t seconds));
+
+/* Response representation. Without a manifest format the final response's
+ * media type selects JSON or XML. Unknown and absent types stay raw. */
+#define HOST_FORMAT_RAW  0
+#define HOST_FORMAT_JSON 1
+#define HOST_FORMAT_XML  2
+#define HOST_DOCUMENT_MAX 12288
+#define HOST_SINCE_HOST_FORMAT_RAW "0.1.100"
+#define HOST_SINCE_HOST_FORMAT_JSON "0.1.100"
+#define HOST_SINCE_HOST_FORMAT_XML "0.1.100"
+#define HOST_SINCE_HOST_DOCUMENT_MAX "0.1.100"
+#define HOST_SINCE_RESPONSE_FORMAT "0.1.100"
+
+/* Register a guest buffer for structured raw responses, normally in
+ * app_on_load. Its lifetime is the current instance. The buffer must be
+ * disjoint from app_data_buffer; capacity is 1..HOST_DOCUMENT_MAX.
+ * While receiving, leave this buffer untouched until app_on_document. A new
+ * registration during any answer is refused. JSON supports 64 nested containers.
+ * Structured XML uses the host/xml.h subset, with up to 64 attributes per
+ * element and duplicate names or unknown entities rejected throughout. */
+#define HOST_SINCE_document_buffer_set "0.1.100"
+HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, int32_t capacity));
+
+/* Opt-in notification after the final raw piece, for recognized formats.
+ * A successful 2xx body is complete and validated, in the registered buffer,
+ * with the given length (no NUL). It remains usable until the next answer
+ * or unload. Non-2xx statuses and validation, size or transport errors have
+ * zero length. An interrupted instance has no later completion. Raw MIME
+ * and JSON pick polls continue through their own handlers. */
+#define HOST_SINCE_app_on_document "0.1.100"
+APP_EXPORT(app_on_document, void app_on_document(int32_t request, int32_t format,
+                                                 int32_t status, int32_t length));

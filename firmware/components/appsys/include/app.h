@@ -171,6 +171,7 @@ void app_answer_begins(app_t *app, const struct host_answer_info *response,
                        int item);
 void app_answer_ends(app_t *app);
 
+void app_response_policy(app_t *app,const app_manifest_t *manifest);
 void app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags,
               int http_status);
 

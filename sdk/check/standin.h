@@ -52,6 +52,7 @@ typedef struct {
     const char        *headers; /* the manifest's, as lines "Name: value", or NULL */
     int32_t            method; /* HOST_HTTP_*, GET when zero */
     const char        *body; /* template, or NULL */
+    int format_policy;
 } standin_poll_t;
 
 typedef struct {
@@ -104,6 +105,7 @@ typedef struct {
     bool                     is_fullscreen, writes_files;
     const standin_setting_t *settings;
     int32_t                  setting_count;
+    int format_policy;
     const standin_poll_t    *polls;
     int32_t                  poll_count;
     const char *const       *hosts;
@@ -153,6 +155,7 @@ typedef struct {
     void (*on_timer)(int32_t id);
     void (*on_alarm)(int32_t id);
     void (*on_draw)(void);
+    void (*on_document)(int32_t request,int32_t format,int32_t status,int32_t length);
     void (*on_data)(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t http_status);
     void (*on_picked)(int32_t request, int32_t http_status);
 } standin_handlers_t;

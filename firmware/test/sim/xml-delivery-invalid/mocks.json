@@ -12,7 +12,8 @@
     "content_type": "application/xml"
   },
   "https://example.test/pick": {
-    "body": "<r value='not-json'/>"
+    "body": "<r value='not-json'/>",
+    "content_type": "application/json"
   },
   "*": {
     "status": -3

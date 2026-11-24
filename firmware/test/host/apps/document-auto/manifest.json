@@ -1,0 +1,36 @@
+{
+  "name": "document-auto",
+  "title": "Response formats",
+  "version": "0.1.0",
+  "abi": 3,
+  "hosts": [
+    "example.test"
+  ],
+  "polls": [
+    {
+      "url": "https://example.test/poll-json",
+      "every": 300,
+      "format": "json"
+    },
+    {
+      "url": "https://example.test/poll-xml",
+      "every": 300,
+      "method": "POST",
+      "body": "one",
+      "format": "xml"
+    },
+    {
+      "url": "https://example.test/poll-raw",
+      "every": 300,
+      "format": "raw"
+    },
+    {
+      "url": "https://example.test/pick",
+      "every": 300,
+      "pick": [
+        "value"
+      ],
+      "format": "auto"
+    }
+  ]
+}

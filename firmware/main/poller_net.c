@@ -781,6 +781,7 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         request->response.length = esp_http_client_is_chunked_response(client)
                                        ? -1
                                        : (int32_t)esp_http_client_get_content_length(client);
+        wants_values = wants_values && answer_format(request->poll.response_format,&request->headers,&request->response)==HOST_FORMAT_JSON;
         if (method == HOST_HTTP_HEAD) {
             /* There is no body to wait for: the headers are the answer. */
             if (wants_values) {

@@ -370,6 +370,7 @@ typedef struct job {
     struct job *next;
     bool        is_poll;
     bool        wants_values;
+    int         format_policy;
     int         number; /* the poll's index, or the request's tag */
     int         method;
     char        url[APP_URL_MAX + 1];
@@ -460,7 +461,8 @@ static void answer_from_mock(job_t *job, const json_t *mock)
     job->status = json_is_number(status) ? (int)status->number : 200;
     job->response.status = job->status;
     snprintf(job->response.content_type, sizeof job->response.content_type, "%s",
-             json_is_string(type) ? type->text : "application/json");
+             json_is_string(type) ? type->text : "");
+    if (json_is_string(type)) answer_headers_type(&job->response_headers,type->text);
     if (json_is_string(file)) {
         char path[PATH_BYTES];
         snprintf(path, sizeof path, "%s%s", file->text[0] == '/' ? "" : s_mocks_folder, file->text);
@@ -925,7 +927,7 @@ static void hand_over(job_t *job)
     }
     say('I', "sim", "%s/%s %d%s: HTTP %d, %zu bytes", s_options.app, kind, job->number, item,
         job->status, job->answer_length);
-    if (job->wants_values) {
+    if (job->wants_values && answer_format(job->format_policy,&job->response_headers,&job->response)==HOST_FORMAT_JSON) {
         const char *paths[JSON_PICK_PATHS_MAX];
         for (int i = 0; i < job->pick_count; i++) {
             paths[i] = job->pick[i];
@@ -993,6 +995,7 @@ static void start_poll_request(const app_poll_t *poll, int number, const list_it
     job->item = item;
     job->method = poll->method;
     job->body_template = strdup(poll->body);
+    job->format_policy = poll->response_format;
     job->wants_values = poll->pick_count > 0;
     job->pick_count = poll->pick_count;
     memcpy(job->pick, poll->pick, sizeof poll->pick);

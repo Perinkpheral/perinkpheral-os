@@ -12,9 +12,13 @@
 typedef struct answer_headers {
     char text[ANSWER_HEADERS_BYTES];
     uint16_t used;
-    bool overflow;
+    uint8_t overflow : 1;
+    uint8_t type_seen : 1;
+    uint8_t mime_format : 2;
 } answer_headers_t;
 
+void answer_headers_type(answer_headers_t *headers,const char *type);
+int answer_format(int policy,const answer_headers_t *headers,const host_answer_info_t *info);
 void answer_headers_reset(answer_headers_t *headers);
 bool answer_header_name_valid(const char *name, size_t length);
 void answer_headers_add(answer_headers_t *headers, const char *name, const char *value);

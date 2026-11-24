@@ -79,6 +79,7 @@ typedef struct {
      * number made of its code and its manifest, never 0. Whoever lists the
      * installed applications fills it in. */
     uint32_t id;
+    uint8_t response_format, poll_formats[APP_POLLS_MAX];
     int      poll_count;
     uint32_t poll_every_s[APP_POLLS_MAX];
     /* The setting a poll's pace is the user's choice in ("every": "{{key}}"),
@@ -109,6 +110,7 @@ typedef struct {
      * application takes the answer as it comes, in pieces. */
     char         pick[JSON_PICK_PATHS_MAX][JSON_PICK_PATH_MAX + 1];
     int          pick_count;
+    uint8_t      response_format;
     /* "each": the list setting the poll goes over, one request an item,
      * {{key}} of it being that item; empty for a poll of one request. */
     char         each_key[MANIFEST_SETTING_KEY_MAX + 1];

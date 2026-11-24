@@ -874,7 +874,7 @@ static int32_t auth_set(const char *app, const char *key, const void *value, int
     }
     return HOST_OK;
 }
-static const char *current_firmware(void) { return "0.1.54"; }
+static const char *current_firmware(void) { return "0.1.100"; }
 static void test_headers_across_background_unloads(void)
 {
     start_on(&menu.scene);

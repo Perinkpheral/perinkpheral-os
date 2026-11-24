@@ -611,8 +611,30 @@ static void test_id_collisions(void)
     CHECK(app_manifest_id_conflicts(apps, 1, "review-b", apps[0].id));
 }
 
+static void test_response_formats(void)
+{
+    static const char format[] =
+        "{\"abi\":3,\"name\":\"test\",\"title\":\"Test\",\"format\":\"xml\",\"polls\":[{\"url\":"
+        "\"https://test.local\",\"every\":60},{\"format\":\"auto\",\"url\":\"https://"
+        "test.local\",\"every\":60,\"pick\":[\"x\"]}]}";
+    app_manifest_t manifest;
+    app_poll_t poll;
+    CHECK(app_manifest_parse(format, &manifest) == APP_MANIFEST_OK);
+    CHECK(manifest.response_format == 2 && manifest.poll_formats[0] == 2 &&
+          !manifest.poll_formats[1]);
+    CHECK(app_manifest_parse_poll(format, 1, &poll) == APP_MANIFEST_OK &&
+          poll.response_format == 0);
+    static const char clash[] =
+        "{\"abi\":3,\"name\":\"test\",\"title\":\"Test\",\"format\":\"raw\",\"polls\":[{\"url\":"
+        "\"https://test.local\",\"every\":60,\"pick\":[\"x\"]}]}";
+    CHECK(app_manifest_parse(clash, &manifest) == APP_MANIFEST_BAD_POLL);
+    CHECK(app_manifest_parse_poll(clash, 0, &poll) == APP_MANIFEST_BAD_POLL);
+    CHECK(app_manifest_parse("{\"abi\":3,\"name\":\"test\",\"title\":\"Test\",\"format\":null}",
+                             &manifest) == APP_MANIFEST_BAD_POLL);
+}
 int main(void)
 {
+    test_response_formats();
     test_shared_setting_defaults();
     test_id_collisions();
     test_four_default_links();

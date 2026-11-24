@@ -48,6 +48,7 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client)
 {
     (void)client;
     if (header_failure != 0) return header_failure;
+    if (active_client.event_handler) reply_header("Content-Type", "application/json");
     if (retry_header != NULL) reply_header("Retry-After", retry_header);
     if (mock_success) {
         reply_header("ETag", "\"revision-1\"");

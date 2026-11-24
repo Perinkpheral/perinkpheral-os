@@ -103,6 +103,7 @@ static bool load(app_scene_t *self)
     switch (app_load(self->manifest.name, self->manifest.abi, self->module, module_size, grants, self->services,
                      &self->app)) {
     case APP_OK:
+        app_response_policy(self->app,&self->manifest);
         self->instance++;
         return true;
     case APP_ERR_NO_MEMORY:

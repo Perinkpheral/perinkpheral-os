@@ -111,12 +111,12 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             return made
         }
         val shared = library.map(::compiled) + compiled(File(mapDir, "map_geo.c")) +
-            compiled(File(responseDir, "answer_headers.c")) + compiled(File(responseDir, "xml_query.c"))
+            compiled(File(responseDir, "answer_headers.c")) + compiled(File(responseDir, "xml_query.c")) + compiled(File(responseDir, "document_reader.c")) + compiled(File(responseDir, "json_document.c"))
         return Host(shared, compiled(File(checkDir, "standin.c")), compiled(File(checkDir, "checks.c")))
     }
 
     private fun includes(vararg more: File): List<String> =
-        (listOf(sdk.sdk, sdk.library, checkDir, File(responseDir, "include")) + more).map { "-I" + it.path }
+        (listOf(sdk.sdk, sdk.library, checkDir, File(responseDir, "include"), File(sdk.root,"firmware/components/appstore/include")) + more).map { "-I" + it.path }
 
     private fun checkOne(appDir: File, scratch: File, host: Host, only: String?): List<Line> {
         val name = appDir.name
@@ -257,6 +257,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 }
                 appendLine("};")
             }
+            fun policy(value: Any?) = when(value) { "json" -> 1; "xml" -> 2; "raw" -> 3; else -> 0 }
             val polls = maps("polls")
             polls.forEachIndexed { index, poll ->
                 val picks = (poll["pick"] as? List<*>).orEmpty()
@@ -269,7 +270,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                     // The manifest's headers as lines "Name: value", for the host to fill when it asks.
                     val headers = (poll["headers"] as? Map<*, *>)?.entries?.joinToString("\n") { (name, value) -> "$name: $value" }
                     appendLine("    { ${text(poll["url"] as String)}, ${if (picks.isEmpty()) "NULL" else "PICKS_$index"}, ${picks.size}, " +
-                        "${text(poll["each"] as? String)}, ${text(poll["prefix"] as? String)}, ${text(headers)}, HOST_HTTP_${poll["method"] ?: "GET"}, ${text(poll["body"] as? String)} },")
+                        "${text(poll["each"] as? String)}, ${text(poll["prefix"] as? String)}, ${text(headers)}, HOST_HTTP_${poll["method"] ?: "GET"}, ${text(poll["body"] as? String)}, ${policy(poll["format"] ?: manifest["format"])} },")
                 }
                 appendLine("};")
             }
@@ -411,6 +412,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             appendLine("    .name = ${text(manifest["name"] as String)},")
             appendLine("    .is_fullscreen = ${manifest["fullscreen"] == true}, .writes_files = ${manifest["writes_files"] == true},")
             if (settings.isNotEmpty()) appendLine("    .settings = SETTINGS, .setting_count = ${settings.size},")
+            appendLine("    .format_policy = ${policy(manifest["format"])},")
             if (polls.isNotEmpty()) appendLine("    .polls = POLLS, .poll_count = ${polls.size},")
             if (hosts.isNotEmpty()) appendLine("    .hosts = HOSTS, .host_count = ${hosts.size},")
             if (files.isNotEmpty()) appendLine("    .files = FILES, .file_count = ${files.size},")
@@ -510,7 +512,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
 
         /** The handlers of standin_handlers_t, as its fields are named. */
         private val HANDLERS = listOf("on_load", "on_focus", "on_blur", "on_terminate", "on_installed", "on_updated",
-            "on_settings", "on_intent", "on_back", "on_button", "on_timer", "on_alarm", "on_draw", "on_data", "on_picked")
+            "on_settings", "on_intent", "on_back", "on_button", "on_timer", "on_alarm", "on_draw", "on_data", "on_picked", "on_document")
 
         /** One set of flags for the stand-in host, every application and every test of one:
          * both sanitizers, and a finding of either stops the program. The contract's

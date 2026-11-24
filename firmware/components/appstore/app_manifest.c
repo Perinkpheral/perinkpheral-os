@@ -183,7 +183,24 @@ static bool is_prefix(const json_t *prefix)
     return true;
 }
 
-static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *parsed)
+static int read_format(const json_t *object, int inherited)
+{
+    const json_t *f = json_get(object, "format");
+    if (!f)
+        return inherited;
+    if (json_is_string(f)) {
+        if (!strcmp(f->text, "auto"))
+            return 0;
+        if (!strcmp(f->text, "raw"))
+            return 3;
+        if (!strcmp(f->text, "json"))
+            return HOST_FORMAT_JSON;
+        if (!strcmp(f->text, "xml"))
+            return HOST_FORMAT_XML;
+    }
+    return -1;
+}
+static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *parsed, int inherited)
 {
     if (!json_is_object(poll)) {
         return false;
@@ -287,8 +304,15 @@ static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *pa
          (parsed->method == HOST_HTTP_GET || parsed->method == HOST_HTTP_HEAD))) {
         return false;
     }
+    if (inherited < 0)
+        return false;
+    int format = read_format(poll, inherited);
+    if (format < 0)
+        return false;
+    parsed->response_format = (uint8_t)format;
     return read_headers(json_get(poll, "headers"), parsed) &&
-           read_pick(json_get(poll, "pick"), parsed);
+           read_pick(json_get(poll, "pick"), parsed) &&
+           !((format == HOST_FORMAT_XML || format == 3) && parsed->pick_count);
 }
 
 static const char *const SETTING_TYPES[] = {
@@ -1025,6 +1049,10 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
     }
 
     const json_t *polls = json_get(root, "polls");
+    int format = read_format(root, 0);
+    if (format < 0)
+        return APP_MANIFEST_BAD_POLL;
+    manifest->response_format = (uint8_t)format;
     manifest->poll_count = 0;
     if (polls == NULL) {
         return APP_MANIFEST_OK;
@@ -1042,10 +1070,11 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
     app_manifest_result_t result = APP_MANIFEST_OK;
     json_for_each(poll, polls)
     {
-        if (!read_poll(poll, json_get(root, "settings"), parsed)) {
+        if (!read_poll(poll, json_get(root, "settings"), parsed, format)) {
             result = APP_MANIFEST_BAD_POLL;
             break;
         }
+        manifest->poll_formats[manifest->poll_count] = parsed->response_format;
         strcpy(manifest->poll_every_key[manifest->poll_count], parsed->every_key);
         manifest->poll_every_s[manifest->poll_count++] = parsed->every_s;
     }
@@ -1115,11 +1144,10 @@ app_manifest_result_t app_manifest_parse_poll(const char *json, int poll, app_po
     const json_t *polls = json_get(root, "polls");
     /* NULL for a number that is not there, and for no array at all. */
     const json_t *wanted = poll >= 0 ? json_at(polls, poll) : NULL;
-    app_manifest_result_t result =
-        wanted != NULL &&
-                read_poll(wanted, json_get(root, "settings"), parsed)
-            ? APP_MANIFEST_OK
-            : APP_MANIFEST_BAD_POLL;
+    app_manifest_result_t result = wanted != NULL && read_poll(wanted, json_get(root, "settings"),
+                                                               parsed, read_format(root, 0))
+                                       ? APP_MANIFEST_OK
+                                       : APP_MANIFEST_BAD_POLL;
     /* A poll over a list without a prefix leaves to the others what they claim. */
     if (result == APP_MANIFEST_OK && parsed->each_key[0] != '\0' && parsed->each_prefix[0] == '\0') {
         const json_t *other;

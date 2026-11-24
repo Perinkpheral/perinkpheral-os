@@ -98,6 +98,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             val firmware = if (declared != null && versionNumber(declared)!! > versionNumber(needed)!!) declared else needed
             val firmwareLine = when {
                 declared == firmware -> "  firmware $firmware or later, as the manifest says"
+                byCall == "RESPONSE_FORMAT" -> "  firmware $firmware or later, for response format selection"
                 byCall == "POLL_METHOD" -> "  firmware $firmware or later, for a poll's method or body"
                 byCall != null -> "  firmware $firmware or later, for $byCall"
                 else -> "  firmware $firmware or later"
@@ -275,14 +276,14 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         }
         val called = module.imports.filter { it.first == HOST_MODULE }.map { it.second }.toSet()
         for ((call, handler) in ANSWERED_BY.toSortedMap()) {
-            if (call in called && handler !in exports) {
+            if (call in called && handler !in exports && !(call == "http_send" && "app_on_document" in exports)) {
                 throw BuildError("${wasm.path} calls $call() and has no $handler() for what comes of it")
             }
         }
         ((manifest["polls"] as? List<*>) ?: emptyList<Any>()).forEachIndexed { number, poll ->
             val picks = (poll as Map<*, *>)["pick"].let { it is List<*> && it.isNotEmpty() }
             val handler = if (picks) "app_on_picked" else "app_on_data"
-            if (handler !in exports) {
+            if (handler !in exports && !(handler == "app_on_data" && "app_on_document" in exports)) {
                 throw BuildError("${wasm.path}: poll $number of the manifest ${if (picks) "has \"pick\"" else "has no \"pick\""}, " +
                     "and the module has no $handler()")
             }

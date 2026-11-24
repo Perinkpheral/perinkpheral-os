@@ -1,11 +1,26 @@
 /* SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe */
 #include "answer_headers.h"
+#include "response_format.h"
 #include "host_api.h"
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
 
+void answer_headers_type(answer_headers_t *headers, const char *type)
+{
+    int format = response_format(0, type);
+    if (headers->type_seen && headers->mime_format != format)
+        format = HOST_FORMAT_RAW;
+    headers->type_seen = true;
+    headers->mime_format = (uint8_t)format;
+}
+int answer_format(int policy, const answer_headers_t *headers, const host_answer_info_t *info)
+{
+    if (policy || !headers || !headers->type_seen)
+        return response_format(policy, info ? info->content_type : NULL);
+    return headers->mime_format;
+}
 void answer_headers_reset(answer_headers_t *headers)
 {
     memset(headers, 0, sizeof *headers);
@@ -30,6 +45,8 @@ bool answer_header_name_valid(const char *name, size_t length)
 
 void answer_headers_add(answer_headers_t *headers, const char *name, const char *value)
 {
+    if (headers && name && value && !strcasecmp(name, "Content-Type"))
+        answer_headers_type(headers, value);
     if (headers->overflow) {
         return;
     }

@@ -1,0 +1,27 @@
+{
+  "app": "firmware/test/host/apps/doc-fixed",
+  "at": 1795262400,
+  "serial": true,
+  "mocks": "mocks.json",
+  "steps": [
+    "forward 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "press 2",
+    "wait 1",
+    "shot decoded"
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "https://example.test/poll-json": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "{\"v\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+    "content_type": "application/xml"
+  },
+  "https://example.test/poll-xml": {
+    "method": "POST",
+    "request_body": "one",
+    "status": 200,
+    "body": "<r a='ok'/>",
+    "content_type": "application/json"
+  },
+  "https://example.test/poll-raw": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "<r a='ok'/>",
+    "content_type": "application/xml"
+  },
+  "https://example.test/pick": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "{\"value\":42}",
+    "content_type": "Application/Vnd.Example+Json; charset=utf-8"
+  },
+  "https://example.test/get": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "{\"value\":42}",
+    "content_type": "Application/JSON ; charset=UTF-8"
+  },
+  "https://example.test/post": {
+    "method": "POST",
+    "request_body": "one",
+    "status": 200,
+    "body": "<r a='ok'/>",
+    "content_type": "TeXt/XmL; CHARSET=utf-8"
+  },
+  "https://example.test/plain": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "{\"value\":42}",
+    "content_type": "text/plain"
+  },
+  "https://example.test/missing": {
+    "method": "POST",
+    "request_body": "one",
+    "status": 200,
+    "body": "{\"value\":42}"
+  },
+  "https://example.test/bad": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "{\"v\":",
+    "content_type": "application/json"
+  },
+  "https://example.test/large": {
+    "method": "POST",
+    "request_body": "one",
+    "status": 200,
+    "body": "{\"v\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}",
+    "content_type": "application/json"
+  },
+  "https://example.test/recover": {
+    "method": "GET",
+    "request_body": "",
+    "status": 200,
+    "body": "<r a='ok'/>",
+    "content_type": "application/very-long-test-provider-response-xml-format+xml"
+  },
+  "https://example.test/error": {
+    "method": "POST",
+    "request_body": "one",
+    "status": 503,
+    "body": "not json",
+    "content_type": "application/json"
+  },
+  "*": {
+    "status": -3
+  }
+}

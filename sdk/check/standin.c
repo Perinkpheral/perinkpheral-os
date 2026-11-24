@@ -6,6 +6,7 @@
  * of subjects; each refuses what the contract says the device refuses.
  */
 #include "xml_query.h"
+#include "document_reader.h"
 #include "standin.h"
 
 #include <signal.h>
@@ -72,9 +73,31 @@ static uint32_t next_boot_id(uint32_t previous)
     return previous + 0x9E3779B1u != 0 ? previous + 0x9E3779B1u : 1;
 }
 
+static document_reader_t doc_reader;
+static uint8_t *doc_buffer;
+static int doc_capacity;
+static void reset_document(void)
+{
+    doc_reader = (document_reader_t){0};
+    doc_buffer = NULL;
+    doc_capacity = 0;
+}
+int32_t document_buffer_set(uint8_t *buffer, int32_t capacity)
+{
+    extern uint8_t *app_data_buffer(void);
+    uintptr_t chunk = (uintptr_t)app_data_buffer(), given = (uintptr_t)buffer;
+    if (!buffer || capacity < 1 || capacity > HOST_DOCUMENT_MAX || doc_reader.active ||
+        standin()->is_delivering ||
+        (given <= chunk ? chunk - given < (unsigned)capacity : given - chunk < HOST_DATA_CHUNK_MAX))
+        return HOST_ERR_ARGUMENT;
+    doc_buffer = buffer;
+    doc_capacity = capacity;
+    return HOST_OK;
+}
 void standin_reset(void)
 {
     standin_t *host = standin();
+    reset_document();
     session_refusal = HOST_OK;
     session_refused = 0;
     uint32_t boot_id = next_boot_id(host->boot_id);
@@ -2726,6 +2749,7 @@ void standin_focus(void)
 void standin_terminate(void)
 {
     CALL(on_terminate);
+    reset_document();
     world->is_loaded = world->is_on_screen = world->is_session_writable = false;
     memset(world->timer_due_ms, 0, sizeof world->timer_due_ms);
 }
@@ -2851,12 +2875,30 @@ uint64_t standin_screen(uint64_t frame)
 
 /* ---- Answers ---- */
 
+static int selected_format(int request)
+{
+    int policy = request >= 0 && request < standin_subject.poll_count
+                     ? standin_subject.polls[request].format_policy
+                     : standin_subject.format_policy;
+    return answer_format(policy, &response_headers, &response_info);
+}
+static void deliver_piece(int request, const uint8_t *buffer, const uint8_t *source, int n,
+                          int flags, int status)
+{
+    CALL(on_data, request, buffer, n, flags, status);
+    bool done = standin_handlers.on_document &&
+                document_reader_feed(&doc_reader, doc_buffer, doc_capacity, request,
+                                     selected_format(request), status, source, n, flags);
+    if (done) {
+        CALL(on_document, request, doc_reader.format, doc_reader.status, doc_reader.used);
+    }
+}
 void standin_data(int32_t request, int32_t item, int32_t status, const void *body, int32_t length,
                   int32_t piece, int32_t ending, int32_t failure)
 {
     standin_t *host = standin();
     prepare_answer(status);
-    if (standin_handlers.on_data == NULL) {
+    if (standin_handlers.on_data == NULL && standin_handlers.on_document == NULL) {
         return;
     }
     host->is_delivering = true;
@@ -2864,7 +2906,7 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
     response_info.status = status;
     has_picked = false;
     if (status < 0) {
-        CALL(on_data, request, NULL, 0, HOST_DATA_FAILED, status);
+        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, status);
         host->is_delivering = false;
         return;
     }
@@ -2887,12 +2929,13 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
         if (taken > 0) {
             copy(buffer, (const uint8_t *)body + at, (size_t)taken);
         }
-        CALL(on_data, request, buffer, taken, flags, status);
+        deliver_piece(request, buffer, taken ? (const uint8_t *)body + at : NULL, taken, flags,
+                      status);
         at += taken;
     } while (at < given);
     if (ending == STANDIN_FAILED) {
         prepare_answer(failure);
-        CALL(on_data, request, NULL, 0, HOST_DATA_FAILED, failure);
+        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, failure);
     }
     host->is_delivering = false;
 }
@@ -2902,6 +2945,10 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
     standin_t *host = standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
     prepare_answer(status);
+    if (status >= 0 && selected_format(poll) != HOST_FORMAT_JSON) {
+        standin_data(poll, item, status, body, length, HOST_DATA_CHUNK_MAX, STANDIN_WHOLE, 0);
+        return;
+    }
     if (standin_handlers.on_picked == NULL) {
         return;
     }

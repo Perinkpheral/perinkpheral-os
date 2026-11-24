@@ -42,7 +42,8 @@
     "content_type": "application/xml"
   },
   "https://example.test/pick": {
-    "body": "{\"value\":\"json\"}"
+    "body": "{\"value\":\"json\"}",
+    "content_type": "application/json"
   },
   "https://example.test/offline": {
     "status": -2

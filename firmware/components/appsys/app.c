@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "app_internal.h"
+#include "answer_headers.h"
 #include "app_abi.h"
 
 /* The interpreter's own stack of values, apart from the application's
@@ -40,7 +41,7 @@ static const struct {
 
 /* An export added to the contract stops the build here until the host
  * calls it: then the number is moved. */
-_Static_assert(EXPORT_COUNT == 17, "every export of host_api.h is called by the host");
+_Static_assert(EXPORT_COUNT == 18, "every export of host_api.h is called by the host");
 
 /* The application whose handler is running, for m3_Yield() below: the
  * interpreter calls it without saying for whom. There is one application
@@ -682,22 +683,41 @@ void app_answer_ends(app_t *app)
     app->headers = NULL;
 }
 
-void app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags,
-              int http_status)
+void app_response_policy(app_t *app, const app_manifest_t *manifest)
 {
-    if (HANDLER(app, app_on_data) == NULL || !app->has_data_buffer || length > HOST_DATA_CHUNK_MAX) {
+    app->response_policy = manifest->response_format;
+    memcpy(app->poll_policies, manifest->poll_formats, sizeof app->poll_policies);
+}
+void app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags, int status)
+{
+    if (length > HOST_DATA_CHUNK_MAX || app->stop_reason)
         return;
-    }
-    /* Looked up again every time: the interpreter may move the memory. */
     uint8_t *memory = m3_GetMemory(app->runtime, NULL, 0);
-    if (memory == NULL || app->stop_reason != NULL) {
+    if (!memory)
         return;
+    if (HANDLER(app, app_on_data) && app->has_data_buffer) {
+        if (length)
+            memcpy(memory + app->data_buffer_offset, data, length);
+        CALL_HANDLER(app, app_on_data, (int32_t)request, (int32_t)app->data_buffer_offset,
+                     (int32_t)length, (int32_t)flags, (int32_t)status);
     }
-    if (length > 0) { /* a request that failed comes with no data at all */
-        memcpy(memory + app->data_buffer_offset, data, length);
+    if (app->stop_reason)
+        return;
+    memory = m3_GetMemory(app->runtime, NULL, 0);
+    if (!memory)
+        return;
+    bool done = false;
+    if (HANDLER(app, app_on_document)) {
+        int policy = request >= 0 && request < APP_POLLS_MAX ? app->poll_policies[request]
+                                                             : app->response_policy;
+        int format = answer_format(policy, app->headers, app->response);
+        uint8_t *buffer = app->document_capacity ? memory + app->document_offset : NULL;
+        done = document_reader_feed(&app->document, buffer, app->document_capacity, request, format,
+                                    status, data, (int)length, flags);
     }
-    CALL_HANDLER(app, app_on_data, (int32_t)request, (int32_t)app->data_buffer_offset,
-                 (int32_t)length, (int32_t)flags, (int32_t)http_status);
+    if (done && !app->stop_reason)
+        CALL_HANDLER(app, app_on_document, (int32_t)request, (int32_t)app->document.format,
+                     (int32_t)app->document.status, (int32_t)app->document.used);
 }
 
 void app_values(app_t *app, int request, int http_status, json_pick_t *picked)

@@ -44,6 +44,17 @@ object PollManifestTest {
             }
             accepted(get)
             accepted(get + ("method" to "GET"))
+            val pick = get + ("pick" to listOf("value"))
+            for (format in listOf("json","raw","xml","auto")) {
+                check(sdk.manifestFeatures(manifest(get + ("format" to format))).isEmpty())
+                check(sdk.manifestFeatures(manifest(get) + ("format" to format)).isEmpty())
+            }
+            check(sdk.manifestFeatures(manifest(pick)).isEmpty())
+            check(sdk.manifestFeatures(manifest(pick + ("format" to "json"))).isEmpty())
+            check(sdk.manifestFeatures(manifest(pick) + ("format" to "json")).isEmpty())
+            check(sdk.manifestFeatures(manifest(pick + ("format" to "json")) + ("format" to "auto")).isEmpty())
+            check(sdk.manifestFeatures(manifest(pick + ("format" to "auto"))) == listOf("RESPONSE_FORMAT"))
+            check(sdk.firmwareFor(sdk.manifestFeatures(manifest(pick) + ("format" to "auto"))).first == "0.1.100")
             check(sdk.manifestFeatures(manifest(get)).isEmpty())
             check(sdk.manifestFeatures(manifest(get + ("method" to "GET"))).isEmpty())
             for (method in listOf("POST", "PUT", "DELETE", "PATCH", "HEAD", "PROPFIND", "REPORT")) {

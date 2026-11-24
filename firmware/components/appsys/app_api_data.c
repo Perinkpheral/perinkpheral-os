@@ -470,3 +470,20 @@ HOST_FUNCTION(xml_attrs)
     char *out = (char *)app_memory_to_fill(runtime, _mem, output, capacity);
     m3ApiReturn(xml_query_attrs(doc, length, node, fields, count, out, capacity));
 }
+
+HOST_FUNCTION(document_buffer_set)
+{
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(uint32_t, offset);
+    m3ApiGetArg(int32_t, capacity);
+    app_t *app = APP_OF(runtime);
+    if (app->is_in_answer || app->document.active || capacity < 1 || capacity > HOST_DOCUMENT_MAX ||
+        !app_memory_to_fill(runtime, _mem, offset, capacity) ||
+        (app->has_data_buffer && offset < app->data_buffer_offset + HOST_DATA_CHUNK_MAX &&
+         app->data_buffer_offset < offset + (uint32_t)capacity)) {
+        m3ApiReturn(HOST_ERR_ARGUMENT);
+    }
+    app->document_offset = offset;
+    app->document_capacity = capacity;
+    m3ApiReturn(HOST_OK);
+}

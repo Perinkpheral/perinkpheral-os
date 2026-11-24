@@ -76,14 +76,19 @@ class Sdk(val root: File) {
     }
 
     /** Behaviour that is absent from wasm imports still raises a package's minimum. */
-    fun manifestFeatures(manifest: Map<*, *>): List<String> =
-        if ((manifest["polls"] as? List<*>).orEmpty().any {
-            val poll = it as Map<*, *>
-            (poll["method"] ?: "GET") != "GET" || poll.containsKey("body")
-        }) listOf("POLL_METHOD") else emptyList()
+    fun manifestFeatures(manifest: Map<*, *>): List<String> {
+        val polls = (manifest["polls"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+        return buildList {
+            if (polls.any { (it["method"] ?: "GET") != "GET" || it.containsKey("body") }) add("POLL_METHOD")
+            // An explicit auto pick depends on routing a non-JSON response to the raw handler.
+            // Plain annotations leave legacy streams and unconditional JSON picks usable on .99.
+            if (polls.any { (it["format"] ?: manifest["format"]) == "auto" && (it["pick"] as? List<*>).orEmpty().isNotEmpty() })
+                add("RESPONSE_FORMAT")
+        }
+    }
 
     companion object {
-        private val MANIFEST_FEATURES = setOf("POLL_METHOD")
+        private val MANIFEST_FEATURES = setOf("POLL_METHOD", "RESPONSE_FORMAT")
     }
 
     val hostApiVersion: Long by lazy { contract.number("HOST_API_VERSION") }

@@ -16,7 +16,8 @@
       "every": 60,
       "pick": [
         "value"
-      ]
+      ],
+      "format": "json"
     },
     {
       "url": "https://example.test/stream",
@@ -30,7 +31,8 @@
       "every": 60,
       "pick": [
         "value"
-      ]
+      ],
+      "format": "json"
     }
   ],
   "settings": [

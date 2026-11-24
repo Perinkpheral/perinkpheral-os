@@ -10,6 +10,7 @@
 #pragma once
 
 #include "words.h"
+#include "document_reader.h"
 #include "app.h"
 
 #include <stdlib.h>
@@ -58,6 +59,10 @@ struct app {
     const struct answer_headers *headers;
     int                    response_status;
     int                    answer_item;
+    document_reader_t document;
+    uint32_t document_offset;
+    int document_capacity;
+    uint8_t response_policy, poll_policies[APP_POLLS_MAX];
     uint32_t    data_buffer_offset; /* where in its memory the application takes data */
     bool        has_data_buffer;
 

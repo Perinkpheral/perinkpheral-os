@@ -55,6 +55,7 @@ constant HOST_DATE_MINUTE	1
 constant HOST_DATE_MONTH	3
 constant HOST_DATE_NONE	5
 constant HOST_DATE_YEAR	4
+constant HOST_DOCUMENT_MAX	12288
 constant HOST_ERR_ARGUMENT	-2
 constant HOST_ERR_FAILED	-5
 constant HOST_ERR_NOT_DRAWING	-1
@@ -79,6 +80,9 @@ constant HOST_FONT_MEDIUM	1
 constant HOST_FONT_SMALL	5
 constant HOST_FONT_TABULAR	256
 constant HOST_FONT_TEXT	0
+constant HOST_FORMAT_JSON	1
+constant HOST_FORMAT_RAW	0
+constant HOST_FORMAT_XML	2
 constant HOST_HEADER_LEFT	0
 constant HOST_HEADER_RIGHT	1
 constant HOST_HEADER_TEXT_MAX	63
@@ -179,6 +183,10 @@ constant HOST_REDRAW_SOON	1
 constant HOST_REQUEST_FIRST	16
 constant HOST_REQUEST_LAST	255
 constant HOST_SESSION_MAX	1024
+constant HOST_SINCE_HOST_DOCUMENT_MAX	"0.1.100"
+constant HOST_SINCE_HOST_FORMAT_JSON	"0.1.100"
+constant HOST_SINCE_HOST_FORMAT_RAW	"0.1.100"
+constant HOST_SINCE_HOST_FORMAT_XML	"0.1.100"
 constant HOST_SINCE_HOST_ICON_CUBE	"0.1.84"
 constant HOST_SINCE_HOST_ICON_LAYERS	"0.1.84"
 constant HOST_SINCE_HOST_ICON_PROGRESS	"0.1.84"
@@ -188,9 +196,12 @@ constant HOST_SINCE_HOST_MAP_WORLD	"0.1.94"
 constant HOST_SINCE_HOST_XML_LABEL	"0.1.100"
 constant HOST_SINCE_HOST_XML_REQUIRED	"0.1.100"
 constant HOST_SINCE_POLL_METHOD	"0.1.80"
+constant HOST_SINCE_RESPONSE_FORMAT	"0.1.100"
 constant HOST_SINCE_SYS_DO_WIFI_SETUP	"0.1.66"
 constant HOST_SINCE_SYS_WIFI_OFF	"0.1.66"
 constant HOST_SINCE_answer_header	"0.1.51"
+constant HOST_SINCE_app_on_document	"0.1.100"
+constant HOST_SINCE_document_buffer_set	"0.1.100"
 constant HOST_SINCE_gfx_draw_map	"0.1.94"
 constant HOST_SINCE_gfx_draw_map_radius	"0.1.94"
 constant HOST_SINCE_gfx_map_point	"0.1.94"
@@ -310,6 +321,7 @@ export app_on_back	v()
 export app_on_blur	v()
 export app_on_button	v(i)
 export app_on_data	v(iiiii)
+export app_on_document	v(iiii)
 export app_on_draw	v()
 export app_on_focus	v()
 export app_on_installed	v()
@@ -591,6 +603,7 @@ import answer_header	i(iiiii) grant=none
 import answer_info	i(ii) grant=none
 import answer_item	i() grant=none
 import answer_value	i(iii) grant=none
+import document_buffer_set	i(ii) grant=none
 import file_read	i(iiiii) grant=none
 import file_size	i(ii) grant=none
 import file_write	i(iiiii) grant=writes_files
@@ -683,6 +696,7 @@ macro BTN_ACTION_OF	(event) ((event) & 3)
 macro BTN_EVENT	(button, action) ((button) << 2 | (action))
 macro BTN_OF	(event) ((event) >> 2)
 since answer_header	0.1.51
+since document_buffer_set	0.1.100
 since gfx_draw_map	0.1.94
 since gfx_draw_map_radius	0.1.94
 since gfx_map_point	0.1.94
