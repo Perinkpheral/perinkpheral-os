@@ -40,26 +40,33 @@ int main(void)
     uint8_t buf[128] = {0};
     const uint8_t json[] = "{\"name\":true}";
     int n = (int)sizeof json - 1;
-    CHECK(!document_reader_feed(&r, buf, 32, 4, 1, 200, json, 3, HOST_DATA_FIRST));
-    CHECK(
-        document_reader_feed(&r, buf, 32, 4, 0, HOST_FAILED_NO_ANSWER, NULL, 0, HOST_DATA_FAILED));
+    CHECK(!document_reader_feed(&r, buf, 32, 4, 1, 200, json, 3, HOST_DATA_FIRST, false));
+    CHECK(document_reader_feed(&r, buf, 32, 4, 0, HOST_FAILED_NO_ANSWER, NULL, 0, HOST_DATA_FAILED,
+                               false));
     CHECK(r.status == HOST_FAILED_NO_ANSWER && r.format == 1 && !r.used && !r.active);
-    CHECK(!document_reader_feed(&r, buf, 32, 4, 1, 200, json, n, HOST_DATA_LAST));
-    CHECK(document_reader_feed(&r, buf, 32, 5, 1, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(!document_reader_feed(&r, buf, 32, 4, 1, 200, json, n, HOST_DATA_LAST, false));
+    CHECK(document_reader_feed(&r, buf, 32, 5, 1, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == 200 && r.used == n && !memcmp(buf, json, n));
-    CHECK(document_reader_feed(&r, buf, 2, 6, 1, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(document_reader_feed(&r, buf, 2, 6, 1, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == HOST_FAILED_TOO_LARGE && !r.used);
-    CHECK(document_reader_feed(&r, NULL, 0, 6, 2, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(document_reader_feed(&r, NULL, 0, 6, 2, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == HOST_FAILED_NOT_READY && !r.used);
-    CHECK(!document_reader_feed(&r, NULL, 0, 9, 0, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
-    CHECK(document_reader_feed(&r, NULL, 0, 9, 1, 204, NULL, 0, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(!document_reader_feed(&r, NULL, 0, 9, 0, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                                false));
+    CHECK(document_reader_feed(&r, NULL, 0, 9, 1, 204, NULL, 0, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == 204 && !r.used);
-    CHECK(document_reader_feed(&r, buf, 32, 9, 1, 403, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(document_reader_feed(&r, buf, 32, 9, 1, 403, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == 403 && !r.used);
     CHECK(document_reader_feed(&r, buf, 32, 9, 1, 200, json, n - 1,
-                               HOST_DATA_FIRST | HOST_DATA_LAST));
+                               HOST_DATA_FIRST | HOST_DATA_LAST, false));
     CHECK(r.status == HOST_FAILED_NO_ANSWER && !r.used);
-    CHECK(document_reader_feed(&r, buf, 32, 9, 2, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST));
+    CHECK(document_reader_feed(&r, buf, 32, 9, 2, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
+                               false));
     CHECK(r.status == HOST_FAILED_NO_ANSWER && !r.used);
     const char *invalid[] = {"",
                              "   ",
@@ -108,8 +115,21 @@ int main(void)
                              "<r><x a='1' a='2'/></r>"};
     for (unsigned i = 0; i < sizeof bad_xml / sizeof bad_xml[0]; i++) {
         CHECK(document_reader_feed(&r, buf, sizeof buf, 9, 2, 200, (const uint8_t *)bad_xml[i],
-                                   strlen(bad_xml[i]), HOST_DATA_FIRST | HOST_DATA_LAST));
+                                   strlen(bad_xml[i]), HOST_DATA_FIRST | HOST_DATA_LAST, false));
         CHECK(r.status == HOST_FAILED_NO_ANSWER && !r.used);
     }
+    CHECK(document_reader_feed(&r, NULL, 0, 8, HOST_FORMAT_JSON, 200, NULL, 0,
+                               HOST_DATA_FIRST | HOST_DATA_LAST, true));
+    CHECK(r.status == 200 && !r.used);
+    CHECK(document_reader_feed(&r, buf, sizeof buf, 8, HOST_FORMAT_JSON, 200, NULL, 0,
+                               HOST_DATA_FIRST | HOST_DATA_LAST, false));
+    CHECK(r.status == HOST_FAILED_NO_ANSWER && !r.used);
+    CHECK(!document_reader_feed(&r, buf, sizeof buf, 8, 1, 200, json, 1, HOST_DATA_FIRST, false));
+    CHECK(!document_reader_feed(&r, buf, sizeof buf, 9, 1, HOST_FAILED_NO_ANSWER, NULL, 0,
+                                HOST_DATA_FAILED, false));
+    CHECK(r.active && r.request == 8 && r.used == 1);
+    CHECK(document_reader_feed(&r, buf, sizeof buf, 8, 1, 200, json + 1, n - 1, HOST_DATA_LAST,
+                               false) &&
+          r.status == 200);
     REPORT();
 }

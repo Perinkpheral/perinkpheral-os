@@ -328,7 +328,8 @@ HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, in
 
 /* Opt-in notification after the final raw piece, for recognized formats.
  * A successful 2xx body is complete and validated, in the registered buffer,
- * with the given length (no NUL). It remains usable until the next answer
+ * with the given length (no NUL). HEAD, 204 and 205 deliver the HTTP status
+ * with zero bytes. It remains usable until the next answer
  * or unload. Non-2xx statuses and validation, size or transport errors have
  * zero length. An interrupted instance has no later completion. Raw MIME
  * and JSON pick polls continue through their own handlers. */

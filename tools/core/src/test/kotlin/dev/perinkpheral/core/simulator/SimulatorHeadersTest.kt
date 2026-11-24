@@ -36,6 +36,13 @@ object SimulatorHeadersTest {
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }
+        server.createContext("/conflict") { exchange ->
+            exchange.responseHeaders.add("A-large", "x".repeat(1400))
+            exchange.responseHeaders.add("Content-Type","application/json")
+            exchange.responseHeaders.add("Content-Type","application/xml")
+            exchange.sendResponseHeaders(200,-1)
+            exchange.close()
+        }
         server.start()
         try {
             Socket(InetAddress.getLoopbackAddress(), SimulatorNetwork.port()).use { socket ->
@@ -52,6 +59,8 @@ object SimulatorHeadersTest {
                 check(get("/selection?text/plain", limits)["status"] == 200L)
                 check(get("/selection?application/vendor+json", limits)["status"] == -7L)
                 check(get("/selection?text/plain", limits + ("formatPolicy" to 1))["status"] == -7L)
+                val conflict = get("/conflict")
+                check(conflict["headers_overflow"] == true && conflict["mimeFormat"] == 0L)
                 val challenge = get("/auth")
                 check(challenge["status"] == 401L)
                 val headers = challenge["headers"] as Map<*, *>

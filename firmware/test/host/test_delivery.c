@@ -617,6 +617,35 @@ static void test_something_else_in_the_middle_of_an_answer(void)
     CHECK(wm.current == probe && state.in_background == NULL && !state.is_mid_answer);
 }
 
+static void test_settings_document_registration(void)
+{
+    const int requests[] = {2, HOST_REQUEST_FIRST};
+    for (unsigned i = 0; i < sizeof requests / sizeof requests[0]; i++) {
+        start_on(probe);
+        host_answer_info_t response = {.content_type = "application/json"};
+        app_delivery_t piece = {.kind = APP_DELIVERY_PIECE,
+                                .request = requests[i],
+                                .http_status = 200,
+                                .response = &response,
+                                .flags = HOST_DATA_FIRST,
+                                .data = (const uint8_t *)"{",
+                                .length = 1};
+        app_deliver(&state, &wm, probe, &piece, 0);
+        app_delivery_t settings = {.kind = APP_DELIVERY_SETTINGS};
+        app_deliver(&state, &wm, probe, &settings, 1);
+        static uint8_t bits[400 * 300 / 8];
+        gfx_t surface;
+        gfx_init(&surface, bits, 400, 300);
+        app_draw(app_scene_app(probe), &surface);
+        /* An invalidated manifest poll releases its buffer. A request from
+         * code continues across the settings event and retains ownership. */
+        CHECK(gfx_get(&surface, i == 0 ? 10 : 12, 61));
+        piece.flags = HOST_DATA_LAST;
+        piece.data = (const uint8_t *)"}";
+        app_deliver(&state, &wm, probe, &piece, 2);
+    }
+}
+
 static void test_settings_discard_an_unfinished_poll(void)
 {
     start_on(&menu.scene);
@@ -1036,6 +1065,7 @@ int main(void)
     test_a_request_that_broke_off();
     test_something_else_in_the_middle_of_an_answer();
     test_settings_discard_an_unfinished_poll();
+    test_settings_document_registration();
     test_a_press_in_the_middle_of_an_answer();
     test_opened_while_taking_an_answer();
     test_a_scene_that_is_not_an_application();

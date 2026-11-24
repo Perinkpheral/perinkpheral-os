@@ -12,7 +12,7 @@ static int validate(int format, const uint8_t *data, int length)
     return document_json_valid(data, length) ? 0 : HOST_FAILED_NO_ANSWER;
 }
 bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int request, int format,
-                          int status, const uint8_t *piece, int n, int flags)
+                          int status, const uint8_t *piece, int n, int flags, bool head)
 {
     if (flags & HOST_DATA_FIRST) {
         *r = (document_reader_t){.request = request,
@@ -21,7 +21,9 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
                                  .active = format != HOST_FORMAT_RAW};
     }
     if (flags & HOST_DATA_FAILED) {
-        if (!r->active || r->request != request)
+        if (r->active && r->request != request)
+            return false;
+        if (!r->active)
             *r = (document_reader_t){.format = format, .request = request};
         r->active = false;
         r->used = 0;
@@ -30,7 +32,8 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
     }
     if (!r->active || r->request != request)
         return false;
-    if (!r->error && r->status >= 200 && r->status < 300 && r->status != 204 && r->status != 205) {
+    if (!r->error && r->status >= 200 && r->status < 300 && !head && r->status != 204 &&
+        r->status != 205) {
         if (!target)
             r->error = HOST_FAILED_NOT_READY;
         else if (n < 0 || n > cap - r->used)
@@ -43,7 +46,8 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
     if (!(flags & HOST_DATA_LAST))
         return false;
     r->active = false;
-    if (!r->error && r->status >= 200 && r->status < 300 && r->status != 204 && r->status != 205)
+    if (!r->error && r->status >= 200 && r->status < 300 && !head && r->status != 204 &&
+        r->status != 205)
         r->error = validate(r->format, target, r->used);
     if (r->error) {
         r->status = r->error;

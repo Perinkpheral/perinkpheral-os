@@ -30,7 +30,7 @@
       "pick": [
         "value"
       ],
-      "format": "auto"
+      "format": "json"
     }
   ],
   "format": "json"

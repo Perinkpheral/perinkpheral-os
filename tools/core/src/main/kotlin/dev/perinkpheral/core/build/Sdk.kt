@@ -80,10 +80,7 @@ class Sdk(val root: File) {
         val polls = (manifest["polls"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
         return buildList {
             if (polls.any { (it["method"] ?: "GET") != "GET" || it.containsKey("body") }) add("POLL_METHOD")
-            // An explicit auto pick depends on routing a non-JSON response to the raw handler.
-            // Plain annotations leave legacy streams and unconditional JSON picks usable on .99.
-            if (polls.any { (it["format"] ?: manifest["format"]) == "auto" && (it["pick"] as? List<*>).orEmpty().isNotEmpty() })
-                add("RESPONSE_FORMAT")
+
         }
     }
 

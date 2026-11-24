@@ -514,7 +514,7 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
                     total > HOST_ANSWER_PIECES_MAX ? HOST_FAILED_TOO_LARGE
                     : is_too_long                  ? HOST_FAILED_TIMEOUT
                                                    : HOST_FAILED_NO_ANSWER,
-                    NULL, NULL, NULL, 0, HOST_DATA_FAILED);
+                    &request->response, &request->headers, NULL, 0, HOST_DATA_FAILED);
 }
 
 /* `why` is a HOST_FAILED_*, where the HTTP status would have been.
@@ -783,6 +783,7 @@ static void ask_network(request_t *request, const char *app_name, int number, in
                                        : (int32_t)esp_http_client_get_content_length(client);
         wants_values = wants_values && answer_format(request->poll.response_format,&request->headers,&request->response)==HOST_FORMAT_JSON;
         if (method == HOST_HTTP_HEAD) {
+            request->headers.head_response=true;
             /* There is no body to wait for: the headers are the answer. */
             if (wants_values) {
                 for (int i = 0; i < request->poll.pick_count; i++) {

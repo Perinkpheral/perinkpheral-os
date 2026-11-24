@@ -114,8 +114,23 @@ static void draw_store_checks(void)
     kv_set("kept", 4, for_the_next_life, sizeof for_the_next_life);
 }
 
+static uint8_t small_document[24];
+static int document_registration;
+void app_on_document(int32_t request, int32_t format, int32_t status, int32_t length)
+{
+    (void)request;
+    (void)format;
+    (void)status;
+    (void)length;
+}
+void app_on_settings(void)
+{
+    document_registration =
+        document_buffer_set(small_document, sizeof small_document) == HOST_OK ? 1 : -1;
+}
 void app_on_load(void)
 {
+    document_buffer_set(small_document, sizeof small_document);
     uint8_t kept;
     found_on_start = kv_get("kept", 4, &kept, sizeof kept) == 1 && kept == 7;
     reads_empty = session_get(scene_data, 0) == 0;
@@ -456,6 +471,10 @@ void app_on_timer(int32_t id)
 
 void app_on_draw(void)
 {
+    if (document_registration == 1)
+        mark(10, ROW_SCENE_STATE);
+    if (document_registration == -1)
+        mark(12, ROW_SCENE_STATE);
     static const char xml[] = "<r><item a='ok'/></r>";
     char value[3];
     static const host_xml_field_t fields[] = {{"a", 0, 3, HOST_XML_REQUIRED, {0}}};

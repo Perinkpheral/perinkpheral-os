@@ -671,6 +671,11 @@ static void exchange(job_t *job, char *next, size_t next_size)
     response->status = job->status;
     const json_t *got_headers = json_get(answer, "headers");
     keep_answer_headers(&job->response_headers, got_headers);
+    const json_t *mime = json_get(answer,"mimeFormat");
+    if(json_is_number(mime) && mime->number>=0 && mime->number<=2) {
+        job->response_headers.type_seen=true;
+        job->response_headers.mime_format=(unsigned)mime->number;
+    }
     const json_t *metadata_headers = json_get(answer, "metadata");
     if (metadata_headers == NULL) { metadata_headers = got_headers; }
     if (json_is_true(json_get(answer, "headers_overflow"))) { job->response_headers.overflow = true; }
@@ -893,6 +898,7 @@ static bool accepts_job(const job_t *job)
  * picked, or the answer in pieces of HOST_DATA_CHUNK_MAX. */
 static void hand_over(job_t *job)
 {
+    job->response_headers.head_response=job->method==HOST_HTTP_HEAD;
     if (job->missing_mock) {
         say('E', "sim", "no mock matches %s %s; network disabled by --mocks", METHODS[job->method], job->url);
     }
@@ -922,6 +928,7 @@ static void hand_over(job_t *job)
         app_delivery_t failed = {
             .kind = job->wants_values ? APP_DELIVERY_VALUES : APP_DELIVERY_PIECE,
             .request = job->number, .http_status = job->status, .flags = HOST_DATA_FAILED,
+            .headers=&job->response_headers,.response=&job->response,
             .has_item = job->item >= 0, .item = job->item,
         };
         deliver(&failed);

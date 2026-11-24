@@ -112,14 +112,14 @@ class ManifestCheck(private val sdk: Sdk) {
         if (intents !is List<*> || intents.any { it !in INTENTS }) {
             fail("$path: \"intents\" must be a list of ${INTENTS.joinToString(", ")}")
         }
-        val formats = setOf("json", "xml", "raw", "auto")
-        if (manifest.containsKey("format") && manifest["format"] !in formats) fail("$path: format must be json, xml, raw or auto")
+        val formats = setOf("json", "xml", "raw")
+        if (manifest.containsKey("format") && manifest["format"] !in formats) fail("$path: format must be json, xml or raw")
         val polls = manifest["polls"] ?: emptyList<Any>()
         if (polls !is List<*> || polls.size > pollsMax) fail("$path: \"polls\" must be a list of at most $pollsMax")
         polls.forEachIndexed { number, poll ->
             checkPoll(path, number, poll, servers, settings)
             if (poll is Map<*, *>) {
-                if (poll.containsKey("format") && poll["format"] !in formats) fail("$path: poll $number: format must be json, xml, raw or auto")
+                if (poll.containsKey("format") && poll["format"] !in formats) fail("$path: poll $number: format must be json, xml or raw")
                 if ((poll["format"] ?: manifest["format"]) in setOf("xml", "raw") && (poll["pick"] as? List<*>).orEmpty().isNotEmpty())
                     fail("$path: poll $number: pick requires JSON")
             }

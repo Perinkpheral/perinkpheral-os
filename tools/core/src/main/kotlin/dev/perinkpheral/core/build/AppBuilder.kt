@@ -276,14 +276,14 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         }
         val called = module.imports.filter { it.first == HOST_MODULE }.map { it.second }.toSet()
         for ((call, handler) in ANSWERED_BY.toSortedMap()) {
-            if (call in called && handler !in exports && !(call == "http_send" && "app_on_document" in exports)) {
+            if (call in called && handler !in exports && !(call == "http_send" && manifest["format"] in setOf("xml", "json") && "app_on_document" in exports)) {
                 throw BuildError("${wasm.path} calls $call() and has no $handler() for what comes of it")
             }
         }
         ((manifest["polls"] as? List<*>) ?: emptyList<Any>()).forEachIndexed { number, poll ->
             val picks = (poll as Map<*, *>)["pick"].let { it is List<*> && it.isNotEmpty() }
             val handler = if (picks) "app_on_picked" else "app_on_data"
-            if (handler !in exports && !(handler == "app_on_data" && "app_on_document" in exports)) {
+            if (handler !in exports && !(handler == "app_on_data" && (poll["format"] ?: manifest["format"]) in setOf("json", "xml") && "app_on_document" in exports)) {
                 throw BuildError("${wasm.path}: poll $number of the manifest ${if (picks) "has \"pick\"" else "has no \"pick\""}, " +
                     "and the module has no $handler()")
             }

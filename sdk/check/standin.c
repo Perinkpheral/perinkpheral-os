@@ -73,6 +73,7 @@ static uint32_t next_boot_id(uint32_t previous)
     return previous + 0x9E3779B1u != 0 ? previous + 0x9E3779B1u : 1;
 }
 
+static bool requested_head[HOST_REQUEST_LAST + 1];
 static document_reader_t doc_reader;
 static uint8_t *doc_buffer;
 static int doc_capacity;
@@ -98,6 +99,7 @@ void standin_reset(void)
 {
     standin_t *host = standin();
     reset_document();
+    memset(requested_head, 0, sizeof requested_head);
     session_refusal = HOST_OK;
     session_refused = 0;
     uint32_t boot_id = next_boot_id(host->boot_id);
@@ -1338,6 +1340,7 @@ int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_leng
     }
     host->handler_requests++;
     host->handler_request_bytes += bytes;
+    requested_head[tag] = method == HOST_HTTP_HEAD;
     standin_request_t *request = &host->requests[host->request_count++];
     memset(request, 0, sizeof *request);
     request->tag = tag;
@@ -2824,6 +2827,8 @@ void standin_intent(int32_t intent)
 
 void standin_settings(void)
 {
+    if (doc_reader.active && doc_reader.request < HOST_REQUEST_FIRST)
+        doc_reader = (document_reader_t){0};
     CALL(on_settings);
 }
 
@@ -2886,9 +2891,13 @@ static void deliver_piece(int request, const uint8_t *buffer, const uint8_t *sou
                           int flags, int status)
 {
     CALL(on_data, request, buffer, n, flags, status);
+    bool head = request >= 0 && request < standin_subject.poll_count
+                    ? standin_subject.polls[request].method == HOST_HTTP_HEAD
+                    : request >= HOST_REQUEST_FIRST && request <= HOST_REQUEST_LAST &&
+                          requested_head[request];
     bool done = standin_handlers.on_document &&
                 document_reader_feed(&doc_reader, doc_buffer, doc_capacity, request,
-                                     selected_format(request), status, source, n, flags);
+                                     selected_format(request), status, source, n, flags, head);
     if (done) {
         CALL(on_document, request, doc_reader.format, doc_reader.status, doc_reader.used);
     }

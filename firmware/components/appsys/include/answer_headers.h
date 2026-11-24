@@ -15,6 +15,7 @@ typedef struct answer_headers {
     uint8_t overflow : 1;
     uint8_t type_seen : 1;
     uint8_t mime_format : 2;
+    uint8_t head_response : 1;
 } answer_headers_t;
 
 void answer_headers_type(answer_headers_t *headers,const char *type);

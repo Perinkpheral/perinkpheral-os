@@ -189,8 +189,6 @@ static int read_format(const json_t *object, int inherited)
     if (!f)
         return inherited;
     if (json_is_string(f)) {
-        if (!strcmp(f->text, "auto"))
-            return 0;
         if (!strcmp(f->text, "raw"))
             return 3;
         if (!strcmp(f->text, "json"))

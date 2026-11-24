@@ -11,6 +11,7 @@ static bool consumer_accepts, fail_open, expire_read;
 static bool mutex_taken, online = true, complete_body = true;
 static int socket_error, tls_error_code, certificate_flags, header_failure;
 static esp_err_t open_error, tls_failure;
+static bool failed_before_first_with_type;
 static int delivered_status;
 static bool delivered_only_on_screen;
 static const char *manifest_json;
@@ -141,6 +142,9 @@ static bool fetch(size_t maximum, int *status)
 static void deliver(const char *name, const app_delivery_t *answer)
 {
     delivered_status = answer->http_status;
+    failed_before_first_with_type =
+        (answer->flags & HOST_DATA_FAILED) &&
+        answer_format(0, answer->headers, answer->response) == HOST_FORMAT_JSON;
     delivered_only_on_screen = answer->only_on_screen;
     if (!mock_success) return;
 
@@ -244,6 +248,8 @@ static void test_poll_transport_failures(void)
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
         reset(); body_bytes = 0; complete_body = false;
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
+        if (!picked)
+            CHECK(failed_before_first_with_type);
         reset(); body_bytes = 0; read_failure = -1; expire_read = true;
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_TIMEOUT);
         reset(); fail_open = true; tls_error_code = -X509_VERIFY_FAILED;

@@ -137,6 +137,7 @@ object SimulatorNetwork {
     }
 
     private val JSON_SUFFIX = Regex("[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+\\+json")
+    private val XML_SUFFIX = Regex("[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+\\+xml")
 
     private fun fetch(asked: Map<*, *>): Map<String, Any?> {
         val method = asked["method"] as String
@@ -188,10 +189,13 @@ object SimulatorNetwork {
             // use the originally negotiated fixed limit.
             val policy = asked["formatPolicy"] as? Long
             val mimeTypes = response.headers().allValues("content-type").map { it.substringBefore(';').trim(' ', '\t').lowercase() }
-            val jsonMedia = mimeTypes.isNotEmpty() && mimeTypes.all { type ->
-                type == "application/json" || type == "text/json" || JSON_SUFFIX.matches(type)
+            fun format(type: String) = when {
+                type == "application/json" || type == "text/json" || JSON_SUFFIX.matches(type) -> 1
+                type == "application/xml" || type == "text/xml" || XML_SUFFIX.matches(type) -> 2
+                else -> 0
             }
-            val picked = wantsValues && (policy == null || policy == 1L || (policy == 0L && jsonMedia))
+            val mime = mimeTypes.map(::format).distinct().singleOrNull() ?: 0
+            val picked = wantsValues && (policy == null || policy == 1L || (policy == 0L && mime == 1))
             val most = if (picked) configuredMax else (asked["rawMax"] as? Long) ?: configuredMax
             val isRefusal = picked && response.statusCode() !in 200..299
             var content = try {
@@ -226,7 +230,7 @@ object SimulatorNetwork {
             val metadata = response.headers().map().filterKeys { it.lowercase() in KEPT_HEADERS }
                 .mapValues { it.value.firstOrNull().orEmpty() }
             val answer = linkedMapOf<String, Any?>("status" to response.statusCode().toLong(), "headers" to kept, "headers_overflow" to headersOverflow,
-                "metadata" to metadata, "body" to Base64.getEncoder().encodeToString(content))
+                "mimeFormat" to mime, "metadata" to metadata, "body" to Base64.getEncoder().encodeToString(content))
             val location = response.headers().firstValue("location").orElse(null)
             if (response.statusCode() in REDIRECTS && location != null) {
                 try {

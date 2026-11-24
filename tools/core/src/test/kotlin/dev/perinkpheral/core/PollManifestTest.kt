@@ -42,19 +42,17 @@ object PollManifestTest {
                     if (message != null) check(message in error.message.orEmpty()) { error.message.orEmpty() }
                 }
             }
+            refused(get + ("format" to "auto"))
             accepted(get)
             accepted(get + ("method" to "GET"))
             val pick = get + ("pick" to listOf("value"))
-            for (format in listOf("json","raw","xml","auto")) {
+            for (format in listOf("json","raw","xml")) {
                 check(sdk.manifestFeatures(manifest(get + ("format" to format))).isEmpty())
                 check(sdk.manifestFeatures(manifest(get) + ("format" to format)).isEmpty())
             }
             check(sdk.manifestFeatures(manifest(pick)).isEmpty())
             check(sdk.manifestFeatures(manifest(pick + ("format" to "json"))).isEmpty())
             check(sdk.manifestFeatures(manifest(pick) + ("format" to "json")).isEmpty())
-            check(sdk.manifestFeatures(manifest(pick + ("format" to "json")) + ("format" to "auto")).isEmpty())
-            check(sdk.manifestFeatures(manifest(pick + ("format" to "auto"))) == listOf("RESPONSE_FORMAT"))
-            check(sdk.firmwareFor(sdk.manifestFeatures(manifest(pick) + ("format" to "auto"))).first == "0.1.100")
             check(sdk.manifestFeatures(manifest(get)).isEmpty())
             check(sdk.manifestFeatures(manifest(get + ("method" to "GET"))).isEmpty())
             for (method in listOf("POST", "PUT", "DELETE", "PATCH", "HEAD", "PROPFIND", "REPORT")) {
@@ -129,6 +127,30 @@ object PollManifestTest {
                 val index = Json.parse(File(catalog, "catalog.json").readText()) as Map<*, *>
                 check(((index["apps"] as List<*>).single() as Map<*, *>)["firmware"] == introduced)
 
+                // A module may omit the raw handler only for a statically structured request or poll.
+                val probe = File(app, "probe.c")
+                val originalProbe = probe.readText()
+                fun docOnly(default: String?, local: String?, sends: Boolean, allowed: Boolean) {
+                    val poll = if (local == null) get else get + ("format" to local)
+                    val source = manifest(poll).toMutableMap()
+                    if (default != null) source["format"] = default
+                    manifestFile.writeText(Json.pretty(source))
+                    val send = if (sends) "http_send(HOST_REQUEST_FIRST, HOST_HTTP_GET, \"https://example.test/\", 21, 0, 0, 0, 0);" else ""
+                    probe.writeText("""/* SPDX-License-Identifier: MIT */
+                        #include "host_api.h"
+                        void app_on_load(void) { $send }
+                        void app_on_document(int32_t r,int32_t f,int32_t s,int32_t n) { (void)r; (void)f; (void)s; (void)n; }
+                    """.trimIndent())
+                    buildLines.clear()
+                    val error = runCatching { builder.build(app,out) }.exceptionOrNull()
+                    if (allowed) check(error == null) { error.toString() + buildLines.joinToString("\n") }
+                    else check(error is BuildError && "app_on_data" in error.message.orEmpty()) { error.toString() + buildLines.joinToString("\n") }
+                }
+                docOnly(null, null, false, false)
+                docOnly("json", "raw", false, false)
+                docOnly(null, "json", true, false)
+                docOnly("xml", "json", true, true)
+                probe.writeText(originalProbe)
                 // The same specimen exercises both data delivery modes with POST polls.
                 val specimen = File(scratch, "native/specimen")
                 File(root, "sdk/check/apps/specimen").copyRecursively(specimen)

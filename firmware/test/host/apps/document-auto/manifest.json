@@ -29,8 +29,7 @@
       "every": 300,
       "pick": [
         "value"
-      ],
-      "format": "auto"
+      ]
     }
   ]
 }

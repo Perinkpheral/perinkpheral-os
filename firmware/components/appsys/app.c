@@ -713,7 +713,8 @@ void app_data(app_t *app, int request, const uint8_t *data, size_t length, int f
         int format = answer_format(policy, app->headers, app->response);
         uint8_t *buffer = app->document_capacity ? memory + app->document_offset : NULL;
         done = document_reader_feed(&app->document, buffer, app->document_capacity, request, format,
-                                    status, data, (int)length, flags);
+                                    status, data, (int)length, flags,
+                                    app->headers && app->headers->head_response);
     }
     if (done && !app->stop_reason)
         CALL_HANDLER(app, app_on_document, (int32_t)request, (int32_t)app->document.format,
@@ -734,6 +735,8 @@ void app_alarm(app_t *app, int id)
 
 void app_settings_changed(app_t *app)
 {
+    if (app->document.active && app->document.request < HOST_REQUEST_FIRST)
+        app->document = (document_reader_t){0};
     CALL_HANDLER(app, app_on_settings);
 }
 
