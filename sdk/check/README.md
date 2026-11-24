@@ -80,6 +80,7 @@ A log line is not a visible error.
 
 `exceptions` is an object mapping check keys to nonempty reasons. Each is printed:
 
+- `store.identical-answers`: durable request leases or equivalent metadata must be written even when successful response data is identical, including as time elapses. Only those write-count assertions are exempted; failed-answer and lifecycle write counts, refused-save recovery and sanitizer checks still run. A nonempty reason is required.
 - `store.response`: a deliberately volatile answer cache.
 - `store.button`: changes in this view deliberately do not survive an unload.
 - `timers.refusal`: this schedule has another recovery policy.

@@ -102,6 +102,10 @@ object AppCheckTest {
             listOf("{\n    if (is_same(kept, text) && !*is_unsaved) {" to
                 "{\n    static int32_t answers;\n    answers++;\n    kv_set(\"answers\", 7, &answers, sizeof answers);\n" +
                 "    if (is_same(kept, text) && !*is_unsaved) {"), "unchanged answers"),
+        Break("store", "durable request exception still checks refused saves",
+            listOf("    if (is_same(kept, text) && !*is_unsaved) {" to "    if (is_same(kept, text)) {"),
+            "not saved when the same answer comes again",
+            checkPatch = mapOf("exceptions" to mapOf("store.identical-answers" to "Durable request leases."))),
         Break("store", "a refused write is not tried again",
             listOf("    if (is_same(kept, text) && !*is_unsaved) {" to "    if (is_same(kept, text)) {"),
             "not saved when the same answer comes again"),
@@ -289,6 +293,12 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("store", "declared durable request writes on identical answers",
+            listOf("{\n    if (is_same(kept, text) && !*is_unsaved) {" to
+                "{\n    static int32_t leases;\n    leases++;\n    kv_set(\"leases\", 6, &leases, sizeof leases);\n" +
+                "    if (is_same(kept, text) && !*is_unsaved) {"), "",
+            checkPatch = mapOf("exceptions" to mapOf("store.identical-answers" to
+                "Durable request leases prevent duplicate requests after instance replacement."))),
         Break("network", "optional null fields and empty feeds render and persist their fallback",
             OPTIONAL_EDITS, "", checkPatch = OPTIONAL_RESPONSES),
         Break("timers", "a repeating alarm refusal is diagnosed in the log",
@@ -439,6 +449,7 @@ object AppCheckTest {
             }
             val invalidDeclarations = listOf(
                 "{\"exceptions\":{\"responses.empty-lists\":\"\"}}",
+                "{\"exceptions\":{\"store.identical-answers\":\" \"}}",
                 "{\"exceptions\":{\"unknown\":\"reason\"}}",
                 "{\"exceptions\":false}",
                 "{\"valid_responses\":false}",

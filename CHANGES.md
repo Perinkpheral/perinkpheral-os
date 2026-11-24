@@ -6,7 +6,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.98
 
-- Application capability checks cover refused saves, session and alarm allocation, notification retries, malformed response fields, HTTP cooldowns and date-aware event times. Application fixtures can declare exact valid response variants, visible errors and narrowly scoped exceptions.
+- Application capability checks cover refused saves, session and alarm allocation, notification retries, malformed response fields, HTTP cooldowns and date-aware event times. Application fixtures can declare exact valid response variants, visible errors and narrowly scoped exceptions. The documented `store.identical-answers` exception requires a reason for durable request metadata such as leases; save-refusal recovery and other checks remain enforced.
 
 ## 0.1.97
 

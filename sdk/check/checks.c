@@ -924,7 +924,7 @@ static void check_unchanged(void)
     if (has_polls_or_requests) {
         standin_reset();
         scene_t polled = { .has_data = true, .rounds = { { ROUND_WHOLE, 0, UNCHANGED_ANSWERS + 1 } } };
-        if (play(&polled)) {
+        if (play(&polled) && !excepted("store.identical-answers")) {
             expect(STORE, mark(MARK_WRITES_AGAIN) == 0,
                    "%d unchanged answers after the first: the flash was written %d times, every write wears it",
                    UNCHANGED_ANSWERS, (int)mark(MARK_WRITES_AGAIN));
@@ -1457,6 +1457,11 @@ static void check_elapsed_answers(void)
     if (!standin_live(elapsed_answers, NULL)) {
         problem(STORE, "unchanged answers with elapsed time: %s", standin_fault());
         stop_if_hung(standin_fault());
+        return;
+    }
+    /* Durable request leases may change even when returned data does not. The
+     * exception covers only these write-count assertions; run the scene for safety. */
+    if (excepted("store.identical-answers")) {
         return;
     }
     expect(STORE, mark(MARK_WRITES_AGAIN) == 0,
