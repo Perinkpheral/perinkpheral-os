@@ -48,3 +48,4 @@ and exclude machine-specific paths and secrets. KiB means 1,024 bytes; KB means
 | [0007](0007-ram-savings.md) | RAM savings study | 2026-11-24 | rejected |
 | [0008](0008-moex-tls.md) | MOEX certificate parsing and application trust | 2026-11-24 | accepted |
 | [0009](0009-screen-manager.md) | A screen manager integrated with the scene stack | 2026-11-24 | deferred |
+| [0010](0010-plex-controller.md) | A Plex player controller | 2026-11-24 | deferred |
