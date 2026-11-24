@@ -115,6 +115,17 @@ int32_t ui_draw_cell(const host_cell_t *cell, const uint8_t *picture, int32_t ic
     }
     return HOST_OK;
 }
+static char header_text[HOST_HEADER_TEXT_MAX + 1];
+static int32_t header_calls;
+int32_t header_set_text(int32_t side, const char *text, int32_t length)
+{
+    CHECK(side == HOST_HEADER_LEFT && length >= 0 && length <= HOST_HEADER_TEXT_MAX);
+    memcpy(header_text, text, (size_t)length);
+    header_text[length] = '\0';
+    header_calls++;
+    return HOST_OK;
+}
+
 /* What app_nav_draw_title() drew, as text at x of a style. */
 static char drawn[4][16];
 static int32_t drawn_x[4], drawn_y[4], drawn_style[4], drawn_count;
@@ -410,18 +421,54 @@ static void test_screen_title(void)
     drawn_count = 0;
     CHECK(app_nav_draw_title(&nav, NULL, false) == 0 && drawn_count == 0);
     drawn_count = 0;
-    CHECK(app_nav_draw_title(&nav, "", true) > 0 && drawn_count == 1 && !strcmp(drawn[0], "2/4"));
+    CHECK(app_nav_draw_title(&nav, "", true) == 0 && drawn_count == 0);
+    CHECK(header_calls == 0);
+    CHECK(app_nav_set_header(&nav, NULL, true) == HOST_OK && !strcmp(header_text, "2/4"));
     app_nav_t one = { .screens = 1 };
     drawn_count = 0;
     CHECK(app_nav_draw_title(&one, NULL, true) == 0 && drawn_count == 0);
     app_nav_t many = { .screens = 12, .screen = 9 };
     drawn_count = 0;
-    app_nav_draw_title(&many, "", true);
-    CHECK(!strcmp(drawn[0], "10/12"));
+    app_nav_set_header(&many, "", true);
+    CHECK(!strcmp(header_text, "10/12"));
     app_nav_t most = { .screens = 500, .screen = 98 };
     drawn_count = 0;
-    app_nav_draw_title(&most, "", true);
-    CHECK(!strcmp(drawn[0], "99/99"));
+    app_nav_set_header(&most, "", true);
+    CHECK(!strcmp(header_text, "99/99"));
+    CHECK(app_nav_set_header(&nav, "Panormos", true) == HOST_OK && !strcmp(header_text, "2/4 Panormos"));
+    app_nav_go(&nav, 2);
+    app_nav_set_header(&nav, "Panormos", true);
+    CHECK(!strcmp(header_text, "3/4 Panormos"));
+    /* Focus restores the same count even though navigation has not changed. */
+    header_text[0] = '\0';
+    int32_t calls_before_focus = header_calls;
+    app_nav_set_header(&nav, "Panormos", true);
+    CHECK(header_calls == calls_before_focus + 1 && !strcmp(header_text, "3/4 Panormos"));
+    app_nav_open(&nav, 0);
+    app_nav_set_header(&nav, "Panormos", true);
+    CHECK(!strcmp(header_text, "Panormos"));
+    app_nav_button(&nav, BTN_BACK_PRESSED);
+    app_nav_set_header(&nav, "Panormos", true);
+    CHECK(!strcmp(header_text, "3/4 Panormos"));
+    app_nav_set_header(&nav, "Panormos", false);
+    CHECK(!strcmp(header_text, "Panormos"));
+    app_nav_set_header(&one, "Panormos", true);
+    CHECK(!strcmp(header_text, "Panormos"));
+    app_nav_set_header(&one, NULL, true);
+    CHECK(!strcmp(header_text, ""));
+    app_nav_set_header(&one, " ", true);
+    CHECK(!strcmp(header_text, " "));
+    app_nav_set_header(&nav, " ", true);
+    CHECK(!strcmp(header_text, "3/4"));
+    /* The byte limit never splits a place's UTF-8 character. Width cutting is the OS's. */
+    char long_place[HOST_HEADER_TEXT_MAX + 5];
+    memset(long_place, 'a', 58);
+    memcpy(long_place + 58, "\xD0\xAF\0", 3);
+    app_nav_set_header(&nav, long_place, true);
+    CHECK(strlen(header_text) == 62 && header_text[61] == 'a');
+    app_nav_set_header(&nav, "", false);
+    CHECK(!strcmp(header_text, ""));
+
 }
 
 int main(void)
