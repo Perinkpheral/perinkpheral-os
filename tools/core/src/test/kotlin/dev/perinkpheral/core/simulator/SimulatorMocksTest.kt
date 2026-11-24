@@ -24,6 +24,7 @@ object SimulatorMocksTest {
         server.createContext("/") { exchange ->
             hits.incrementAndGet()
             val body = "{}".toByteArray()
+            if (exchange.requestURI.path == "/picked") exchange.responseHeaders.set("Content-Type", "application/json")
             exchange.sendResponseHeaders(200, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
         }
@@ -122,6 +123,7 @@ object SimulatorMocksTest {
                 simulate(mocks, replies = "failed")
             }
             mocks.writeText(Json.write(mapOf("$base/raw" to mapOf("body" to "{}"),
+                "$base/picked" to mapOf("method" to "GET", "request_body" to "", "body" to "{}", "content_type" to "application/json"),
                 "$base/*" to mapOf("method" to "GET", "request_body" to "", "body" to "{}"))))
             simulate(mocks, replies = "ok")
             check(hits.get() == 3) { "mocked requests leaked to HTTP: ${hits.get() - 3}" }
