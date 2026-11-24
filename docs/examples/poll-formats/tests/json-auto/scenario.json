@@ -1,0 +1,30 @@
+{
+  "app": "docs/examples/poll-formats/poll-formats",
+  "at": 1795543200,
+  "mocks": {
+    "https://media.example.test/auto": {
+      "status": 200,
+      "content_type": "application/vnd.example+json",
+      "body": "[{\"NowPlayingItem\":{\"Name\":\"JSON by MIME\"}}]"
+    },
+    "https://media.example.test/search": {
+      "status": 200,
+      "content_type": "text/plain",
+      "body": "<MediaContainer><Track title=\"XML override\"/></MediaContainer>"
+    },
+    "https://media.example.test/sessions": {
+      "status": 200,
+      "content_type": "text/plain",
+      "body": "[{\"NowPlayingItem\":{\"Name\":\"Picked JSON\"}}]"
+    },
+    "https://media.example.test/untyped": {
+      "status": 200,
+      "content_type": "application/octet-stream",
+      "body": "abc"
+    }
+  },
+  "steps": [
+    "wait 3",
+    "shot responses"
+  ]
+}

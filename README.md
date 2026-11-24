@@ -17,6 +17,7 @@ modules using ABI 3.
 
 Application guide (PDF): [English](https://github.com/Perinkpheral/perinkpheral-os/releases/latest/download/perinkpheral-app-guide.pdf),
 [Russian](https://github.com/Perinkpheral/perinkpheral-os/releases/latest/download/perinkpheral-app-guide.ru.pdf).
+[Runnable network poll examples](docs/examples/poll-formats/) cover response formats and callbacks.
 Official applications and catalog: [perinkpheral-apps](https://github.com/Perinkpheral/perinkpheral-apps).
 
 ## Build

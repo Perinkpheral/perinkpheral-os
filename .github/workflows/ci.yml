@@ -102,12 +102,16 @@ jobs:
           node firmware/test/web/test_app_settings.js
       - name: The applications in the simulator
         run: tools/perinkpheral sim-test firmware/test/sim
+      - name: The poll format examples in the simulator
+        run: tools/perinkpheral sim-test docs/examples/poll-formats/tests
       - name: The pictures that differ
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: simulator-pictures
-          path: firmware/test/sim/**/*.actual.png
+          path: |
+            firmware/test/sim/**/*.actual.png
+            docs/examples/poll-formats/tests/**/*.actual.png
           if-no-files-found: ignore
 
   case:

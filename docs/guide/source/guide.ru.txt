@@ -1078,8 +1078,8 @@ pick
 up to 16 paths of up to 63 bytes
 до 16 путей, каждый до 63 байт
 
-JSON paths, for example <code>current.temperature_2m</code>, <code>daily.code[0]</code>. <code>[*]</code> in place of one index takes every element of the array: <code>close[*]</code> (section 9). Perinkpheral OS extracts the values. Without <code>pick</code> the response is streamed
-Пути JSON, например <code>current.temperature_2m</code>, <code>daily.code[0]</code>. <code>[*]</code> вместо одного индекса берёт все элементы массива: <code>close[*]</code> (раздел 9). Значения извлекает Perinkpheral OS. Без <code>pick</code> ответ приходит потоком
+JSON paths, for example <code>current.temperature_2m</code> and <code>daily.code[0]</code>. <code>[*]</code> selects the array elements in order (section 9). The effective format must be JSON to extract values. Explicit XML and raw polls cannot use <code>pick</code>.
+Пути JSON, например <code>current.temperature_2m</code> и <code>daily.code[0]</code>. <code>[*]</code> выбирает элементы массива по порядку (раздел 9). Значения извлекаются, если итоговый формат — JSON. Явные опросы XML и raw не могут использовать <code>pick</code>.
 
 each
 =
@@ -2182,8 +2182,8 @@ Trigger
 Delivery
 Доставка
 
-Poll with <code>pick</code>
-Опрос с <code>pick</code>
+JSON poll with <code>pick</code>
+Опрос JSON с <code>pick</code>
 
 Schedule
 Расписание
@@ -2194,8 +2194,8 @@ Schedule
 Poll without <code>pick</code>
 Опрос без <code>pick</code>
 
-<code>app_on_data()</code> in pieces, with the poll number
-<code>app_on_data()</code> фрагментами, с номером опроса
+<code>app_on_data()</code> in pieces, when exported. For a recognized format, the registered document buffer also enables <code>app_on_document()</code>. Both receive the poll number.
+<code>app_on_data()</code> по частям, если обработчик экспортирован. Для распознанного формата регистрация буфера также включает <code>app_on_document()</code>. Оба обработчика получают номер опроса.
 
 Poll with <code>each</code>
 Опрос с <code>each</code>
@@ -2209,8 +2209,8 @@ As above, once per item. <code>answer_item()</code> gives the item
 Code: after a button press, or as a follow-up request
 Код: после нажатия кнопки или как последующий запрос
 
-<code>app_on_data()</code> in pieces, with the tag chosen by the application (16 - 255)
-<code>app_on_data()</code> фрагментами, с тегом, выбранным приложением (16 - 255)
+As for a poll without <code>pick</code>, with the tag chosen by the application (16 - 255)
+Как для опроса без <code>pick</code>, с меткой, выбранной приложением (16–255)
 
 Values extracted by Perinkpheral OS
 Значения, извлечённые Perinkpheral OS
@@ -4528,8 +4528,8 @@ Handled by Perinkpheral OS: opens the previous or next application in menu order
 Recognized translation codes
 Распознаваемые коды переводов
 
-The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports/exports, manifest features and an explicit manifest minimum. A non-GET poll method or any poll body automatically requires the firmware named by <code>HOST_SINCE_POLL_METHOD</code> (0.1.80). Other new flags or manifest behaviour need an explicit minimum. Older firmware refuses installation and startup with "Update Perinkpheral OS."
-Минимальная версия прошивки. Сборка выбирает наибольшую из начальной версии ABI 3 (0.1.30), версий появления используемых импортов/экспортов и возможностей манифеста и явно указанного минимума. Метод опроса, отличный от GET, или любое тело опроса автоматически требуют прошивку из <code>HOST_SINCE_POLL_METHOD</code> (0.1.80). Для других новых флагов или возможностей манифеста минимум нужно указать явно. Более старая прошивка отказывает в установке и запуске: «Обновите Perinkpheral OS.»
+The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports and exports, manifest features and the explicit minimum. A non-GET poll method or any poll body requires 0.1.80. The document API and explicit <code>auto</code> with a nonempty <code>pick</code> require 0.1.100. A format annotation that keeps the existing handler behaviour does not raise the minimum. Set an explicit minimum when the application relies on another 0.1.100 response-format behaviour. Older firmware refuses installation and startup with "Update Perinkpheral OS."
+Минимальная версия прошивки. Сборка берёт максимум из базовой версии ABI 3 (0.1.30), версий появления используемых импортов и экспортов, требований полей манифеста и явного минимума. Метод опроса, отличный от GET, или любое тело опроса требует 0.1.80. API документов и явное значение <code>auto</code> при непустом <code>pick</code> требуют 0.1.100. Если аннотация формата сохраняет работу существующих обработчиков, минимум не повышается. Если приложению нужно другое поведение форматов из 0.1.100, задайте явный минимум. Старая прошивка отклоняет установку и запуск с сообщением «Обновите Perinkpheral OS».
 
 Optional request method; defaults to GET. Only GET follows redirects, up to three times; another method delivers its redirect response without sending again. <code>pick</code> works with every method; HEAD delivers no response values.
 Необязательный метод запроса; по умолчанию GET. Только GET следует перенаправлениям, не более трёх раз; другой метод передаёт ответ с перенаправлением приложению без повторной отправки. <code>pick</code> работает с любым методом; HEAD передаёт ответ без значений.
@@ -4624,3 +4624,54 @@ Optional fields and empty feeds may legitimately change the picture. Declare exa
 
 <code>store.identical-answers</code> requires a nonempty reason for durable request leases or equivalent metadata that must be written despite identical successful answers, including as time elapses. It exempts only those write-count assertions. Failed-answer and lifecycle write counts, refused-save recovery and sanitizer checks still run.
 Для <code>store.identical-answers</code> нужна непустая причина: сохраняемые резервации запросов или аналогичные метаданные требуется записывать даже при одинаковых успешных ответах, в том числе с течением времени. Исключение отменяет только эти проверки числа записей. Число записей при неудачных ответах и смене экземпляра, восстановление после отказа сохранения и проверки санитайзеров по-прежнему проверяются.
+
+Query a complete XML response
+Запросы к целому ответу XML
+
+Firmware 0.1.100 adds <code>xml_child()</code>, <code>xml_attr()</code> and <code>xml_attrs()</code> to ABI 3. They read a complete document in the app's linear memory. Accumulate a bounded response, use the APIs after <code>HOST_DATA_LAST</code>, and discard partial responses on <code>HOST_DATA_FAILED</code>.
+Прошивка 0.1.100 добавляет в ABI 3 вызовы <code>xml_child()</code>, <code>xml_attr()</code> и <code>xml_attrs()</code>. Они читают целый документ из линейной памяти приложения. Ограничьте объём буфера, вызывайте функции после <code>HOST_DATA_LAST</code> и отбрасывайте неполный ответ при <code>HOST_DATA_FAILED</code>.
+
+The XML subset is UTF-8 with attributes and a single root element, up to 12288 bytes, 256 elements and 16 levels. An XML 1.0 declaration is optional. DTDs, comments and element text are outside the subset. Find a direct child by name with <code>xml_child()</code>, then read one attribute with <code>xml_attr()</code>. Use <code>xml_attrs()</code> to read several attributes of that element in one pass.
+Поддерживается подмножество XML в UTF-8 с атрибутами и одним корневым элементом, до 12288 байт, 256 элементов и 16 уровней. Декларация XML 1.0 необязательна. DTD, комментарии и текст внутри элементов не поддерживаются. Найдите прямой дочерний элемент по имени через <code>xml_child()</code>, затем прочитайте атрибут через <code>xml_attr()</code>. Функция <code>xml_attrs()</code> читает несколько атрибутов одного элемента за проход.
+
+Element numbers refer to the same document bytes and start at zero. The first root search uses parent <code>-1</code>. Consume only attributes reported as present. A failed query leaves the application responsible for keeping its previous displayed data.
+Номера элементов относятся к тем же байтам документа и начинаются с нуля. При первом поиске корня передайте родителя <code>-1</code>. Используйте только атрибуты, которые найдены. При ошибке запроса приложение должно сохранить предыдущие данные на экране.
+
+<code>json</code>, <code>xml</code>, <code>raw</code>, <code>auto</code>
+=
+
+format
+=
+
+Optional default response format for manifest polls and requests from code. Omitting it selects <code>auto</code>.
+Необязательный формат ответа по умолчанию для опросов и запросов из кода. Если поле опущено, действует <code>auto</code>.
+
+Optional response format for this poll. Overrides the application default.
+Необязательный формат ответа этого опроса. Имеет приоритет над форматом приложения.
+
+Choosing the response format
+Выбор формата ответа
+
+The poll format takes precedence over the application format. With <code>json</code> or <code>xml</code>, Perinkpheral OS uses the declared format even when the response has a different or missing <code>Content-Type</code>. <code>raw</code> always streams the response unchanged. With <code>auto</code> or no declaration, Perinkpheral OS uses the response MIME type.
+Формат конкретного опроса имеет приоритет над форматом приложения. При <code>json</code> или <code>xml</code> Perinkpheral OS использует объявленный формат, даже если в ответе другой <code>Content-Type</code> или заголовок отсутствует. При <code>raw</code> ответ всегда приходит без изменений. При <code>auto</code> или отсутствии поля Perinkpheral OS определяет формат по MIME-типу ответа.
+
+Automatic detection recognizes <code>application/json</code>, <code>text/json</code>, and subtypes ending in <code>+json</code>, as well as <code>application/xml</code>, <code>text/xml</code>, and subtypes ending in <code>+xml</code>. Matching ignores ASCII case and MIME parameters. Missing and unrecognized types stay raw. The request headers <code>Accept</code> and <code>Content-Type</code> are independent of the response format.
+Автоматическое определение распознаёт <code>application/json</code>, <code>text/json</code> и подтипы с суффиксом <code>+json</code>, а также <code>application/xml</code>, <code>text/xml</code> и подтипы с суффиксом <code>+xml</code>. Регистр ASCII и параметры MIME не учитываются. При отсутствующем или неизвестном типе ответ передаётся без разбора. Заголовки запроса <code>Accept</code> и <code>Content-Type</code> задаются независимо от формата ответа.
+
+Set <code>format</code> to <code>json</code> for an existing <code>pick</code> poll if its server can reply without a JSON MIME type. A JSON poll with <code>pick</code> calls <code>app_on_picked()</code> even when the application also registers a document buffer. An unrecognized MIME type in auto mode takes the raw path, even when the poll declares <code>pick</code>.
+Если сервер существующего опроса с <code>pick</code> может ответить без MIME-типа JSON, укажите <code>format</code> со значением <code>json</code>. Опрос JSON с <code>pick</code> вызывает <code>app_on_picked()</code>, даже если приложение зарегистрировало буфер документов. Неизвестный MIME-тип в автоматическом режиме ведёт к потоковой доставке, даже когда в опросе указан <code>pick</code>.
+
+For an application that combines Plex-style XML and Jellyfin-style JSON, use <code>auto</code> when both servers label their replies correctly. Set an explicit format on individual polls when a server sends the wrong MIME type. A request from code uses the application default. With different on-demand formats, keep <code>auto</code> and use the servers’ MIME types, or stream and interpret the body in the application.
+Если приложение сочетает XML в стиле Plex и JSON в стиле Jellyfin, используйте <code>auto</code>, когда оба сервера корректно указывают MIME-тип. Если сервер сообщает неверный тип, укажите формат отдельного опроса. Для запроса из кода действует формат приложения. Если запросы из кода ожидают разные форматы, используйте <code>auto</code> и MIME-типы серверов либо обрабатывайте поток в самом приложении.
+
+Complete JSON or XML responses
+Целые ответы JSON или XML
+
+To receive a complete recognized response, declare <code>app_on_document()</code> and call <code>document_buffer_set()</code> in <code>app_on_load()</code>. The app owns the buffer and supplies a capacity from 1 to 12288 bytes. The buffer must be separate from <code>app_data_buffer</code>. The new entry points require firmware 0.1.100 and keep ABI 3. When the app also exports <code>app_on_data()</code>, it receives the pieces before the complete-document callback. A JSON poll with <code>pick</code> uses only <code>app_on_picked()</code>. Raw responses never call <code>app_on_document()</code>.
+Чтобы получить целый распознанный ответ, объявите <code>app_on_document()</code> и вызовите <code>document_buffer_set()</code> в <code>app_on_load()</code>. Буфер принадлежит приложению, допустимая ёмкость — от 1 до 12288 байт. Буфер не должен пересекаться с <code>app_data_buffer</code>. Новые точки входа требуют прошивку 0.1.100 и сохраняют ABI 3. Если приложение экспортирует и <code>app_on_data()</code>, оно получает фрагменты перед вызовом обработчика целого документа. Опрос JSON с <code>pick</code> вызывает только <code>app_on_picked()</code>. Сырые ответы не вызывают <code>app_on_document()</code>.
+
+<code>app_on_document(request, format, status, length)</code> receives <code>HOST_FORMAT_JSON</code> or <code>HOST_FORMAT_XML</code> and the number of bytes in the registered buffer. The host adds no trailing NUL. The bytes can be read until the next response or unload. Exceeding the capacity gives <code>HOST_FAILED_TOO_LARGE</code>. Failing format validation gives <code>HOST_FAILED_NO_ANSWER</code>. A non-2xx HTTP response or a failure has document length zero.
+Обработчик <code>app_on_document(request, format, status, length)</code> получает <code>HOST_FORMAT_JSON</code> или <code>HOST_FORMAT_XML</code> и число байт в зарегистрированном буфере. Завершающий нулевой байт не добавляется. Байты доступны до следующего ответа или выгрузки. Переполнение буфера даёт <code>HOST_FAILED_TOO_LARGE</code>. Ошибка проверки формата даёт <code>HOST_FAILED_NO_ANSWER</code>. При ошибке или статусе HTTP вне диапазона 2xx длина документа равна нулю.
+
+The <a href="https://github.com/Perinkpheral/perinkpheral-os/tree/main/docs/examples/poll-formats">runnable example</a> includes two simulator scenarios. The first GET takes either a JSON or an XML document from its MIME type. The XML POST is a read-only search whose explicit format overrides the fixture’s text/plain response. The Jellyfin-style JSON GET uses the existing picker. The unknown MIME type arrives as bytes.
+<a href="https://github.com/Perinkpheral/perinkpheral-os/tree/main/docs/examples/poll-formats">Рабочий пример</a> включает два сценария симулятора. Первый GET принимает документ JSON или XML согласно MIME-типу. POST выполняет поиск без изменения данных, а явно заданный XML переопределяет text/plain тестового ответа. GET в стиле Jellyfin использует существующий разбор пути JSON. Ответ неизвестного MIME-типа приходит как байты.

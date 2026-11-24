@@ -12,6 +12,7 @@ The site's source lives in [perinkpheral-dev-portal](https://github.com/Perinkph
 | Architecture, constraints and current state | [CLAUDE.md](../CLAUDE.md) |
 | Build, flash and bench recipes | [AGENTS.md](../AGENTS.md) |
 | Application development guide | [English HTML](guide/source/guide.html), [Russian translation](guide/source/guide.ru.txt) |
+| Response format examples | [Runnable polls and simulator tests](examples/poll-formats/) |
 | User manual | [English HTML](manual/source/manual.html), [Russian translation](manual/source/manual.ru.txt), [picture and PDF recipes](manual/README.md) |
 | Perinkpheral OS ABI and compatibility | [host_api.h](../sdk/host_api.h), [frozen ABI notes](../sdk/abi/README.md) |
 | Device HTTP API, including recovery | [OpenAPI](api/openapi.yaml) |

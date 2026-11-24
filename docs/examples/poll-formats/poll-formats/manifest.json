@@ -1,0 +1,32 @@
+{
+  "name": "poll-formats",
+  "title": "Poll formats",
+  "author": "Example developer",
+  "version": "0.1.0",
+  "abi": 3,
+  "format": "auto",
+  "polls": [
+    {
+      "url": "https://media.example.test/auto",
+      "every": 60
+    },
+    {
+      "url": "https://media.example.test/search",
+      "every": 60,
+      "method": "POST",
+      "headers": { "Content-Type": "application/xml" },
+      "body": "<Query limit=\"1\"/>",
+      "format": "xml"
+    },
+    {
+      "url": "https://media.example.test/sessions",
+      "every": 60,
+      "format": "json",
+      "pick": ["[0].NowPlayingItem.Name"]
+    },
+    {
+      "url": "https://media.example.test/untyped",
+      "every": 60
+    }
+  ]
+}
