@@ -222,7 +222,7 @@ int32_t session_set(const void *data, int32_t length)
     if (data == NULL || length < 0 || length > HOST_SESSION_MAX || host->is_loading || !host->is_session_writable) {
         return HOST_ERR_ARGUMENT;
     }
-    if (session_refusal != HOST_OK) {
+    if (length > host->session_length && session_refusal != HOST_OK) {
         if (session_refused++ == 0) {
             session_diagnostics_before = host->diagnostics;
         }

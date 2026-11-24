@@ -427,11 +427,32 @@ static void test_refusals_and_metadata(void)
     assert(session_set(&kept, sizeof kept) == HOST_OK);
     standin_refuse_session(HOST_ERR_NO_SPACE);
     kept = 8;
-    assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
+    assert(session_set(&kept, sizeof kept) == HOST_OK);
+    assert(standin_refused_sessions() == 0);
+    assert(session_get(&kept, sizeof kept) == sizeof kept && kept == 8);
+    int32_t larger[] = { 9, 10 };
+    assert(session_set(larger, sizeof larger) == HOST_ERR_NO_SPACE);
     assert(standin_refused_sessions() == 1 && !standin_session_failure_reported());
-    assert(session_get(&kept, sizeof kept) == sizeof kept && kept == 7);
+    assert(session_get(&kept, sizeof kept) == sizeof kept && kept == 8);
     log_write(HOST_LOG_ERROR, "Session error.", 14);
     assert(standin_session_failure_reported());
+    assert(session_set(&kept, 1) == HOST_OK);
+    /* Firmware compares growth to the latest stored length, including after shrinking. */
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
+    assert(session_set(&kept, 0) == HOST_OK);
+    assert(session_get(&kept, sizeof kept) == 0);
+    assert(session_set(&kept, 1) == HOST_ERR_NO_SPACE);
+    standin_refuse_session(HOST_OK);
+    assert(session_set(larger, sizeof larger) == HOST_OK);
+    standin_refuse_session(HOST_ERR_NO_SPACE);
+    standin_forget_session();
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
+    standin_refuse_session(HOST_OK);
+    assert(session_set(larger, sizeof larger) == HOST_OK);
+    standin_restart();
+    standin()->is_session_writable = true;
+    standin_refuse_session(HOST_ERR_NO_SPACE);
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
     standin_refuse_session(HOST_OK);
 
     standin()->refuse_alarms = HOST_ERR_NO_SPACE;

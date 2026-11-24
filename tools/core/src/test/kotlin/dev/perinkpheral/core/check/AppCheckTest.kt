@@ -293,6 +293,10 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("sessions", "a session reserved on focus needs no allocation on blur",
+            listOf("    session_get(&page, sizeof page);" to
+                "    session_get(&page, sizeof page);\n    session_set(&page, sizeof page);",
+                "        log_write(HOST_LOG_ERROR, \"Session error.\", 14);" to ""), ""),
         Break("store", "declared durable request writes on identical answers",
             listOf("{\n    if (is_same(kept, text) && !*is_unsaved) {" to
                 "{\n    static int32_t leases;\n    leases++;\n    kv_set(\"leases\", 6, &leases, sizeof leases);\n" +
