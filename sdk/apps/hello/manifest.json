@@ -5,6 +5,7 @@
   "description": "A sample app of the SDK.",
   "version": "0.1.4",
   "abi": 3,
+  "format": "raw",
   "fullscreen": false,
   "icon": [
     "...#####...",
