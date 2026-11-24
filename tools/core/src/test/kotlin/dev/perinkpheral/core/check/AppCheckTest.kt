@@ -2,6 +2,7 @@
 package dev.perinkpheral.core.check
 
 import dev.perinkpheral.core.BuildError
+import dev.perinkpheral.core.Json
 import dev.perinkpheral.core.build.Sdk
 import java.io.File
 import java.nio.file.Files
@@ -15,9 +16,25 @@ import java.nio.file.Files
  * (WASI_SDK_PATH) only what needs neither is tested, and it says so.
  */
 object AppCheckTest {
+    private enum class PollEdit { REMOVE, REQUIRE_SETTING }
+
     /** One line of the contract broken in the specimen, and the capability that has to notice. */
     private class Break(val capability: String, val what: String, val edits: List<Pair<String, String>>, val saying: String,
-                        val manifestEdits: List<Pair<String, String>> = emptyList(), val checkPatch: Map<String, Any?> = emptyMap())
+                        val manifestEdits: List<Pair<String, String>> = emptyList(),
+                        val checkPatch: Map<String, Any?> = emptyMap(), val pollEdit: PollEdit? = null)
+
+    private fun editSpecimenPolls(file: File, edit: PollEdit) {
+        val manifest = (Json.parse(file.readText()) as Map<*, *>).entries.associate {
+            it.key.toString() to it.value
+        }.toMutableMap()
+        val polls = manifest["polls"] as List<*>
+        val poll = polls.single() as Map<*, *>
+        when (edit) {
+            PollEdit.REMOVE -> manifest.remove("polls")
+            PollEdit.REQUIRE_SETTING -> manifest["polls"] = listOf(poll + ("headers" to mapOf("X-Token" to "{{server}}")))
+        }
+        file.writeText(Json.write(manifest))
+    }
 
     private val OPTIONAL_RESPONSES = mapOf<String, Any?>(
         "valid_responses" to mapOf("https://example.test/now*" to listOf(
@@ -34,7 +51,7 @@ object AppCheckTest {
         Break("network", "a raw application with a timer that never retries an unsuccessful read",
             listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""),
             "after the whole answer it shows another picture",
-            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
+            pollEdit = PollEdit.REMOVE),
         Break("network", "optional fallback declarations still check required null values",
             OPTIONAL_EDITS + listOf("length < 10 && picked[0] >= '0' && picked[0] <= '9'" to "length <= HOST_VALUE_MAX"),
             "response nulls", checkPatch = OPTIONAL_RESPONSES),
@@ -335,8 +352,7 @@ object AppCheckTest {
                     "    if (schedule_failed) schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;\n    if (id == TICK_TIMER) {"), ""),
         Break("network", "shadowed HTTP 200 mocks and unready polls receive no mutation", emptyList(),
             "no generated malformed response reached",
-            manifestEdits = listOf("\"every\": 60, \"pick\"" to
-                "\"every\": 60, \"headers\": {\"X-Token\": \"{{server}}\"}, \"pick\""),
+            pollEdit = PollEdit.REQUIRE_SETTING,
             checkPatch = mapOf("mocks" to linkedMapOf(
                 "https://example.test/not*" to mapOf("body" to "Plain text"),
                 "https://example.test/note" to mapOf("body" to "{\"value\":21,\"rows\":[{\"name\":\"row\"}]}"),
@@ -352,15 +368,15 @@ object AppCheckTest {
                     "    if (schedule_failed) schedule_failed = alarm_set(ASK_ALARM, 30) != HOST_OK;\n    if (id == TICK_TIMER) {"), ""),
         Break("network", "raw HTTP refresh after a cooldown does not invent a second 429",
             listOf("    if (event != BTN_OK_PRESSED) {" to "    ask_note();\n    if (event != BTN_OK_PRESSED) {"), "",
-            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
+            pollEdit = PollEdit.REMOVE),
 
         Break("network", "raw HTTP recovers on its foreground refresh timer",
             listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to "",
                 "        timer_set(TICK_TIMER, TICK_MS);" to "        timer_set(TICK_TIMER, TICK_MS);\n        ask_note();"), "",
-            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
+            pollEdit = PollEdit.REMOVE),
         Break("network", "raw HTTP refreshes on focus without periodic retries",
             listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""), "",
-            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to ""),
+            pollEdit = PollEdit.REMOVE,
             checkPatch = mapOf("exceptions" to mapOf("network.recovery" to "Responses are retried on focus; no periodic request is scheduled."))),
         Break("network", "a marked source-truncated value wraps onto another draw record",
             listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX",
@@ -542,6 +558,7 @@ object AppCheckTest {
                     described = described.replace(from, to)
                 }
                 manifest.writeText(described)
+                broken.pollEdit?.let { editSpecimenPolls(manifest, it) }
                 said.clear()
                 return copy
             }
