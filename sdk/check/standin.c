@@ -24,7 +24,8 @@
 standin_handlers_t standin_handlers;
 
 static standin_t *world;
-static int32_t session_refusal, session_refused, session_logs_before;
+static int32_t session_refusal, session_refused;
+static uint64_t session_diagnostics_before;
 
 /* memcpy(), of nothing when the length is 0: an application may pass NULL with it, which the
  * C library's memcpy() does not take (glibc declares both pointers never null). */
@@ -43,6 +44,7 @@ static void *copy(void *to, const void *from, size_t length)
 #define STORAGE_ENTRY_BYTES 32   /* host/store.h: 64 bytes a value and its length rounded up */
 #define FILE_BLOCK_BYTES    4096
 #define MS_PER_SECOND       1000
+#define DIAGNOSTIC_HASH_PRIME 1099511628211ULL
 /* The clock of a subject that names no time: 2026-11-21 12:00 UTC. A device knows the time. */
 #define DEFAULT_TIME        1795262400LL
 
@@ -179,6 +181,11 @@ void log_write(int32_t level, const char *text, int32_t length)
     copy(host->last_log, text, (size_t)length);
     host->last_log[length] = '\0';
     host->logs++;
+    host->diagnostics = (host->diagnostics ^ (uint64_t)level) * DIAGNOSTIC_HASH_PRIME;
+    for (int32_t index = 0; index < length; index++) {
+        host->diagnostics = (host->diagnostics ^ (uint8_t)text[index]) * DIAGNOSTIC_HASH_PRIME;
+    }
+    host->diagnostics = (host->diagnostics ^ (uint64_t)length) * DIAGNOSTIC_HASH_PRIME;
     if (level == HOST_LOG_ERROR) {
         host->error_logs++;
     }
@@ -199,7 +206,7 @@ int32_t standin_refused_sessions(void)
 
 bool standin_session_failure_reported(void)
 {
-    return session_refused > 0 && standin()->logs > session_logs_before;
+    return session_refused > 0 && standin()->diagnostics != session_diagnostics_before;
 }
 
 int32_t session_set(const void *data, int32_t length)
@@ -211,7 +218,7 @@ int32_t session_set(const void *data, int32_t length)
     }
     if (session_refusal != HOST_OK) {
         if (session_refused++ == 0) {
-            session_logs_before = host->logs;
+            session_diagnostics_before = host->diagnostics;
         }
         return session_refusal;
     }
@@ -2770,6 +2777,7 @@ void standin_timer(int32_t id)
 void standin_alarm(int32_t id)
 {
     standin_alarm_t *alarm = &standin()->alarms[id];
+    world->alarms_delivered |= 1u << id;
     if (alarm->kind == STANDIN_ALARM_EVERY) {
         /* As app_host.c keeps it: a period after the time it was due, or a period from now when
          * that is past already or the clock was set meanwhile. */

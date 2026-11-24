@@ -3,7 +3,7 @@ package dev.perinkpheral.core.check
 
 import dev.perinkpheral.core.Json
 
-/** Deliberately invalid responses derived from a supplied good answer, without a provider schema. */
+/** Potentially invalid responses derived from a supplied good answer, without a provider schema. */
 object ResponseMutations {
     private const val MAX_MEMBER_MUTATIONS = 64
     private const val OVERSIZED_TEXT_BYTES = 80
@@ -54,17 +54,20 @@ object ResponseMutations {
         }
         // Keep the other fields valid: corrupting an identity must not prevent reaching
         // a displayed name or number. The first row keeps the mutation count bounded.
-        fun members(value: Any?, accepts: (Any?) -> Boolean, change: (Any?) -> Any?): List<Any?> = when (value) {
-            is Map<*, *> -> value.entries.flatMap { (key, item) ->
-                val direct = if (accepts(item)) listOf(value.toMutableMap().apply { put(key, change(item)) }) else emptyList()
-                direct + members(item, accepts, change).map { child -> value.toMutableMap().apply { put(key, child) } }
+        fun members(value: Any?, accepts: (Any?) -> Boolean, change: (Any?) -> Any?): Sequence<Any?> = sequence {
+            when (value) {
+                is Map<*, *> -> for ((key, item) in value) {
+                    if (accepts(item)) yield(value.toMutableMap().apply { put(key, change(item)) })
+                    for (child in members(item, accepts, change)) {
+                        yield(value.toMutableMap().apply { put(key, child) })
+                    }
+                }
+                is List<*> -> if (value.isNotEmpty()) {
+                    val first = value.first()
+                    if (accepts(first)) yield(listOf(change(first)) + value.drop(1))
+                    for (child in members(first, accepts, change)) yield(listOf(child) + value.drop(1))
+                }
             }
-            is List<*> -> if (value.isEmpty()) emptyList() else {
-                val first = value.first()
-                val direct = if (accepts(first)) listOf(listOf(change(first)) + value.drop(1)) else emptyList()
-                direct + members(first, accepts, change).map { listOf(it) + value.drop(1) }
-            }
-            else -> emptyList()
         }
         fun addMembers(kind: String, accepts: (Any?) -> Boolean, change: (Any?) -> Any?) {
             members(parsed, accepts, change).take(MAX_MEMBER_MUTATIONS).forEach { result += Mutation(kind, Json.write(it)) }

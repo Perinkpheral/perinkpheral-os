@@ -235,6 +235,8 @@ enum {
     MARK_ROUND_PICTURE, /* and the three after it: after each round */
     MARK_VISIBLE_FAILURE = MARK_ROUND_PICTURE + ROUNDS_MAX,
     MARK_MUTATION_PICKED,
+    MARK_DIAGNOSTICS,
+    MARK_ALARM_COVERAGE,
     MARK_COUNT
 };
 
@@ -345,7 +347,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     }
     if (round->kind == ROUND_HTTP && status == 429) {
         host->retry_after = backoff_seconds;
-        host->saw_rate_limit = true;
+        host->rate_limits++;
         host->retry_until_ms = host->uptime_ms + (int64_t)backoff_seconds * 1000;
         snprintf(host->response_headers, sizeof host->response_headers, "Retry-After: %d", backoff_seconds);
     }
@@ -614,6 +616,7 @@ static void scene_run(void *context)
     }
     if (scene->retry_events || scene->recover_alarms) {
         bool warned_before_recovery = visible_failure();
+        host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
         host->refuse_alarms = HOST_OK;
         host->refuse_notices = HOST_OK;
         host->refuse_receipts = false;
@@ -647,6 +650,10 @@ static void scene_run(void *context)
         }
     }
     host->marks[MARK_ALARMS] = standin_alarms();
+    host->marks[MARK_ALARM_COVERAGE] = standin_alarms() | host->alarms_delivered;
+    if (!scene->recover_alarms && !scene->retry_events) {
+        host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
+    }
     host->marks[MARK_LEFT] = host->is_leaving;
     if (scene->is_off_screen) {
         if (!is_away) {
@@ -1363,7 +1370,8 @@ static void check_drawing(void)
 
 static void session_refusal_run(void *context)
 {
-    const char *way = context;
+    const scene_t *scene = context;
+    const char *way = scene->presses;
     standin_load();
     standin_focus();
     if (has_polls_or_requests) {
@@ -1374,19 +1382,29 @@ static void session_refusal_run(void *context)
     }
     shown.is_shown = false;
     standin()->marks[MARK_PICTURE] = show();
-    standin_refuse_session(HOST_ERR_NO_SPACE);
+    standin_refuse_session(scene->refusal);
     standin_leave();
     standin()->marks[MARK_TIMERS_BEFORE] = (uint64_t)standin_refused_sessions();
     standin()->marks[MARK_VISIBLE_FAILURE] = standin_session_failure_reported();
+    standin()->marks[MARK_DIAGNOSTICS] = standin()->diagnostics;
     standin()->marks[MARK_LEFT] = standin()->is_leaving;
 }
 
 static void check_session_refusal(void)
 {
     for (int way = 0; way < WAY_COUNT; way++) {
+        scene_t scene = { .presses = WAYS[way] };
         standin_reset();
+        if (!standin_live(session_refusal_run, &scene)) {
+            problem(SESSIONS, "session baseline: buttons %s: %s", WAYS[way], standin_fault());
+            stop_if_hung(standin_fault());
+            continue;
+        }
+        uint64_t diagnostics = mark(MARK_DIAGNOSTICS);
+        standin_reset();
+        scene.refusal = HOST_ERR_NO_SPACE;
         results[SESSIONS].checks++;
-        if (!standin_live(session_refusal_run, (void *)WAYS[way])) {
+        if (!standin_live(session_refusal_run, &scene)) {
             problem(SESSIONS, "session-refusal: buttons %s: %s", WAYS[way], standin_fault());
             stop_if_hung(standin_fault());
             continue;
@@ -1395,7 +1413,7 @@ static void check_session_refusal(void)
             continue;
         }
         uint64_t picture = mark(MARK_PICTURE);
-        bool reported = mark(MARK_VISIBLE_FAILURE) != 0;
+        bool reported = mark(MARK_VISIBLE_FAILURE) != 0 && mark(MARK_DIAGNOSTICS) != diagnostics;
         if (play(&ON_SCREEN)) {
             expect(SESSIONS, reported || mark(MARK_PICTURE) == picture,
                    "session-refusal: buttons %s, session_set answered HOST_ERR_NO_SPACE: "
@@ -1487,15 +1505,17 @@ static void check_alarm_refusal(void)
         if (!play(&used)) {
             continue;
         }
-        uint64_t alarms = mark(MARK_ALARMS);
+        uint64_t alarms = mark(MARK_ALARM_COVERAGE);
+        uint64_t diagnostics = mark(MARK_DIAGNOSTICS);
         standin_reset();
         standin()->refuse_alarms = HOST_ERR_NO_SPACE;
         if (!play(&used) || standin()->refused_alarms == 0 || mark(MARK_LEFT)) {
             continue;
         }
-        expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || (mark(MARK_ALARMS) & alarms) == alarms,
+        expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || mark(MARK_DIAGNOSTICS) != diagnostics ||
+               (mark(MARK_ALARM_COVERAGE) & alarms) == alarms,
                "alarm-refusal: buttons %s, alarm_set* answered HOST_ERR_NO_SPACE: schedule lost after 60 seconds "
-               "of timer retries, with no visible failure", WAYS[way]);
+               "of timer retries, with no failure diagnostic", WAYS[way]);
     }
 }
 
@@ -1645,6 +1665,11 @@ static void check_responses(void)
                    "response long-values at %s: a picked 63-byte string is displayed without a truncation marker", mutation->address);
             continue;
         }
+        if (mutation->is_valid) {
+            note(NETWORK, "declared valid response %s at %s (mutation %d)", mutation->kind, mutation->address, index);
+            picture = mark(MARK_PICTURE);
+            failure = picture;
+        }
         expect(NETWORK, mark(MARK_PICTURE) == picture || mark(MARK_PICTURE) == failure,
                "response %s at %s (mutation %d): malformed HTTP 200 replaced a good picture; "
                "neither the retained picture nor its failed-answer picture", mutation->kind, mutation->address, index);
@@ -1673,36 +1698,41 @@ static int32_t requests_made(void)
 
 static void during_backoff(void *context)
 {
-    (void)context;
+    bool repeat = *(const bool *)context;
     standin_t *host = standin();
     standin_load();
     standin_focus();
     shown.is_shown = false;
     show();
-    for (int chain = 0; chain < 2; chain++) {
-        answer_round(&(round_t){ ROUND_HTTP, 429, 0 });
+    if (repeat) {
         standin_intent(HOST_INTENT_NETWORK_UP);
-        standin_intent(HOST_INTENT_TIME_CHANGED);
         standin_settings();
         standin_press(BTN_OK);
-        for (int32_t step = 0; step < backoff_seconds - 1; step++) {
-            standin_pass(1000);
-            for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
-                if (host->timer_due_ms[id] != 0 && host->timer_due_ms[id] <= host->uptime_ms) {
-                    standin_timer(id);
-                }
-            }
-            for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
-                if (standin_alarm_due(id)) {
-                    standin_alarm(id);
-                }
+        ask_again();
+    }
+    int32_t before = host->rate_limits;
+    answer_round(&(round_t){ ROUND_HTTP, 429, 0 });
+    if (host->rate_limits == before) {
+        standin_leave();
+        return;
+    }
+    standin_intent(HOST_INTENT_NETWORK_UP);
+    standin_intent(HOST_INTENT_TIME_CHANGED);
+    standin_settings();
+    standin_press(BTN_OK);
+    for (int32_t step = 0; step < backoff_seconds - 1; step++) {
+        standin_pass(1000);
+        for (int32_t id = 0; id < HOST_TIMER_COUNT; id++) {
+            if (host->timer_due_ms[id] != 0 && host->timer_due_ms[id] <= host->uptime_ms) {
+                standin_timer(id);
             }
         }
-        if (chain == 0) {
-            standin_pass(1000);
+        for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+            if (standin_alarm_due(id)) {
+                standin_alarm(id);
+            }
         }
     }
-    host->marks[MARK_WRITES_AGAIN] = (uint64_t)host->early_requests;
     standin_leave();
 }
 
@@ -1716,25 +1746,31 @@ static void check_backoff(void)
         backoff_seconds = DELAYS[delay];
         standin_reset();
         standin()->monitor_backoff = true;
-        results[NETWORK].checks++;
-        if (!standin_live(during_backoff, NULL)) {
-            problem(NETWORK, "retry-after: %s", standin_fault());
-            stop_if_hung(standin_fault());
-            continue;
-        }
-        if (!standin()->saw_rate_limit) {
-            note(NETWORK, "no request ready for Retry-After: supply the required settings");
-            continue;
-        }
-        expect(NETWORK, mark(MARK_WRITES_AGAIN) == 0,
-               "retry-after: two HTTP 429s with Retry-After: %d, %d requests queued during cooldown "
-               "by reconnect, clock/settings changes, OK, timers or alarms", backoff_seconds,
-               (int)mark(MARK_WRITES_AGAIN));
-        int32_t before = requests_made();
-        if (play(&ON_SCREEN)) {
+        for (int chain = 0; chain < 2; chain++) {
+            bool repeat = chain > 0;
+            int32_t before = standin()->rate_limits;
+            results[NETWORK].checks++;
+            if (!standin_live(during_backoff, &repeat)) {
+                problem(NETWORK, "retry-after: %s", standin_fault());
+                stop_if_hung(standin_fault());
+                break;
+            }
+            if (standin()->rate_limits == before) {
+                note(NETWORK, "no request ready for Retry-After round %d: supply the required settings", chain + 1);
+                break;
+            }
+            expect(NETWORK, standin()->early_requests == 0,
+                   "retry-after: HTTP 429 with Retry-After: %d, %d requests queued during cooldown "
+                   "by reconnect, clock/settings changes, OK, timers or alarms", backoff_seconds,
+                   standin()->early_requests);
+            before = requests_made();
+            if (!play(&ON_SCREEN)) {
+                break;
+            }
             expect(NETWORK, requests_made() == before,
                    "retry-after: unload/focus queued %d requests one second before a %d-second cooldown ends",
                    requests_made() - before, backoff_seconds);
+            standin_pass(1000);
         }
     }
     backoff_seconds = 120;

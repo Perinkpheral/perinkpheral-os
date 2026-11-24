@@ -307,15 +307,31 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             val failures = kept["failure_text"]?.let { it as? List<*> ?: throw BuildError("failure_text must be an array") }.orEmpty()
             if (failures.any { it !is String || it.isBlank() }) throw BuildError("failure_text must contain nonempty strings")
             if (failures.isNotEmpty()) appendLine("static const char *const FAILURE_TEXT[] = { ${failures.joinToString(", ") { text(it as String) }} };")
+            // Exact alternate bodies keep an optional-field policy from disabling required-field checks.
+            val validResponses = kept["valid_responses"]?.let {
+                it as? Map<*, *> ?: throw BuildError("valid_responses must be an object")
+            }.orEmpty().mapValues { (address, bodies) ->
+                if (address !is String || answers.none { it.first == address }) throw BuildError("unknown valid_responses address: $address")
+                val variants = bodies as? List<*> ?: throw BuildError("valid_responses bodies must be an array")
+                if (variants.isEmpty()) throw BuildError("valid_responses bodies must not be empty")
+                variants.map { body ->
+                    if (body !is String) throw BuildError("valid_responses bodies must be JSON strings")
+                    val parsed = runCatching { Json.parse(body) }.getOrElse { throw BuildError("invalid valid_responses JSON") }
+                    if (parsed !is Map<*, *> && parsed !is List<*>) throw BuildError("valid_responses bodies must be JSON objects or arrays")
+                    parsed
+                }
+            }
             val mutations = answers.flatMapIndexed { index, (address, status, file) ->
                 if (status != 200L) emptyList() else ResponseMutations.make(file.readText()).mapIndexed { number, mutation ->
                     val mutated = File(scratch, "answers/$index-$number.body").apply { writeText(mutation.body) }
-                    Triple(address, mutation.kind, mutated)
+                    val parsed = runCatching { Json.parse(mutation.body) }.getOrNull()
+                    val valid = validResponses[address].orEmpty().any { it == parsed }
+                    "    { ${text(address)}, ${text(mutation.kind)}, ${text(mutated.path)}, $valid },"
                 }
             }
             if (mutations.isNotEmpty()) {
                 appendLine("static const standin_mutation_t MUTATIONS[] = {")
-                mutations.forEach { (address, kind, file) -> appendLine("    { ${text(address)}, ${text(kind)}, ${text(file.path)} },") }
+                mutations.forEach { appendLine(it) }
                 appendLine("};")
             }
             val at = kept["at"] as? Long ?: 0L

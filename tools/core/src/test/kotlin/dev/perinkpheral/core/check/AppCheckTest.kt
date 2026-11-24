@@ -19,7 +19,30 @@ object AppCheckTest {
     private class Break(val capability: String, val what: String, val edits: List<Pair<String, String>>, val saying: String,
                         val manifestEdits: List<Pair<String, String>> = emptyList(), val checkPatch: Map<String, Any?> = emptyMap())
 
+    private val OPTIONAL_RESPONSES = mapOf<String, Any?>(
+        "valid_responses" to mapOf("https://example.test/now*" to listOf(
+            "{\"value\":21,\"rows\":[{\"name\":null}]}", "{\"value\":21,\"rows\":[]}",
+            "{\"value\":21,\"rows\":[{}]}", "{\"value\":21,\"rows\":null}", "{\"value\":21,\"rows\":[null]}")))
+    private val OPTIONAL_EDITS = listOf(
+        "if (answer_count(1) != 1 || row_length <= 0 || row_length >= HOST_VALUE_MAX)" to
+            "if (answer_count(1) > 1 || row_length >= HOST_VALUE_MAX)",
+        "    row[row_length] = '\\0';" to "    row[row_length > 0 ? row_length : 0] = '\\0';",
+        "    if (is_same(row, \"null\")) {\n        return;\n    }" to
+            "    if (row_length <= 0 || is_same(row, \"null\")) {\n        row[0] = '-';\n        row[1] = '\\0';\n    }")
+
     private val BREAKS = listOf(
+        Break("network", "optional fallback declarations still check required null values",
+            OPTIONAL_EDITS + listOf("length < 10 && picked[0] >= '0' && picked[0] <= '9'" to "length <= HOST_VALUE_MAX"),
+            "response nulls", checkPatch = OPTIONAL_RESPONSES),
+
+        Break("sessions", "unrelated error logs do not report a refused session",
+            listOf("        log_write(HOST_LOG_ERROR, \"Session error.\", 14);" to "",
+                "    int32_t saved = session_set(&page, sizeof page);" to
+                    "    log_write(HOST_LOG_ERROR, \"Leaving\", 7);\n    int32_t saved = session_set(&page, sizeof page);\n    log_write(HOST_LOG_ERROR, \"Leaving\", 7);"), "session-refusal:"),
+        Break("timers", "a refused one-shot alarm silently loses its action",
+            listOf("schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to
+                "alarm_set(ASK_ALARM, 30);"), "alarm-refusal:"),
+
         Break("clock", "a floating future date uses today's offset",
             listOf("    time_from_local(&floating, &floating_at);" to
                 "    floating_at = 1806321600LL - time_zone_offset();"), "clock event"),
@@ -266,6 +289,25 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("network", "optional null fields and empty feeds render and persist their fallback",
+            OPTIONAL_EDITS, "", checkPatch = OPTIONAL_RESPONSES),
+        Break("timers", "a repeating alarm refusal is diagnosed in the log",
+            listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
+                "    ask_note();\n}" to "    if (schedule_failed) log_write(HOST_LOG_WARN, \"Alarm error.\", 12);\n    ask_note();\n}"), ""),
+        Break("timers", "a one-shot alarm action is delivered after allocation recovers",
+            listOf("    if (schedule_failed) {\n        gfx_draw_text(MARGIN, 180, HOST_FONT_TEXT, \"Schedule error.\", 15);\n    }" to "",
+                "schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to
+                "schedule_failed = alarm_set(ASK_ALARM, 30) != HOST_OK;",
+                "    if (id == TICK_TIMER) {" to
+                    "    if (schedule_failed) schedule_failed = alarm_set(ASK_ALARM, 30) != HOST_OK;\n    if (id == TICK_TIMER) {"), ""),
+        Break("network", "raw HTTP refresh after a cooldown does not invent a second 429",
+            listOf("    if (event != BTN_OK_PRESSED) {" to "    ask_note();\n    if (event != BTN_OK_PRESSED) {"), "",
+            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to "")),
+
+        Break("network", "raw HTTP refreshes on focus without periodic retries",
+            listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""), "",
+            manifestEdits = listOf("  \"polls\": [\n    { \"url\": \"https://example.test/now?place={{place}}\", \"every\": 60, \"pick\": [\"value\", \"rows[*].name\"] }\n  ],\n" to ""),
+            checkPatch = mapOf("exceptions" to mapOf("network.recovery" to "Responses are retried on focus; no periodic request is scheduled."))),
         Break("network", "a marked source-truncated value wraps onto another draw record",
             listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX",
                 "    row[row_length] = '\\0';" to
@@ -372,6 +414,9 @@ object AppCheckTest {
                 "{\"exceptions\":{\"responses.empty-lists\":\"\"}}",
                 "{\"exceptions\":{\"unknown\":\"reason\"}}",
                 "{\"exceptions\":false}",
+                "{\"valid_responses\":false}",
+                "{\"valid_responses\":{\"unknown\":[]}}",
+                "{\"valid_responses\":{\"https://example.test/now*\":[\"invalid\"]}}",
                 "{\"failure_text\":[\"\"]}",
                 "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}",
                 "{\"clock_probes\":[{\"now\":1795262400,\"local\":\"bad date\"}]}",
@@ -418,12 +463,6 @@ object AppCheckTest {
                 said.clear()
                 return copy
             }
-            BREAKS.forEachIndexed { number, broken ->
-                val report = checker.run(copied(number, broken).parentFile, only = broken.capability)
-                val line = report.lines.single()
-                check(line.state == AppCheck.State.FAILED) { "${broken.what}: ${broken.capability} did not notice" }
-                check(line.details.any { broken.saying in it }) { "${broken.what}: ${line.details.joinToString("\n")}" }
-            }
             // And what is right, if unusual, passes: the checks find no fault the device would not have.
             FINE.forEachIndexed { number, fine ->
                 val report = checker.run(copied(BREAKS.size + number, fine).parentFile, only = fine.capability)
@@ -432,6 +471,12 @@ object AppCheckTest {
                 (fine.checkPatch["exceptions"] as? Map<*, *>).orEmpty().keys.forEach { exception ->
                     check(line.details.any { "exception $exception" in it }) { "exception $exception was not reported" }
                 }
+            }
+            BREAKS.forEachIndexed { number, broken ->
+                val report = checker.run(copied(number, broken).parentFile, only = broken.capability)
+                val line = report.lines.single()
+                check(line.state == AppCheck.State.FAILED) { "${broken.what}: ${broken.capability} did not notice" }
+                check(line.details.any { broken.saying in it }) { "${broken.what}: ${line.details.joinToString("\n")}" }
             }
         } finally {
             scratch.deleteRecursively()

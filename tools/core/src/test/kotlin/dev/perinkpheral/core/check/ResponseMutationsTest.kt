@@ -22,6 +22,10 @@ object ResponseMutationsTest {
         val changed = unicode.filter { it.kind == "long-values" }.map { Json.parse(it.body) as Map<*, *> }
             .first { it["second"] == "keep" }["first"] as String
         check(changed.substringBefore('W').toByteArray().size <= 24 && changed.contains("W".repeat(80)))
+        val wide = ResponseMutations.make(Json.write((0 until 20_000).associate { "field$it" to it }))
+        check(wide.count { it.kind == "picked-null" } == 64)
+        check(wide.count { it.kind == "numeric-overflow" } == 65) // all leaves plus 64 members
+        check(wide.count { it.kind == "wrong-types" } == 65)
         println("Response mutations: single-field strings/numbers, list nulls and UTF-8 prefixes passed")
     }
 }

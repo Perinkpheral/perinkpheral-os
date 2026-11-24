@@ -66,6 +66,7 @@ typedef struct {
 
 typedef struct {
     const char *address, *kind, *file;
+    bool is_valid; /* exact alternate response declared by the application */
 } standin_mutation_t;
 
 typedef struct {
@@ -219,7 +220,9 @@ typedef struct {
     bool refuse_receipts; /* refuse writes only after an accepted notification */
     int32_t active_zone; /* 0: configured zone; otherwise subject.zones[index - 1] */
     int32_t mutation_deliveries;
-    bool monitor_backoff, saw_rate_limit;
+    bool monitor_backoff;
+    int32_t rate_limits;
+    uint32_t alarms_delivered;
     int64_t retry_until_ms;
     int32_t early_requests;
     int32_t retry_after; /* response metadata, set before delivery */
@@ -261,6 +264,7 @@ typedef struct {
     char    status_text[2][HOST_STATUS_TEXT_MAX + 1];
     int32_t status_icon[2];
     int32_t logs, error_logs;
+    uint64_t diagnostics; /* hash of log records */
     char    last_log[HOST_LOG_TEXT_MAX + 1];
 
     /* The network. */

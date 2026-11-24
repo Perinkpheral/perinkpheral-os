@@ -40,9 +40,9 @@ prove every possible input or button sequence. A coverage note identifies missin
 
 | Capability | Failure paths |
 | --- | --- |
-| `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic is required. |
+| `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic absent from the healthy run is required. |
 | `store` | Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Refuse response saves as well. Unload immediately and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
-| `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The healthy schedule must recover or the app must display failure. |
+| `timers` | Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The healthy schedule must recover, its one-shot action must be delivered, or the app must display or log failure. Log diagnostics are compared before recovery against the healthy run. |
 | `notices` | Reach alarms/timers through the standard paths; compare accepted counts with queue rejection followed by acceptance and with writes refused immediately after acceptance. Retry for 60 seconds, then unload/replay; also deliver alarms into fresh background instances. No due notice reached is a coverage note. |
 | `network` | Derive malformed responses from good JSON mocks, compare the good/normal failed-response pictures and reloaded cache; observe new HTTP/poll requests during Retry-After, including lifecycle changes and chains of two refusals, with both 120- and 300-second deadlines. |
 | `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |
@@ -83,10 +83,21 @@ A log line is not a visible error.
 
 Unknown keys and blank reasons fail. Do not use an exception to bless a defect.
 JSON mutations include individual null, string and number members (at most 64 variants
-of each kind, using the first record in nested arrays), as well as changing all leaves.
+of each kind, generated lazily using the first record in nested arrays), as well as changing all leaves.
 String mutations retain up to 24 UTF-8 bytes of the original prefix, so an invalid identity
 does not prevent reaching a long displayed name. Numeric mutations also preserve the other
-fields. Optional nulls can legitimately change fallback text: declare that difference. For non-JSON protocols,
+fields. Optional nulls and empty feeds can legitimately change fallback text. Declare exact
+alternate JSON bodies in `valid_responses`, keyed by the matching mock address:
+
+```json
+{"valid_responses": {"https://example.test/feed": ["{\"value\":21,\"description\":null}", "{\"value\":21,\"rows\":[]}"]}}
+```
+
+Only mutations equal to a declared JSON body may render a different picture; their
+fallback picture must survive unloading. Required fields and every other mutation
+remain checked. Addresses must match supplied mocks; variants must be JSON objects
+or arrays encoded as strings. This avoids exempting an entire mutation kind for one
+optional field. For non-JSON protocols,
 up to 64 decimal tokens are replaced independently with an
 oversized integer; only sanitizer safety is asserted because another number can be valid
 data. Semantic validation still needs application tests: truncating arbitrary text can
