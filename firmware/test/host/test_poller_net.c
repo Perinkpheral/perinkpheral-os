@@ -17,6 +17,9 @@ static const char *manifest_json;
 static esp_http_client_config_t active_client;
 static char *retry_header;
 static int cooldown_seconds, cooldown_calls;
+static const char MOCK_BODY[] = "{\"value\":42}";
+static bool mock_success, mock_picked;
+static int delivered_replies;
 
 SemaphoreHandle_t xSemaphoreCreateMutex(void) { return &mutex_taken; }
 int xSemaphoreTake(SemaphoreHandle_t lock, unsigned wait) { (void)wait; CHECK(!*lock); *lock = true; return pdTRUE; }
@@ -35,14 +38,20 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
 }
 esp_err_t esp_http_client_open(esp_http_client_handle_t client, int length) { (void)client; CHECK(length == 0); return fail_open ? open_error : ESP_OK; }
 int esp_http_client_get_socket(esp_http_client_handle_t client) { (void)client; return -1; }
+static void reply_header(char *name, char *value)
+{
+    esp_http_client_event_t event = { .event_id = HTTP_EVENT_ON_HEADER,
+        .user_data = active_client.user_data, .header_key = name, .header_value = value };
+    CHECK(active_client.event_handler(&event) == ESP_OK);
+}
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client)
 {
     (void)client;
     if (header_failure != 0) return header_failure;
-    if (retry_header != NULL) {
-        esp_http_client_event_t event = { .event_id = HTTP_EVENT_ON_HEADER,
-            .user_data = active_client.user_data, .header_key = "Retry-After", .header_value = retry_header };
-        CHECK(active_client.event_handler(&event) == ESP_OK);
+    if (retry_header != NULL) reply_header("Retry-After", retry_header);
+    if (mock_success) {
+        reply_header("ETag", "\"revision-1\"");
+        reply_header("Set-Cookie", "sid=probe");
     }
     return (int64_t)body_bytes;
 }
@@ -51,7 +60,13 @@ int esp_http_client_read(esp_http_client_handle_t client, char *bytes, int capac
     (void)client; read_calls++;
     if (body_bytes > 0) {
         size_t count = body_bytes < (size_t)capacity ? body_bytes : (size_t)capacity;
-        memset(bytes, 'x', count); body_bytes -= count; return (int)count;
+        if (mock_success) {
+            memcpy(bytes, MOCK_BODY + sizeof MOCK_BODY - 1 - body_bytes, count);
+        } else {
+            memset(bytes, 'x', count);
+        }
+        body_bytes -= count;
+        return (int)count;
     }
     if (expire_read) clock_ms += FIRMWARE_WITHIN_MS;
     return read_failure;
@@ -96,7 +111,8 @@ static void reset(void)
     socket_error = tls_error_code = certificate_flags = header_failure = 0;
     open_error = ESP_FAIL;
     tls_failure = ESP_OK;
-    delivered_status = 0;
+    delivered_status = delivered_replies = 0;
+    mock_success = false;
     manifest_json = NULL;
     retry_header = NULL;
     cooldown_seconds = cooldown_calls = 0;
@@ -118,9 +134,33 @@ static bool fetch(size_t maximum, int *status)
 
 static void deliver(const char *name, const app_delivery_t *answer)
 {
-    (void)name;
     delivered_status = answer->http_status;
     delivered_only_on_screen = answer->only_on_screen;
+    if (!mock_success) return;
+
+    delivered_replies++;
+    CHECK_STR(name, "probe");
+    CHECK(answer->request == 0 && answer->http_status == 200);
+    CHECK(answer->response != NULL);
+    if (answer->response != NULL) {
+        CHECK_STR(answer->response->etag, "\"revision-1\"");
+        CHECK(answer->response->length == sizeof MOCK_BODY - 1);
+    }
+    char cookie[16] = {0};
+    CHECK(answer_headers_get(answer->headers, "Set-Cookie", 10, 0, cookie, sizeof cookie) == 9);
+    CHECK_STR(cookie, "sid=probe");
+    if (mock_picked) {
+        CHECK(answer->kind == APP_DELIVERY_VALUES && answer->picked != NULL);
+        if (answer->picked != NULL) {
+            const char *picked = json_pick_value(answer->picked, 0);
+            CHECK(picked != NULL && strcmp(picked, "42") == 0);
+        }
+    } else {
+        CHECK(answer->kind == APP_DELIVERY_PIECE);
+        CHECK(answer->flags == (HOST_DATA_FIRST | HOST_DATA_LAST));
+        CHECK(answer->length == sizeof MOCK_BODY - 1 && answer->data != NULL &&
+              memcmp(answer->data, MOCK_BODY, sizeof MOCK_BODY - 1) == 0);
+    }
 }
 
 static void record_retry_after(int seconds)
@@ -221,6 +261,18 @@ static void test_poll_transport_failures(void)
     CHECK(delivered_only_on_screen && delivered_status == HOST_FAILED_NO_NETWORK);
 }
 
+static void test_successful_poll_delivery(void)
+{
+    for (int picked = 0; picked <= 1; picked++) {
+        reset();
+        mock_success = true;
+        mock_picked = picked;
+        body_bytes = sizeof MOCK_BODY - 1;
+        CHECK(!poll_failure(picked));
+        CHECK(delivered_replies == 1 && delivered_status == 200);
+    }
+}
+
 static void test_retry_after(void)
 {
     reset();
@@ -249,6 +301,7 @@ int main(void)
     test_poll_memory_failures();
     test_poll_transport_failures();
     test_retry_after();
+    test_successful_poll_delivery();
     int status;
     reset(); CHECK(fetch(4096, &status)); CHECK(status == 200 && received == HOST_DATA_CHUNK_MAX + 17);
     reset(); read_failure = -1;

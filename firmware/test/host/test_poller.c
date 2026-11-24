@@ -18,7 +18,9 @@ static wifi_status_t network;
 static bool transport_failure, reconnect_during_request;
 static int round_items, raw_sent, failures_told, notifications, radio_holds;
 static int retry_after, round_poll, sent_item, response_ms;
-static bool session_memory = true;
+static bool session_memory = true, page_memory = true;
+static const char *served_manifest;
+static int deliveries, delivered_request, delivered_status;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
 const app_manifest_t *launcher_installed(int *count)
@@ -56,7 +58,12 @@ unsigned ulTaskNotifyTake(int clear, TickType_t timeout)
     return 0;
 }
 int64_t esp_timer_get_time(void) { return clock_ms * US_PER_MS; }
-bool memory_has(memory_need_t need) { return need != MEMORY_FOR_A_SESSION || session_memory; }
+bool memory_has(memory_need_t need)
+{
+    if (need == MEMORY_FOR_A_SESSION) return session_memory;
+    if (need == MEMORY_FOR_A_PAGE) return page_memory;
+    return true;
+}
 bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
 void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }
@@ -78,12 +85,15 @@ bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
 void host_deliver(const char *name, const app_delivery_t *delivery)
 {
-    (void)name; (void)delivery;
+    CHECK_STR(name, "probe");
+    deliveries++;
+    delivered_request = delivery->request;
+    delivered_status = delivery->http_status;
 }
 char *app_store_read_manifest(const char *root, const char *name)
 {
     (void)root; (void)name;
-    return NULL;
+    return served_manifest != NULL ? strdup(served_manifest) : NULL;
 }
 uint32_t app_kv_poll_pace(const char *name, int poll) { (void)name; (void)poll; return 0; }
 bool app_kv_set_poll_pace(const char *name, int poll, uint32_t seconds)
@@ -142,18 +152,22 @@ void poller_net_poll_not_made(const char *name, int poll, int why)
 }
 void poller_net_request(const char *name, const poller_ask_t *ask)
 {
-    (void)name;
-    (void)ask;
     if (retry_after != 0) {
         NET_HOST.retry_after(retry_after);
         retry_after = 0;
     }
     clock_ms += response_ms;
     raw_sent++;
+    const app_delivery_t answer = { .kind = APP_DELIVERY_PIECE, .request = ask->number,
+        .http_status = 200, .flags = HOST_DATA_FIRST | HOST_DATA_LAST };
+    NET_HOST.deliver(name, &answer);
 }
 void poller_net_tell_failure(const char *name, int number, int why)
 {
-    (void)name; (void)number; (void)why; failures_told++;
+    failures_told++;
+    const app_delivery_t answer = { .kind = APP_DELIVERY_PIECE, .request = number,
+        .http_status = why, .flags = HOST_DATA_FAILED };
+    NET_HOST.deliver(name, &answer);
 }
 bool poller_net_fetch(const char *url, size_t max_bytes, poller_net_take_fn take, void *context, int *status)
 {
@@ -193,7 +207,9 @@ static void reset_poller(void)
     retry_after = round_poll = response_ms = 0;
     s_network_generation = 0;
     s_memory_looks = 0;
-    session_memory = true;
+    session_memory = page_memory = true;
+    served_manifest = NULL;
+    deliveries = delivered_request = delivered_status = 0;
     s_polled_now_at_ms = -POLL_NOW_EVERY_MS;
     sent_method = HOST_HTTP_GET;
     s_lock = xSemaphoreCreateMutex();
@@ -534,6 +550,36 @@ static void test_reconnect_raw_queue(void)
     CHECK(failures_told == 1);
 }
 
+static void test_request_admission(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    served_manifest = "{\"name\":\"probe\",\"title\":\"Probe\",\"abi\":3,\"hosts\":[\"example.test\"]}";
+    app_request_t asked = { .tag = HOST_REQUEST_FIRST + 3, .method = HOST_HTTP_GET,
+        .url = "https://unlisted.test/api" };
+    CHECK(poller_request("probe", &asked) == HOST_ERR_ARGUMENT);
+    CHECK(!run_pending_request(0) && deliveries == 0);
+
+    strcpy(asked.url, "https://example.test/api");
+    page_memory = false;
+    CHECK(poller_request("probe", &asked) == HOST_ERR_NO_SPACE);
+    CHECK(!run_pending_request(0) && deliveries == 0);
+    page_memory = true;
+
+    CHECK(poller_request("probe", &asked) == HOST_OK);
+    CHECK(raw_sent == 0 && deliveries == 0);
+    CHECK(run_pending_request(0) && raw_sent == 1 && deliveries == 1);
+    CHECK(delivered_request == asked.tag && delivered_status == 200);
+    CHECK(!run_pending_request(0));
+
+    asked.tag++;
+    CHECK(poller_request("probe", &asked) == HOST_OK);
+    CHECK(deliveries == 1);
+    CHECK(run_pending_request(HOST_FAILED_NO_NETWORK) && failures_told == 1 && deliveries == 2);
+    CHECK(delivered_request == asked.tag && delivered_status == HOST_FAILED_NO_NETWORK);
+    CHECK(!run_pending_request(0));
+}
+
 static void test_settings_save_during_retry_after(void)
 {
     for (int dispatch_before_settings = 0; dispatch_before_settings <= 1; dispatch_before_settings++) {
@@ -701,6 +747,7 @@ static void test_long_retry_after_survives_reload(void)
 
 int main(void)
 {
+    test_request_admission();
     test_long_retry_after_survives_reload();
     test_list_round_stops_when_body_outlasts_retry_after();
     test_expired_retry_after_cancels_suspended_rounds();

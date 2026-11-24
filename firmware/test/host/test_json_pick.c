@@ -240,8 +240,11 @@ static void test_broken_documents(void)
 
     /* a document that never closes is not whole, whatever it held */
     json_pick_init(&pick, PATHS, 2);
-    json_pick_feed(&pick, "{\"a\":123", 8);
+    CHECK(json_pick_feed(&pick, "{\"a\":123", 8));
     CHECK(!json_pick_finish(&pick));
+    CHECK(json_pick_count(&pick, 0) == 1);
+    CHECK_STR(value(0), "123");
+    CHECK(json_pick_count(&pick, 1) == 0);
     json_pick_init(&pick, PATHS, 2);
     json_pick_feed(&pick, "{\"a\":123}", 9);
     CHECK(json_pick_finish(&pick));

@@ -492,6 +492,12 @@ static void test_hosts(void)
     CHECK(!app_manifest_allows_url(manifest, "https://api.example.com@evil.net/", NULL, NULL));
     CHECK(!app_manifest_allows_url(manifest, "ftp://api.example.com/", NULL, NULL));
     CHECK(!app_manifest_allows_url(manifest, "https:///x", NULL, NULL) && !app_manifest_allows_url(manifest, "", NULL, NULL));
+    const char *boundary_ports =
+        "{\"name\":\"a\",\"title\":\"T\",\"abi\":3,\"hosts\":[\"low.example.test:1\",\"high.example.test:65535\"]}";
+    CHECK(parse(boundary_ports) == APP_MANIFEST_OK);
+    CHECK(app_manifest_allows_url(boundary_ports, "http://low.example.test:1/api", NULL, NULL));
+    CHECK(app_manifest_allows_url(boundary_ports, "https://high.example.test:65535/api", NULL, NULL));
+
     /* no list: nowhere */
     CHECK(!app_manifest_allows_url("{\"name\":\"a\",\"title\":\"T\",\"abi\":3}", "https://api.example.com/",
                                    NULL, NULL));
