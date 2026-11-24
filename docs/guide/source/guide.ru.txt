@@ -4528,8 +4528,8 @@ Handled by Perinkpheral OS: opens the previous or next application in menu order
 Recognized translation codes
 Распознаваемые коды переводов
 
-The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports and exports, manifest features and the explicit minimum. A non-GET poll method or any poll body requires 0.1.80. The document API and explicit <code>auto</code> with a nonempty <code>pick</code> require 0.1.100. A format annotation that keeps the existing handler behaviour does not raise the minimum. Set an explicit minimum when the application relies on another 0.1.100 response-format behaviour. Older firmware refuses installation and startup with "Update Perinkpheral OS."
-Минимальная версия прошивки. Сборка берёт максимум из базовой версии ABI 3 (0.1.30), версий появления используемых импортов и экспортов, требований полей манифеста и явного минимума. Метод опроса, отличный от GET, или любое тело опроса требует 0.1.80. API документов и явное значение <code>auto</code> при непустом <code>pick</code> требуют 0.1.100. Если аннотация формата сохраняет работу существующих обработчиков, минимум не повышается. Если приложению нужно другое поведение форматов из 0.1.100, задайте явный минимум. Старая прошивка отклоняет установку и запуск с сообщением «Обновите Perinkpheral OS».
+The minimum firmware release. The build takes the maximum of the ABI 3 floor (0.1.30), the introduction stamps of used imports and exports, manifest features and the explicit minimum. A non-GET poll method or any poll body requires 0.1.80. The document API requires 0.1.100. A format annotation that keeps the existing handler behaviour does not raise the minimum. Set an explicit minimum when the application relies on another 0.1.100 response-format behaviour. Older firmware refuses installation and startup with "Update Perinkpheral OS."
+Минимальная версия прошивки. Сборка берёт максимум из базовой версии ABI 3 (0.1.30), версий появления используемых импортов и экспортов, требований полей манифеста и явного минимума. Метод опроса, отличный от GET, или любое тело опроса требует 0.1.80. API документов требует 0.1.100. Если аннотация формата сохраняет работу существующих обработчиков, минимум не повышается. Если приложению нужно другое поведение форматов из 0.1.100, задайте явный минимум. Старая прошивка отклоняет установку и запуск с сообщением «Обновите Perinkpheral OS».
 
 Optional request method; defaults to GET. Only GET follows redirects, up to three times; another method delivers its redirect response without sending again. <code>pick</code> works with every method; HEAD delivers no response values.
 Необязательный метод запроса; по умолчанию GET. Только GET следует перенаправлениям, не более трёх раз; другой метод передаёт ответ с перенаправлением приложению без повторной отправки. <code>pick</code> работает с любым методом; HEAD передаёт ответ без значений.
@@ -4637,14 +4637,14 @@ The XML subset is UTF-8 with attributes and a single root element, up to 12288 b
 Element numbers refer to the same document bytes and start at zero. The first root search uses parent <code>-1</code>. Consume only attributes reported as present. A failed query leaves the application responsible for keeping its previous displayed data.
 Номера элементов относятся к тем же байтам документа и начинаются с нуля. При первом поиске корня передайте родителя <code>-1</code>. Используйте только атрибуты, которые найдены. При ошибке запроса приложение должно сохранить предыдущие данные на экране.
 
-<code>json</code>, <code>xml</code>, <code>raw</code>, <code>auto</code>
+<code>json</code>, <code>xml</code>, <code>raw</code>
 =
 
 format
 =
 
-Optional default response format for manifest polls and requests from code. Omitting it selects <code>auto</code>.
-Необязательный формат ответа по умолчанию для опросов и запросов из кода. Если поле опущено, действует <code>auto</code>.
+Optional default response format for manifest polls and requests from code. If neither the app nor the poll declares a format, Perinkpheral OS uses the response MIME type.
+Необязательный формат ответа по умолчанию для опросов и запросов из кода. Если формат не задан ни в приложении, ни в опросе, Perinkpheral OS использует MIME-тип ответа.
 
 Optional response format for this poll. Overrides the application default.
 Необязательный формат ответа этого опроса. Имеет приоритет над форматом приложения.
@@ -4652,17 +4652,17 @@ Optional response format for this poll. Overrides the application default.
 Choosing the response format
 Выбор формата ответа
 
-The poll format takes precedence over the application format. With <code>json</code> or <code>xml</code>, Perinkpheral OS uses the declared format even when the response has a different or missing <code>Content-Type</code>. <code>raw</code> always streams the response unchanged. With <code>auto</code> or no declaration, Perinkpheral OS uses the response MIME type.
-Формат конкретного опроса имеет приоритет над форматом приложения. При <code>json</code> или <code>xml</code> Perinkpheral OS использует объявленный формат, даже если в ответе другой <code>Content-Type</code> или заголовок отсутствует. При <code>raw</code> ответ всегда приходит без изменений. При <code>auto</code> или отсутствии поля Perinkpheral OS определяет формат по MIME-типу ответа.
+The poll format takes precedence over the application format. With <code>json</code> or <code>xml</code>, Perinkpheral OS uses the declared format even when the response has a different or missing <code>Content-Type</code>. <code>raw</code> always streams the response unchanged. With no format declaration, Perinkpheral OS uses the response MIME type.
+Формат конкретного опроса имеет приоритет над форматом приложения. При <code>json</code> или <code>xml</code> Perinkpheral OS использует объявленный формат, даже если в ответе другой <code>Content-Type</code> или заголовок отсутствует. При <code>raw</code> ответ всегда приходит без изменений. При отсутствии поля Perinkpheral OS определяет формат по MIME-типу ответа.
 
 Automatic detection recognizes <code>application/json</code>, <code>text/json</code>, and subtypes ending in <code>+json</code>, as well as <code>application/xml</code>, <code>text/xml</code>, and subtypes ending in <code>+xml</code>. Matching ignores ASCII case and MIME parameters. Missing and unrecognized types stay raw. The request headers <code>Accept</code> and <code>Content-Type</code> are independent of the response format.
 Автоматическое определение распознаёт <code>application/json</code>, <code>text/json</code> и подтипы с суффиксом <code>+json</code>, а также <code>application/xml</code>, <code>text/xml</code> и подтипы с суффиксом <code>+xml</code>. Регистр ASCII и параметры MIME не учитываются. При отсутствующем или неизвестном типе ответ передаётся без разбора. Заголовки запроса <code>Accept</code> и <code>Content-Type</code> задаются независимо от формата ответа.
 
-Set <code>format</code> to <code>json</code> for an existing <code>pick</code> poll if its server can reply without a JSON MIME type. A JSON poll with <code>pick</code> calls <code>app_on_picked()</code> even when the application also registers a document buffer. An unrecognized MIME type in auto mode takes the raw path, even when the poll declares <code>pick</code>.
-Если сервер существующего опроса с <code>pick</code> может ответить без MIME-типа JSON, укажите <code>format</code> со значением <code>json</code>. Опрос JSON с <code>pick</code> вызывает <code>app_on_picked()</code>, даже если приложение зарегистрировало буфер документов. Неизвестный MIME-тип в автоматическом режиме ведёт к потоковой доставке, даже когда в опросе указан <code>pick</code>.
+Set <code>format</code> to <code>json</code> for an existing <code>pick</code> poll if its server can reply without a JSON MIME type. A JSON poll with <code>pick</code> calls <code>app_on_picked()</code> even when the application also registers a document buffer. Without an explicit format, an unrecognized MIME type takes the raw path, even when the poll declares <code>pick</code>.
+Если сервер существующего опроса с <code>pick</code> может ответить без MIME-типа JSON, укажите <code>format</code> со значением <code>json</code>. Опрос JSON с <code>pick</code> вызывает <code>app_on_picked()</code>, даже если приложение зарегистрировало буфер документов. Без явного формата неизвестный MIME-тип ведёт к потоковой доставке, даже когда в опросе указан <code>pick</code>.
 
-For an application that combines Plex-style XML and Jellyfin-style JSON, use <code>auto</code> when both servers label their replies correctly. Set an explicit format on individual polls when a server sends the wrong MIME type. A request from code uses the application default. With different on-demand formats, keep <code>auto</code> and use the servers’ MIME types, or stream and interpret the body in the application.
-Если приложение сочетает XML в стиле Plex и JSON в стиле Jellyfin, используйте <code>auto</code>, когда оба сервера корректно указывают MIME-тип. Если сервер сообщает неверный тип, укажите формат отдельного опроса. Для запроса из кода действует формат приложения. Если запросы из кода ожидают разные форматы, используйте <code>auto</code> и MIME-типы серверов либо обрабатывайте поток в самом приложении.
+For an application that combines Plex-style XML and Jellyfin-style JSON, omit the format when both servers label their replies correctly. Set an explicit format on individual polls when a server sends the wrong MIME type. A request from code uses the application default. With different on-demand formats, omit the application format to use the servers’ MIME types, or set <code>raw</code> and interpret the byte stream in the application.
+Если приложение сочетает XML в стиле Plex и JSON в стиле Jellyfin, опустите поле формата, когда оба сервера корректно указывают MIME-тип. Если сервер сообщает неверный тип, укажите формат отдельного опроса. Для запроса из кода действует формат приложения. Если запросы из кода ожидают разные форматы, опустите формат приложения, чтобы использовать MIME-типы серверов, либо задайте <code>raw</code> и обрабатывайте поток в приложении.
 
 Complete JSON or XML responses
 Целые ответы JSON или XML

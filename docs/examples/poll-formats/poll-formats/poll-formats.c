@@ -5,7 +5,7 @@
 #include "host_api.h"
 #include "json_pick.h"
 
-enum { AUTO, XML_POST, JSON_PICK, UNTYPED, POLLS };
+enum { MIME_GET, XML_POST, JSON_PICK, UNTYPED, POLLS };
 
 static uint8_t document[1024];
 static json_pick_t json;
@@ -20,7 +20,7 @@ void app_on_load(void)
 
 void app_on_document(int32_t request, int32_t format, int32_t status, int32_t length)
 {
-    if ((request != AUTO && request != XML_POST) || status != 200 || length <= 0) {
+    if ((request != MIME_GET && request != XML_POST) || status != 200 || length <= 0) {
         return;
     }
 
@@ -32,7 +32,7 @@ void app_on_document(int32_t request, int32_t format, int32_t status, int32_t le
         if (track < 0 || xml_attr(bytes, length, track, "title", 5, title, sizeof title, 1) != 1) {
             return;
         }
-    } else if (format == HOST_FORMAT_JSON && request == AUTO) {
+    } else if (format == HOST_FORMAT_JSON && request == MIME_GET) {
         static const char *const paths[] = {"[0].NowPlayingItem.Name"};
         json_pick_init(&json, paths, 1);
         if (!json_pick_feed(&json, bytes, length) || !json_pick_finish(&json)) {
@@ -84,7 +84,7 @@ void app_on_draw(void)
         gfx_draw_text(16, 42, HOST_FONT_TEXT, "Buffer unavailable", 18);
         return;
     }
-    static const char *const labels[] = {"Auto", "XML POST", "JSON pick", "Untyped"};
+    static const char *const labels[] = {"MIME GET", "XML POST", "JSON pick", "Untyped"};
     for (int i = 0; i < POLLS; ++i) {
         app_text_t text;
         char line[96];

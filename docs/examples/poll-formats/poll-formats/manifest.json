@@ -4,10 +4,9 @@
   "author": "Example developer",
   "version": "0.1.0",
   "abi": 3,
-  "format": "auto",
   "polls": [
     {
-      "url": "https://media.example.test/auto",
+      "url": "https://media.example.test/by-type",
       "every": 60
     },
     {

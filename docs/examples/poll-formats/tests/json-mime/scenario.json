@@ -2,7 +2,7 @@
   "app": "docs/examples/poll-formats/poll-formats",
   "at": 1795543200,
   "mocks": {
-    "https://media.example.test/auto": {
+    "https://media.example.test/by-type": {
       "status": 200,
       "content_type": "application/vnd.example+json",
       "body": "[{\"NowPlayingItem\":{\"Name\":\"JSON by MIME\"}}]"
