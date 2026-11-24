@@ -257,7 +257,7 @@ window.addEventListener("message", event => {
     const app = companion.app, values = {};
     for (const setting of app.settings)
       if (setting.type !== "secret" && setting.type !== "link")
-        values[setting.key] = Object.prototype.hasOwnProperty.call(app.values, setting.key) ? app.values[setting.key] : "";
+        values[setting.key] = settingValue(app, setting.key) ?? "";
     companion.page.postMessage({ perinkpheral: "app", name: app.name, title: app.title,
                                  settings: app.settings, values }, companion.origin);
   } else if (said.perinkpheral === "settings" && said.values && typeof said.values === "object") {

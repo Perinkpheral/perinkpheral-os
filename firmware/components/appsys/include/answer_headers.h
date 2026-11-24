@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "host_api.h"
 
 /* One response, owned by the network request until delivery returns. */
 #define ANSWER_HEADERS_BYTES 1024
@@ -19,3 +20,6 @@ bool answer_header_name_valid(const char *name, size_t length);
 void answer_headers_add(answer_headers_t *headers, const char *name, const char *value);
 int32_t answer_headers_get(const answer_headers_t *headers, const char *name, size_t name_length,
                            int32_t occurrence, char *value, int32_t capacity);
+
+/* Fixed response metadata is independent of aggregate header storage. */
+void answer_info_header(host_answer_info_t *response, const char *name, const char *value);

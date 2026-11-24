@@ -6,6 +6,9 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+#include "json_tree.h"
 
 #include "host_api.h"
 #include "tinytest.h"
@@ -15,6 +18,47 @@ static app_manifest_t manifest;
 static app_manifest_result_t parse(const char *json)
 {
     return app_manifest_parse(json, &manifest);
+}
+
+static void test_shared_setting_defaults(void)
+{
+    FILE *file = fopen("manifest_defaults.json", "rb");
+    CHECK(file != NULL);
+    if (file == NULL) {
+        return;
+    }
+    CHECK(fseek(file, 0, SEEK_END) == 0);
+    long length = ftell(file);
+    CHECK(length > 0);
+    rewind(file);
+    char *bytes = malloc((size_t)length + 1);
+    CHECK(bytes != NULL);
+    if (bytes == NULL) {
+        fclose(file);
+        return;
+    }
+    CHECK(fread(bytes, 1, (size_t)length, file) == (size_t)length);
+    bytes[length] = '\0';
+    fclose(file);
+    json_t *cases = json_parse(bytes);
+    free(bytes);
+    CHECK(json_is_array(cases));
+    json_t *entry;
+    json_for_each(entry, cases) {
+        json_t *document = json_new_object();
+        json_add_string(document, "name", "defaults");
+        json_add_string(document, "title", "Defaults");
+        json_add_number(document, "abi", 3);
+        json_t *settings = json_new_array();
+        json_array_add(settings, json_detach(entry, "setting"));
+        json_add_item(document, "settings", settings);
+        char *text = json_print(document);
+        CHECK(text != NULL);
+        CHECK((parse(text) == APP_MANIFEST_OK) == json_is_true(json_get(entry, "valid")));
+        free(text);
+        json_free(document);
+    }
+    json_free(cases);
 }
 
 static void test_complete(void)
@@ -555,6 +599,7 @@ static void test_id_collisions(void)
 
 int main(void)
 {
+    test_shared_setting_defaults();
     test_id_collisions();
     test_four_default_links();
     test_list_setting();

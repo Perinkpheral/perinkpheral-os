@@ -14,6 +14,16 @@ Put application-specific inputs in `test/check.json`: `at`, `tz`, `store` and
 `mocks`. Mocks may be an object or a JSON filename relative to that file. The command
 also discovers and runs `test/*.c`, compiled with the stand-in and sanitizers.
 
+Mock responses may include `"headers": {"ETag": "v1", "Set-Cookie": ["a=1", "b=2"]}`.
+String values are single fields; arrays preserve repeated fields in order. Names are
+case-insensitive HTTP tokens. `answer_header()` uses the firmware's storage and lookup:
+1024 bytes including names and separators, no partial values, and every lookup fails
+with `HOST_ERR_NO_SPACE` after aggregate overflow or an invalid received field name.
+`answer_info()` uses the firmware's fixed metadata parser independently of that storage;
+Content-Length comes from the mock header, or is -1 when absent. Headers are scoped to one
+answer, available in every data chunk and in picked delivery. Direct native tests can call
+`standin_answer_headers(fields, count)` before the next delivery; without it there are no headers.
+
 The stand-in arena uses eight-byte alignment, as does the device allocator.
 
 ## Known differences from the device
@@ -27,6 +37,8 @@ defect of the checks:
   simulator's pictures hold them).
 - The header is taken to show the clock, so a frame is drawn again every minute.
 - Time-zone rules cover two years before to three years after the checked time.
+- Mock headers describe the final response: no automatic headers, transfer decoding or
+  Content-Length/body consistency check is performed.
 - The network has no redirects, TLS or timeouts; the request queue holds only the checked
   application's requests; a picked answer is broken off only before its last closing bracket;
   polls come when the checks give them, not at their pace.

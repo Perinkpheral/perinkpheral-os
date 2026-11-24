@@ -303,7 +303,8 @@ class ManifestCheck(private val sdk: Sdk) {
         }
         settings.forEachIndexed { number, setting ->
             setting as Map<*, *>
-            val default = setting["default"] ?: return@forEachIndexed
+            if (!setting.containsKey("default")) return@forEachIndexed
+            val default = setting["default"]
             val kind = setting["type"]
             if (kind == "list") {
                 if (default !is List<*> || default.isEmpty() || default.any { item ->
@@ -326,8 +327,8 @@ class ManifestCheck(private val sdk: Sdk) {
                 (kind != "toggle" || default in setOf("0", "1")) &&
                 (kind != "choice" || default in (setting["options"] as List<*>)) &&
                 (kind != "number" || Regex("""-?(\d+\.?\d*|\.\d+)""").matches(default)) &&
-                (kind != "url" || Regex("""https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?""").matches(default)) &&
-                (kind != "link" || Regex("""https?://[!-~]+""").matches(default))
+                (kind != "url" || isAddressDefault(default, serverOnly = true)) &&
+                (kind != "link" || isAddressDefault(default, serverOnly = false))
             if (!fits) fail("$path: setting $number: \"default\" must be a value the setting takes")
         }
         val numbers = settings.map { it as Map<*, *> }.filter { it["type"] == "number" }.map { it["key"] }.toSet()
@@ -340,6 +341,27 @@ class ManifestCheck(private val sdk: Sdk) {
                 fail("$path: setting $number: a place names two number settings as its \"latitude\" and \"longitude\"")
             }
         }
+    }
+
+    /** app_manifest.c: host_in_url, is_server_value and is_link_value. Keep authority
+     * and port parsing identical, rather than adding a different DNS validator. */
+    private fun isAddressDefault(value: String, serverOnly: Boolean): Boolean {
+        val address = when {
+            value.startsWith("https://") -> value.removePrefix("https://")
+            value.startsWith("http://") -> value.removePrefix("http://")
+            else -> return false
+        }
+        val authority = address.takeWhile { it !in "/?#" }
+        if (authority.isEmpty() || '@' in authority) return false
+        if (serverOnly && authority.length != address.length) return false
+        if (!serverOnly && value.any { it !in '!'..'~' }) return false
+        val colon = authority.indexOf(':')
+        if (colon < 0) return true
+        val port = authority.substring(colon + 1)
+        if (colon == 0 || port.isEmpty() || port.any { it !in '0'..'9' }) return false
+        // Leading zeroes are permitted by the firmware, regardless of digit count.
+        val number = port.trimStart('0').toIntOrNull() ?: return false
+        return number in 1..65535
     }
 
     companion object {

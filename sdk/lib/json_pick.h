@@ -33,7 +33,8 @@ extern "C" {
  * Values are returned as text. Numbers, true, false and null are returned
  * as written. Strings are returned without quotes. Escaped quotes,
  * backslashes and slashes are decoded. Unicode escapes become UTF-8;
- * unpaired surrogate escapes are discarded. Other escaped characters
+ * surrogate escapes combine only when adjacent in the same string,
+ * including across input chunks; unpaired surrogates are discarded. Other escaped characters
  * become spaces. Values are cut between characters when too long.
  * Only ASCII JSON property names are supported reliably. Non-ASCII key
  * characters become "?" and can match a path containing "?". Extracted
@@ -45,8 +46,8 @@ extern "C" {
  * array index consumes one level: a.b[0] uses three. Containers deeper
  * than eight are skipped; nesting beyond 64 makes the document invalid.
  *
- * A list path has one "[*]" in place of an index: every element of that
- * array, in order.
+ * A list path has one "[*]" in place of an index: matching scalar values
+ * in source order.
  *
  *     chart.result[0].indicators.quote[0].close[*]     items[*].title
  *
@@ -54,8 +55,10 @@ extern "C" {
  * json_pick_lists(), each as its text and a terminator plus one byte;
  * elements that do not fit are dropped. An element without the rest of the
  * path ("items[*].title" in an item that has no title) is skipped, so two
- * lists of one array have the same order but may differ in length. A
- * value goes to the first path that names it.
+ * lists of one array have the same order but may differ in length. Non-scalar
+ * values are skipped too. A value goes to the first path that names it.
+ * Parallel lists cannot safely be zipped without source guarantees of
+ * corresponding scalars for every record and non-overlapping paths.
  * No dependencies; covered by host tests. */
 
 #define JSON_PICK_PATHS_MAX 16

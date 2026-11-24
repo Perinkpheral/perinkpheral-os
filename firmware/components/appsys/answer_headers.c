@@ -3,6 +3,8 @@
 #include "answer_headers.h"
 #include "host_api.h"
 #include <string.h>
+#include <strings.h>
+#include <stdlib.h>
 
 void answer_headers_reset(answer_headers_t *headers)
 {
@@ -98,4 +100,36 @@ int32_t answer_headers_get(const answer_headers_t *headers, const char *name, si
         }
     }
     return HOST_ERR_NOT_FOUND;
+}
+
+/* The headers an application may ask about, and where each goes. */
+void answer_info_header(host_answer_info_t *response, const char *name, const char *value)
+{
+    const struct {
+        const char *name;
+        char       *text;
+        size_t      size;
+    } KEPT[] = {
+        { "Content-Type", response->content_type, sizeof response->content_type },
+        { "ETag", response->etag, sizeof response->etag },
+        { "Last-Modified", response->last_modified, sizeof response->last_modified },
+        { "Location", response->location, sizeof response->location },
+        { "Link", response->link, sizeof response->link },
+    };
+    for (size_t i = 0; i < sizeof KEPT / sizeof KEPT[0]; i++) {
+        if (strcasecmp(name, KEPT[i].name) == 0) {
+            size_t length = strlen(value);
+            if (length >= KEPT[i].size) {
+                length = KEPT[i].size - 1;
+            }
+            memcpy(KEPT[i].text, value, length);
+            KEPT[i].text[length] = '\0';
+            return;
+        }
+    }
+    if (strcasecmp(name, "Retry-After") == 0) {
+        /* Seconds; a date instead of them reads as 0, which is "none". */
+        long seconds = strtol(value, NULL, 10);
+        response->retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
+    }
 }

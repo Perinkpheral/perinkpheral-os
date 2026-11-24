@@ -226,39 +226,12 @@ static const esp_http_client_method_t METHODS[] = {
     [HOST_HTTP_REPORT] = HTTP_METHOD_REPORT,
 };
 
-/* The headers an application may ask about, and where each goes. */
-static void note_header(host_answer_info_t *response, const char *name, const char *value)
-{
-    const struct {
-        const char *name;
-        char       *text;
-        size_t      size;
-    } KEPT[] = {
-        { "Content-Type", response->content_type, sizeof response->content_type },
-        { "ETag", response->etag, sizeof response->etag },
-        { "Last-Modified", response->last_modified, sizeof response->last_modified },
-        { "Location", response->location, sizeof response->location },
-        { "Link", response->link, sizeof response->link },
-    };
-    for (size_t i = 0; i < sizeof KEPT / sizeof KEPT[0]; i++) {
-        if (strcasecmp(name, KEPT[i].name) == 0) {
-            strlcpy(KEPT[i].text, value, KEPT[i].size);
-            return;
-        }
-    }
-    if (strcasecmp(name, "Retry-After") == 0) {
-        /* Seconds; a date instead of them reads as 0, which is "none". */
-        long seconds = strtol(value, NULL, 10);
-        response->retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
-    }
-}
-
 static esp_err_t on_http_event(esp_http_client_event_t *event)
 {
     request_t *request = event->user_data;
     host_answer_info_t *response = &request->response;
     if (event->event_id == HTTP_EVENT_ON_HEADER) {
-        note_header(response, event->header_key, event->header_value);
+        answer_info_header(response, event->header_key, event->header_value);
         answer_headers_add(&request->headers, event->header_key, event->header_value);
     }
     return ESP_OK;

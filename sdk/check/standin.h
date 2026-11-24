@@ -54,6 +54,10 @@ typedef struct {
     const char        *body; /* template, or NULL */
 } standin_poll_t;
 
+typedef struct {
+    const char *key, *value;
+} standin_pair_t;
+
 /* An answer kept for an address, as the simulator's mocks are: an address
  * ending in '*' answers every address that begins with the rest. */
 typedef struct {
@@ -61,16 +65,14 @@ typedef struct {
     int32_t     status;
     const char *file; /* the body's file, or NULL when `body` is it */
     const char *body;
+    const standin_pair_t *headers; /* repeated fields in arrival order */
+    int32_t header_count;
 } standin_answer_t;
 
 typedef struct {
     const char *name; /* on the device */
     const char *file; /* on this computer */
 } standin_file_t;
-
-typedef struct {
-    const char *key, *value;
-} standin_pair_t;
 
 /* From `at` on, the zone's offset is `offset`: the changes of its rules, written by the tools. */
 typedef struct {
@@ -322,6 +324,11 @@ uint64_t standin_screen(uint64_t frame); /* the frame with the header and the in
 #define STANDIN_WHOLE  0 /* every piece, the last with HOST_DATA_LAST */
 #define STANDIN_CUT    1 /* the first half and no more: an answer that just stops */
 #define STANDIN_FAILED 2 /* the first half, then HOST_DATA_FAILED with `failure` */
+
+/* Headers for the next standin_data()/standin_picked() delivery only. Names
+ * and values must remain valid until that call; NULL/0 supplies no headers.
+ * Storage and metadata parsing use the firmware's rules. */
+void standin_answer_headers(const standin_pair_t *headers, int32_t count);
 
 /* An answer in pieces of `piece` bytes through app_data_buffer() and
  * app_on_data(). A negative `status` is a request that failed: one call,

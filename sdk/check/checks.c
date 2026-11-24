@@ -98,6 +98,8 @@ typedef struct {
     int32_t        status;
     const uint8_t *body;
     int32_t        length;
+    const standin_pair_t *headers;
+    int32_t header_count;
 } answer_t;
 
 static bool is_answered_by(const char *address, const char *url)
@@ -128,6 +130,8 @@ static bool answer_for(const char *url, answer_t *answer)
             lengths[index] = (int32_t)fread(bodies[index], 1, HOST_ANSWER_MAX, file);
             fclose(file);
         }
+        answer->headers = kept->headers;
+        answer->header_count = kept->header_count;
         answer->status = kept->status;
         answer->body = kept->file != NULL ? bodies[index] : (const uint8_t *)kept->body;
         answer->length = kept->file != NULL ? lengths[index] : (int32_t)strlen(kept->body);
@@ -282,7 +286,8 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         status = HOST_FAILED_NOT_ALLOWED;
     } else if (round->kind == ROUND_HTTP) {
         static const char UNAVAILABLE[] = "Service Unavailable";
-        answer = (answer_t){ round->size, (const uint8_t *)UNAVAILABLE, (int32_t)sizeof UNAVAILABLE - 1 };
+        answer = (answer_t){ .status = round->size, .body = (const uint8_t *)UNAVAILABLE,
+                             .length = (int32_t)sizeof UNAVAILABLE - 1 };
         status = round->size;
     } else if (answer_for(url, &answer)) {
         status = answer.status;
@@ -300,6 +305,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     if (is_head) {
         answer.length = 0; /* poller_net.c: HEAD has no response body, with either delivery mode */
     }
+    standin_answer_headers(answer.headers, answer.header_count);
     if (is_picked) {
         /* One that fails late is, for the application, one that failed - with what the picker
          * read before it broke off: here all of it before its last closing bracket, so that every
