@@ -72,7 +72,6 @@ void power_release_radio(void)
 {
     wifi_status_update(&network, network_plan.phase, true);
 }
-void status_check(void) { }
 void settings_watch(settings_watch_fn watcher) { (void)watcher; }
 bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
@@ -371,6 +370,8 @@ static void test_reconnect_transport_and_races(void)
             transport_failure = true;
             reconnect_during_request = during;
             CHECK(run_wanted_poll());
+            CHECK(network.phase == WIFI_PHASE_ONLINE && network.was_reached);
+            CHECK_STR(network.address, "192.0.2.1");
             reconnect_during_request = false;
             poller_network_is_back();
             poller_network_is_back();
@@ -464,19 +465,23 @@ static void test_each_cooldown_survives_transport_failure(void)
 
 static void test_local_failure_keeps_pace(void)
 {
-    reset_poller();
-    CHECK(schedule_installed() == 1);
-    advance_to(0);
-    session_memory = false;
-    for (int look = 1; look < MEMORY_LOOKS_MAX; look++) CHECK(!run_wanted_poll());
-    CHECK(run_wanted_poll());
-    session_memory = true;
-    poller_network_is_back();
-    CHECK(!run_wanted_poll());
-    CHECK(requests_sent == 0);
-    advance_to(3600000);
-    CHECK(run_wanted_poll());
-    CHECK(requests_sent == 1);
+    for (int saving = 0; saving <= 1; saving++) {
+        reset_poller();
+        saving_power = saving;
+        CHECK(schedule_installed() == 1);
+        advance_to(0);
+        session_memory = false;
+        for (int look = 1; look < MEMORY_LOOKS_MAX; look++) CHECK(!run_wanted_poll());
+        CHECK(run_wanted_poll());
+        CHECK(network.phase == WIFI_PHASE_ONLINE && network.was_reached);
+        session_memory = true;
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        CHECK(requests_sent == 0);
+        advance_to(3600000);
+        CHECK(run_wanted_poll());
+        CHECK(requests_sent == 1);
+    }
 }
 
 static void test_reconnect_raw_queue(void)

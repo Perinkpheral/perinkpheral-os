@@ -106,8 +106,6 @@ static void deliver(const char *name, const app_delivery_t *answer)
     delivered_only_on_screen = answer->only_on_screen;
 }
 
-static void network_worked(bool worked) { (void)worked; }
-
 static bool poll_failure(bool picked)
 {
     manifest_json = picked
@@ -201,7 +199,7 @@ static void test_poll_transport_failures(void)
 
 int main(void)
 {
-    const poller_net_host_t host = { .deliver = deliver, .network_worked = network_worked };
+    const poller_net_host_t host = { .deliver = deliver };
     poller_net_start(&host);
     test_poll_memory_failures();
     test_poll_transport_failures();
