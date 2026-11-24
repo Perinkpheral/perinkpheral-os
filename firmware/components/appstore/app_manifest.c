@@ -183,6 +183,10 @@ static bool is_prefix(const json_t *prefix)
     return true;
 }
 
+/* These counters travel with every listed application or scheduled poll. */
+_Static_assert(APP_POLLS_MAX <= UINT8_MAX && MANIFEST_CERTIFICATES_MAX <= UINT8_MAX &&
+               JSON_PICK_PATHS_MAX <= UINT8_MAX, "manifest counters fit their stored representation");
+
 static int read_format(const json_t *object, int inherited)
 {
     const json_t *f = json_get(object, "format");
@@ -862,7 +866,7 @@ static bool is_certificate_file(const char *name)
     return true;
 }
 
-static bool read_certificates(const json_t *certificates, int *count)
+static bool read_certificates(const json_t *certificates, uint8_t *count)
 {
     *count = 0;
     if (certificates == NULL) {

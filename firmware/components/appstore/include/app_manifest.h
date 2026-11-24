@@ -71,7 +71,8 @@ typedef struct {
     bool writes_files;
     /* How many certificate authorities it trusts beside the browsers' set,
      * for its own requests ("certificates": files of its package). */
-    int certificate_count;
+    uint8_t certificate_count;
+    uint8_t poll_formats[APP_POLLS_MAX];
     /* The kinds of news it asked for under "intents": bit HOST_INTENT_*
      * of each. */
     uint32_t intents;
@@ -79,8 +80,8 @@ typedef struct {
      * number made of its code and its manifest, never 0. Whoever lists the
      * installed applications fills it in. */
     uint32_t id;
-    uint8_t response_format, poll_formats[APP_POLLS_MAX];
-    int      poll_count;
+    uint8_t poll_count;
+    uint8_t response_format;
     uint32_t poll_every_s[APP_POLLS_MAX];
     /* The setting a poll's pace is the user's choice in ("every": "{{key}}"),
      * or empty; poll_every_s is then what holds while nothing is chosen. */
@@ -109,7 +110,7 @@ typedef struct {
     /* The paths to pick out of a JSON answer (see json_pick.h). None: the
      * application takes the answer as it comes, in pieces. */
     char         pick[JSON_PICK_PATHS_MAX][JSON_PICK_PATH_MAX + 1];
-    int          pick_count;
+    uint8_t      pick_count;
     uint8_t      response_format;
     /* "each": the list setting the poll goes over, one request an item,
      * {{key}} of it being that item; empty for a poll of one request. */

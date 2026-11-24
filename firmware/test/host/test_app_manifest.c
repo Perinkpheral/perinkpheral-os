@@ -613,6 +613,9 @@ static void test_id_collisions(void)
 
 static void test_response_formats(void)
 {
+    /* A copy lives in every launcher slot and every application scene. */
+    CHECK(sizeof(app_manifest_t) <= 276);
+    CHECK(sizeof(app_poll_t) <= 3848);
     static const char format[] =
         "{\"abi\":3,\"name\":\"test\",\"title\":\"Test\",\"format\":\"xml\",\"polls\":[{\"url\":"
         "\"https://test.local\",\"every\":60},{\"format\":\"json\",\"url\":\"https://"
