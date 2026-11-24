@@ -712,7 +712,7 @@ static void free_job(job_t *job);
 /* A request as the device makes it (poller_net.c): a GET that is answered with a redirect is
  * asked again where it says, three times at most; one with a body is not sent twice. A
  * request of the application's own stays inside its manifest's "hosts", and the headers it
- * gave do not travel to another host than the one it named. */
+ * gave stay with the named host and are dropped on a downgrade from TLS. */
 static void fetch(job_t *job)
 {
     if (job->status < 0) {
@@ -734,8 +734,11 @@ static void fetch(job_t *job)
             return;
         }
         bool is_refused = next[0] == '\x01';
-        if (!is_refused && !app_manifest_is_same_host(first, next)) {
-            is_refused = !job->is_poll && !app_manifest_allows_url(job->manifest, next, job_setting, job);
+        if (!is_refused && !job->is_poll && !app_manifest_is_same_host(first, next)) {
+            is_refused = !app_manifest_allows_url(job->manifest, next, job_setting, job);
+        }
+        bool from_https = strncmp(job->url, "https://", sizeof "https://" - 1) == 0;
+        if (!is_refused && !app_manifest_redirect_keeps_headers(first, next, from_https)) {
             free(job->headers);
             job->headers = NULL;
         }

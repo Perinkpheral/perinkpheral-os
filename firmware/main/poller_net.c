@@ -566,10 +566,11 @@ typedef enum {
 /* Points the client where the answer in hand sends it. A request of the
  * application's own stays inside the manifest's "hosts"; and the headers
  * an application gave - a token, most likely - were meant for the host it
- * named, so they do not travel to another. */
+ * named. Remove them on a different host or a downgrade from TLS. */
 static redirect_t follow_redirect(request_t *request, esp_http_client_handle_t client,
                                   const char *app_name, bool only_listed_hosts)
 {
+    bool from_https = esp_http_client_get_transport_type(client) == HTTP_TRANSPORT_OVER_SSL;
     cut_forget(); /* a redirect to another host closes the connection */
     if (esp_http_client_set_redirection(client) != ESP_OK) {
         cut_watch(client); /* its body is read as the answer */
@@ -579,16 +580,16 @@ static redirect_t follow_redirect(request_t *request, esp_http_client_handle_t c
     if (esp_http_client_get_url(client, next_url, sizeof request->piece) != ESP_OK) {
         return REDIRECT_REFUSED;
     }
-    if (!app_manifest_is_same_host(request->url, next_url)) {
-        if (only_listed_hosts) {
-            char *manifest = app_store_read_manifest(STORAGE_APPS_ROOT, app_name);
-            bool  allowed = manifest != NULL && app_manifest_allows_url(manifest, next_url, poller_net_setting_of,
-                                                      (void *)app_name);
-            free(manifest);
-            if (!allowed) {
-                return REDIRECT_REFUSED;
-            }
+    if (only_listed_hosts && !app_manifest_is_same_host(request->url, next_url)) {
+        char *manifest = app_store_read_manifest(STORAGE_APPS_ROOT, app_name);
+        bool  allowed = manifest != NULL && app_manifest_allows_url(manifest, next_url, poller_net_setting_of,
+                                                    (void *)app_name);
+        free(manifest);
+        if (!allowed) {
+            return REDIRECT_REFUSED;
         }
+    }
+    if (!app_manifest_redirect_keeps_headers(request->url, next_url, from_https)) {
         for (int i = 0; i < request->poll.header_count; i++) {
             esp_http_client_delete_header(client, request->poll.headers[i].name);
         }

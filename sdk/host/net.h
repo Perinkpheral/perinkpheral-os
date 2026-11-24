@@ -257,9 +257,10 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  *
  * Redirects: a GET is followed up to three times; the application
  * receives the last answer only. Redirects to the same name with the same
- * port, or with both ports in {80, 443}, bypass the allowlist check and keep
- * request headers. Other destinations must be in "hosts" or fail with
- * HOST_FAILED_NOT_ALLOWED; request headers are dropped there. A request
+ * port, or with both ports in {80, 443}, bypass the allowlist check.
+ * Other destinations must be in "hosts" or fail with HOST_FAILED_NOT_ALLOWED.
+ * Application headers are dropped for all remaining hops on a different host
+ * or a transition from HTTPS to HTTP, even after an earlier upgrade. A request
  * with any other method is sent once; its 3xx status is delivered as the
  * answer. GET polls follow redirects to any host; polls of another method
  * are sent once too.

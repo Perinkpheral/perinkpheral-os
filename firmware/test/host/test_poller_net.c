@@ -72,6 +72,11 @@ int esp_http_client_read(esp_http_client_handle_t client, char *bytes, int capac
     return read_failure;
 }
 esp_err_t esp_http_client_cleanup(esp_http_client_handle_t client) { (void)client; cleanups++; CHECK(s_cut.socket == -1); return ESP_OK; }
+esp_http_client_transport_t esp_http_client_get_transport_type(esp_http_client_handle_t client)
+{
+    (void)client;
+    return HTTP_TRANSPORT_OVER_TCP;
+}
 esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client) { (void)client; return ESP_FAIL; }
 esp_err_t esp_http_client_clear_response_buffer(esp_http_client_handle_t client) { (void)client; return ESP_OK; }
 esp_err_t esp_http_client_close(esp_http_client_handle_t client) { (void)client; return ESP_OK; }

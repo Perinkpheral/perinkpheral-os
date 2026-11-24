@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.99
+
+- Application requests drop their headers when a redirect moves from HTTPS to HTTP, including on the same host and after an earlier upgrade. HTTP-to-HTTPS upgrades on the same host continue to carry the original headers.
+
 ## 0.1.98
 
 - Fresh installations include updated catalog applications. Calendar combines up to four calendars; ISS uses the firmware map; Stocks includes the MOEX certificate authority. Timer, Stopwatch, Weather, Air and the other updated applications improve recovery from network, storage and scheduling failures. Existing installations update applications through the catalog.

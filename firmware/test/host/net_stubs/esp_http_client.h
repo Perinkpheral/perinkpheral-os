@@ -43,6 +43,13 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t client, int length);
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client);
 int esp_http_client_get_status_code(esp_http_client_handle_t client);
 int esp_http_client_read(esp_http_client_handle_t client, char *bytes, int capacity);
+typedef enum {
+    HTTP_TRANSPORT_UNKNOWN,
+    HTTP_TRANSPORT_OVER_TCP,
+    HTTP_TRANSPORT_OVER_SSL,
+} esp_http_client_transport_t;
+
+esp_http_client_transport_t esp_http_client_get_transport_type(esp_http_client_handle_t client);
 esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client);
 esp_err_t esp_http_client_clear_response_buffer(esp_http_client_handle_t client);
 esp_err_t esp_http_client_close(esp_http_client_handle_t client);

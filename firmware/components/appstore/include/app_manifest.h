@@ -261,6 +261,10 @@ bool app_manifest_poll_takes(const app_poll_t *poll, const char *item, const cha
  * name being one host: what a redirect is measured against. */
 bool app_manifest_is_same_host(const char *url, const char *other_url);
 
+/* App headers stay on the original host, and a hop from HTTPS may
+ * carry them only to HTTPS. Call with the current hop's scheme. */
+bool app_manifest_redirect_keeps_headers(const char *first_url, const char *next_url, bool from_https);
+
 /* 1-13 of a-z, 0-9, - and _: what an application may be called. */
 bool app_manifest_is_valid_name(const char *name);
 

@@ -482,6 +482,14 @@ static void test_hosts(void)
     CHECK(app_manifest_is_same_host("http://example.com/a", "http://example.com:80/b"));
     CHECK(app_manifest_is_same_host("http://example.com/a", "https://example.com:443/a"));
     CHECK(app_manifest_is_same_host("http://example.com:8080/a", "http://example.com:8080/b"));
+    CHECK(app_manifest_redirect_keeps_headers("http://example.com/start", "https://example.com/secure", false));
+    CHECK(app_manifest_redirect_keeps_headers("http://example.com/start", "http://example.com/next", false));
+    CHECK(app_manifest_redirect_keeps_headers("https://example.com/start", "https://example.com/next", true));
+    CHECK(app_manifest_redirect_keeps_headers("http://example.com/start", "https://example.com/again", true));
+    CHECK(!app_manifest_redirect_keeps_headers("https://example.com/start", "http://example.com/next", true));
+    CHECK(!app_manifest_redirect_keeps_headers("https://example.com:8443/start", "http://example.com:8443/next", true));
+    CHECK(!app_manifest_redirect_keeps_headers("http://example.com/start", "http://example.com/after-upgrade", true));
+    CHECK(!app_manifest_redirect_keeps_headers("https://example.com/start", "https://other.example.com/next", true));
     CHECK(app_manifest_allows_url(manifest, "https://api.example.com:443/v1", NULL, NULL));
     CHECK(app_manifest_allows_url(manifest, "http://api.example.com:80/v1", NULL, NULL));
     CHECK(!app_manifest_allows_url(manifest, "http://api.example.com:8080/v1", NULL, NULL));

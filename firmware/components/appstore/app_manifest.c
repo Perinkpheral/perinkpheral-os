@@ -732,6 +732,12 @@ bool app_manifest_is_same_host(const char *url, const char *other_url)
            (host.port == other.port || (is_scheme_port(host.port) && is_scheme_port(other.port)));
 }
 
+bool app_manifest_redirect_keeps_headers(const char *first_url, const char *next_url, bool from_https)
+{
+    return app_manifest_is_same_host(first_url, next_url) &&
+           (!from_https || starts_with(next_url, "https://"));
+}
+
 /* A server and nothing more: "https://ha.example.org",
  * "http://192.168.1.10:32400". No path, no query, nobody's name and
  * password in front of the host. */
