@@ -8,6 +8,7 @@
 typedef int esp_err_t;
 #define ESP_OK 0
 #define ESP_FAIL (-1)
+#define ESP_ERR_NO_MEM 0x101
 #define ESP_ERR_TIMEOUT 0x107
 #define ESP_ERR_HTTP_EAGAIN 0x7007
 #define ESP_ERROR_CHECK(result) assert((result) == ESP_OK)
@@ -53,6 +54,7 @@ esp_err_t esp_http_client_delete_header(esp_http_client_handle_t client, const c
 int esp_http_client_write(esp_http_client_handle_t client, const char *bytes, int length);
 esp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t client, int timeout);
 bool esp_http_client_is_chunked_response(esp_http_client_handle_t client);
+bool esp_http_client_is_complete_data_received(esp_http_client_handle_t client);
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t client);
 int esp_http_client_get_and_clear_last_tls_error(esp_http_client_handle_t client, int *error, int *flags);
 int esp_http_client_get_errno(esp_http_client_handle_t client);

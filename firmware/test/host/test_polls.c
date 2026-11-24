@@ -236,14 +236,17 @@ static void test_schedule_hurry(void)
         asked++;
     }
     CHECK(asked == 2);
-    /* the network is back: everything */
-    poll_schedule_want_all(&schedule);
+    /* Only the failed poll is retried; due work coalesces with it. */
+    poll_schedule_network_failed(&schedule, 0xA, 0);
+    poll_schedule_want(&schedule, 0xA, 0);
+    poll_schedule_network_is_back(&schedule);
+    poll_schedule_network_is_back(&schedule);
     asked = 0;
     while ((next = poll_schedule_next_wanted(&schedule)) != NULL) {
         poll_schedule_answered(&schedule, next->app, next->poll);
         asked++;
     }
-    CHECK(asked == 3);
+    CHECK(asked == 1);
 }
 
 static void test_pace(void)
@@ -430,7 +433,8 @@ static void test_floor_and_removal(void)
     poll_schedule_set_floor(&schedule, 0);
     CHECK(poll_schedule_pace_ms(&schedule, 0xA, 0) == 60000);
     /* an application that was removed loses its polls, wanted or not */
-    poll_schedule_want_all(&schedule);
+    poll_schedule_want_of(&schedule, 0xA);
+    poll_schedule_want_of(&schedule, 0xB);
     const int left[] = { 0xB };
     poll_schedule_keep_only(&schedule, left, 1);
     CHECK(!poll_schedule_has(&schedule, 0xA, 0) && poll_schedule_has(&schedule, 0xB, 0));

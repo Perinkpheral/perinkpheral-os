@@ -29,9 +29,10 @@ typedef struct {
     int      poll;     /* its number in that application's manifest */
     uint32_t every_ms;
     bool     is_wanted;    /* its time has come, or somebody asked for it */
-    /* A poll_run() was put off to keep the pace of such calls: the run
-     * under way must not set this poll a whole period away when it ends. */
+    /* A deferred poll_run() or changed interval already set a deadline:
+     * the round under way and reconnect retries must leave it there. */
     bool     is_due_soon;
+    bool     failed_for_network;
     uint32_t wanted_order; /* of several that are wanted the first to be goes first */
 } poll_entry_t;
 
@@ -90,24 +91,26 @@ bool poll_schedule_want(poll_schedule_t *schedule, int app, int poll);
  * was fetched with the old ones. */
 void poll_schedule_want_of(poll_schedule_t *schedule, int app);
 
-/* Every poll: the network is back, and what was not asked while it was
- * away is asked at once. */
-void poll_schedule_want_all(poll_schedule_t *schedule);
+/* Retry transport failures when an address is obtained. Already wanted
+ * polls keep their place; deferred calls and changed intervals keep their deadlines. */
+void poll_schedule_network_is_back(poll_schedule_t *schedule);
+
+void poll_schedule_network_failed(poll_schedule_t *schedule, int app, int poll);
 
 /* The poll to ask next, or NULL when none is wanted. */
 const poll_entry_t *poll_schedule_next_wanted(const poll_schedule_t *schedule);
 
 /* The poll was taken to be asked: it is not wanted any more, and a
- * poll_run() put off before it is spent. */
+ * deferred deadline from before it is spent. */
 void poll_schedule_answered(poll_schedule_t *schedule, int app, int poll);
 
-/* A poll_run() of the poll was put off by a moment: its deadline is set
- * for that, and the run under way leaves it there. False when there is no
+/* A deferred poll_run() or changed interval set a deadline: the round
+ * under way and reconnect retries leave it there. False when there is no
  * such poll. */
 bool poll_schedule_due_soon(poll_schedule_t *schedule, int app, int poll);
 
-/* Whether a poll_run() was put off since the poll was last taken: then the
- * run that ends does not set its next deadline. */
+/* Whether a caller set a deadline since the poll was last taken: then the
+ * round that ends does not set its next deadline. */
 bool poll_schedule_is_due_soon(const poll_schedule_t *schedule, int app, int poll);
 
 #ifdef __cplusplus

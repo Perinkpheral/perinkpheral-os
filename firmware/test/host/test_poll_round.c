@@ -17,7 +17,9 @@ static void test_all_items(int polls, int items, bool one_app)
         CHECK(poll_schedule_add(&schedule, one_app ? 1 : index + 1,
                                 one_app ? index : 0, 300, &first_ms));
     }
-    poll_schedule_want_all(&schedule);
+    for (int index = 0; index < polls; index++) {
+        CHECK(poll_schedule_want(&schedule, one_app ? 1 : index + 1, one_app ? index : 0));
+    }
     int calls = 0;
     poll_turn_t turn;
     while (poll_rounds_next(&rounds, poll_schedule_next_wanted(&schedule), &turn)) {
