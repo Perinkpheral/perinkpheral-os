@@ -43,6 +43,11 @@ object ContractSnapshotTest {
                     refused("HOST_SINCE_$name")
                 }
                 api.writeText("$original\n#define HOST_SINCE_$name \"$version\"\n$declaration\n")
+                for (invalid in listOf("\"$version\" trailing", "\"$version\" \"junk\"", version)) {
+                    api.writeText("$original\n#define HOST_SINCE_$name $invalid\n$declaration\n")
+                    refused("HOST_SINCE_$name")
+                }
+                api.writeText("$original\n#define HOST_SINCE_$name \"$version\"\n$declaration\n")
                 run()
                 run(true)
                 // Once recorded, its stamp cannot be removed or changed.
