@@ -179,6 +179,11 @@ jobs:
         working-directory: firmware
         run: |
           . "$IDF_PATH/export.sh"
+          # Native regression against the same bundled sources as the firmware;
+          # no network is needed by this test, only the saved public MOEX leaf.
+          cmake -S test/mbedtls -B /tmp/mbedtls-host
+          cmake --build /tmp/mbedtls-host --parallel 2
+          ctest --test-dir /tmp/mbedtls-host --output-on-failure
           export PERINKPHERAL_APPS="$GITHUB_WORKSPACE/preinstalled-catalog"
           git config --global --add safe.directory "$PERINKPHERAL_APPS"
           if [ "${{ matrix.flavor }}" = release ]; then

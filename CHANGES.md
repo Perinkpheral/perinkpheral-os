@@ -4,6 +4,10 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.97
+
+- HTTPS accepts certificates with NumericString name attributes, including MOEX's current certificate used by Stocks. Chain and hostname verification remain required; Stocks also needs its catalog update with the matching certificate-authority root.
+
 ## 0.1.95
 
 - Glyph pack uploads check memory for their declared size, compaction buffers and spare heap before allocating. A shortage returns "Not enough memory." on the page.

@@ -32,4 +32,8 @@ if(IDF_COMPILER_DIR)
     idf_build_set_property(EXTRA_CMAKE_ARGS "-DCMAKE_PROGRAM_PATH=${IDF_COMPILER_DIR}" APPEND)
 endif()
 project(perinkpheral)
+include("${CMAKE_CURRENT_LIST_DIR}/patches/mbedtls/patch.cmake")
+perinkpheral_use_patched_mbedtls(
+    "$ENV{IDF_PATH}/components/mbedtls/mbedtls/library/x509.c"
+    "${CMAKE_BINARY_DIR}/patched-mbedtls")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/recovery.cmake")
