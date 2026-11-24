@@ -43,7 +43,8 @@ decision does not assert that installed count has zero effect on all heap use.
 
 Removing applications frees flash and may reduce their scheduled workload, but
 does not recover the fixed application arena. RAM work must identify actual
-allocations; the separate [RAM study](0007-ram-savings.md) remains open.
+allocations; the separate [RAM study](0007-ram-savings.md) was closed without
+adopting changes on 2026-11-24.
 
 ## Reopen when
 
