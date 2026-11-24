@@ -37,9 +37,10 @@ extern void standin_subject_handlers(void);
 typedef enum { SESSIONS, STORE, TIMERS, NETWORK, DRAWING, NOTICES, CLOCK, CAPABILITY_COUNT } capability_t;
 static const char *const CAPABILITY_NAMES[CAPABILITY_COUNT] = { "sessions", "store", "timers", "network", "drawing", "notices", "clock" };
 
-#define PROBLEMS_MAX  40
+#define PROBLEMS_MAX  512
 #define PROBLEM_BYTES 480
 #define NOTES_MAX     16
+#define TRUNCATION_MARK_BYTES 16
 
 static struct {
     bool is_asked;
@@ -233,6 +234,7 @@ enum {
     MARK_DRAWN_NOW,     /* what the instance would draw at its end, drawn where nothing of it is kept */
     MARK_ROUND_PICTURE, /* and the three after it: after each round */
     MARK_VISIBLE_FAILURE = MARK_ROUND_PICTURE + ROUNDS_MAX,
+    MARK_MUTATION_PICKED,
     MARK_COUNT
 };
 
@@ -350,6 +352,9 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     if (mutation != NULL && (round->kind == ROUND_MUTATION || round->kind == ROUND_TARGET_FAILURE) &&
         is_answered_by(mutation->address, url)) {
         host->mutation_deliveries++;
+        if (is_picked) {
+            host->marks[MARK_MUTATION_PICKED] = 1;
+        }
         if (round->kind == ROUND_TARGET_FAILURE) {
             status = HOST_FAILED_NO_ANSWER;
         } else {
@@ -1566,6 +1571,37 @@ static void check_notices(void)
     }
 }
 
+static bool truncated_text_is_marked(const char *text)
+{
+    char marker[TRUNCATION_MARK_BYTES + 1];
+    memset(marker, 'W', sizeof marker - 1);
+    marker[sizeof marker - 1] = '\0';
+    bool has_marker = false, has_marked_text = false, previous_marker = false;
+    for (const char *at = text; *at != '\0';) {
+        size_t length = strcspn(at, "\n");
+        char line[STANDIN_DRAW_TEXT_BYTES];
+        memcpy(line, at, length);
+        line[length] = '\0';
+        bool line_marker = strstr(line, marker) != NULL;
+        has_marker = has_marker || line_marker;
+        const char *ellipsis = strstr(line, "...");
+        if (ellipsis == NULL) {
+            ellipsis = strstr(line, "\xe2\x80\xa6");
+        }
+        if (ellipsis != NULL) {
+            const char *tail = strstr(line, marker);
+            bool continuation = previous_marker;
+            for (const char *prefix = line; prefix < ellipsis; prefix++) {
+                continuation = continuation && (*prefix == 'W' || *prefix == ' ');
+            }
+            has_marked_text = has_marked_text || (tail != NULL && tail < ellipsis) || continuation;
+        }
+        previous_marker = line_marker;
+        at += length + (at[length] == '\n' ? 1 : 0);
+    }
+    return !has_marker || has_marked_text;
+}
+
 static void check_responses(void)
 {
     int exercised = 0;
@@ -1602,11 +1638,10 @@ static void check_responses(void)
         }
         /* Long valid strings need not be rejected, but a displayed picker limit must be marked. */
         if (strcmp(mutation->kind, "long-values") == 0) {
-            char truncated[64];
-            memset(truncated, 'W', sizeof truncated - 1);
-            truncated[sizeof truncated - 1] = '\0';
-            expect(NETWORK, strstr(standin()->draw_text, truncated) == NULL ||
-                   strstr(standin()->draw_text, "...") != NULL || strstr(standin()->draw_text, "\xe2\x80\xa6") != NULL,
+            if (!mark(MARK_MUTATION_PICKED)) {
+                continue; /* Streamed strings are not limited by the picker. */
+            }
+            expect(NETWORK, truncated_text_is_marked(standin()->draw_text),
                    "response long-values at %s: a picked 63-byte string is displayed without a truncation marker", mutation->address);
             continue;
         }

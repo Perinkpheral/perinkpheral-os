@@ -63,7 +63,9 @@ object AppCheckTest {
         Break("network", "numeric overflow is accepted as data",
             listOf("length < 10" to "length <= HOST_VALUE_MAX"), "response numeric-overflow"),
         Break("network", "a picker-truncated name looks complete",
-            listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX"), "response long-values"),
+            listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX",
+                "void app_on_draw(void)\n{\n" to
+                    "void app_on_draw(void)\n{\n    gfx_draw_text(MARGIN, 120, HOST_FONT_SMALL, \"...\", 3);\n"), "response long-values"),
         Break("clock", "future clock uses the current date's offset",
             listOf("time_local_at(1806321600LL, &future);" to
                 "time_local_at(1806321600LL, &future);\n    int64_t local_seconds = 1806321600LL + time_zone_offset();\n    future.hour = (int32_t)(local_seconds / 3600 % 24);"), "clock event"),
@@ -264,6 +266,16 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("network", "a marked source-truncated value wraps onto another draw record",
+            listOf("row_length >= HOST_VALUE_MAX" to "row_length > HOST_VALUE_MAX",
+                "    row[row_length] = '\\0';" to
+                    "    row[row_length] = '\\0';\n    if (row_length == HOST_VALUE_MAX) {\n" +
+                    "        row[row_length - 3] = row[row_length - 2] = row[row_length - 1] = '.';\n    }",
+                "        gfx_draw_text(MARGIN, 160, HOST_FONT_SMALL, row_name, length_of(row_name));" to
+                    "        if (length_of(row_name) > 45) {\n" +
+                    "            gfx_draw_text(MARGIN, 160, HOST_FONT_SMALL, row_name, 45);\n" +
+                    "            gfx_draw_text(MARGIN, 175, HOST_FONT_SMALL, row_name + 45, length_of(row_name) - 45);\n" +
+                    "        } else {\n            gfx_draw_text(MARGIN, 160, HOST_FONT_SMALL, row_name, length_of(row_name));\n        }"), ""),
         Break("network", "an explicit alternative backoff policy",
             listOf("    if (time_now() < retry_until) {\n        return;\n    }" to ""), "",
             checkPatch = mapOf("exceptions" to mapOf("network.backoff" to "This policy variant leaves request pacing to its service-specific tests."))),

@@ -82,15 +82,18 @@ A log line is not a visible error.
   for this application. An empty feed may legitimately clear the view, for example.
 
 Unknown keys and blank reasons fail. Do not use an exception to bless a defect.
-JSON mutations include nulling individual object members (at most 64 variants, using
-the first record in nested arrays), as well as changing all leaves. Optional nulls
-can legitimately change fallback text: declare that difference. For non-JSON protocols,
+JSON mutations include individual null, string and number members (at most 64 variants
+of each kind, using the first record in nested arrays), as well as changing all leaves.
+String mutations retain up to 24 UTF-8 bytes of the original prefix, so an invalid identity
+does not prevent reaching a long displayed name. Numeric mutations also preserve the other
+fields. Optional nulls can legitimately change fallback text: declare that difference. For non-JSON protocols,
 up to 64 decimal tokens are replaced independently with an
 oversized integer; only sanitizer safety is asserted because another number can be valid
 data. Semantic validation still needs application tests: truncating arbitrary text can
 itself be a valid answer.
-The long-string check flags an unmarked displayed 63-byte generated string; it does
-not infer every possible wrapping or truncation convention.
+The long-string check observes picked responses only and flags an unmarked marker from
+a known source-truncated string; it does not infer every possible wrapping or
+truncation convention.
 
 The notice comparison does not prove power-cut atomicity. A fresh instance and refused
 receipt writes model unloads, not a crash between a reservation and posting. Event

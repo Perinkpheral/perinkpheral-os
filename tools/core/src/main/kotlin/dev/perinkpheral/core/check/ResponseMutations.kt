@@ -7,7 +7,21 @@ import dev.perinkpheral.core.Json
 object ResponseMutations {
     private const val MAX_MEMBER_MUTATIONS = 64
     private const val OVERSIZED_TEXT_BYTES = 80
+    private const val PRESERVED_PREFIX_BYTES = 24
     data class Mutation(val kind: String, val body: String)
+
+    private fun longer(text: String): String {
+        val prefix = StringBuilder()
+        var bytes = 0
+        for (code in text.codePoints().toArray()) {
+            val character = String(Character.toChars(code))
+            val size = character.toByteArray().size
+            if (bytes + size > PRESERVED_PREFIX_BYTES) break
+            prefix.append(character)
+            bytes += size
+        }
+        return prefix.toString() + "W".repeat(OVERSIZED_TEXT_BYTES)
+    }
 
     fun make(body: String): List<Mutation> {
         val parsed = runCatching { Json.parse(body) }.getOrNull()
@@ -29,7 +43,7 @@ object ResponseMutations {
             else -> when (kind) {
                 "nulls" -> null
                 "wrong-types" -> if (value is String) true else "invalid"
-                "long-values" -> if (value is String) "W".repeat(OVERSIZED_TEXT_BYTES) else value
+                "long-values" -> if (value is String) longer(value) else value
                 "numeric-overflow" -> if (value is Number) Long.MAX_VALUE else value
                 else -> value
             }
@@ -38,17 +52,27 @@ object ResponseMutations {
             val changed = Json.write(replace(parsed, kind))
             if (changed != Json.write(parsed)) result += Mutation(kind, changed)
         }
-        // One missing/null picked path must not shift every parallel list in the same way.
-        // Change each object member in turn, including the first row of nested arrays.
-        fun nullMembers(value: Any?): List<Any?> = when (value) {
+        // Keep the other fields valid: corrupting an identity must not prevent reaching
+        // a displayed name or number. The first row keeps the mutation count bounded.
+        fun members(value: Any?, accepts: (Any?) -> Boolean, change: (Any?) -> Any?): List<Any?> = when (value) {
             is Map<*, *> -> value.entries.flatMap { (key, item) ->
-                listOf(value.toMutableMap().apply { put(key, null) }) +
-                    nullMembers(item).map { child -> value.toMutableMap().apply { put(key, child) } }
+                val direct = if (accepts(item)) listOf(value.toMutableMap().apply { put(key, change(item)) }) else emptyList()
+                direct + members(item, accepts, change).map { child -> value.toMutableMap().apply { put(key, child) } }
             }
-            is List<*> -> value.firstOrNull()?.let { first -> nullMembers(first).map { listOf(it) + value.drop(1) } }.orEmpty()
+            is List<*> -> if (value.isEmpty()) emptyList() else {
+                val first = value.first()
+                val direct = if (accepts(first)) listOf(listOf(change(first)) + value.drop(1)) else emptyList()
+                direct + members(first, accepts, change).map { listOf(it) + value.drop(1) }
+            }
             else -> emptyList()
         }
-        nullMembers(parsed).take(MAX_MEMBER_MUTATIONS).forEach { result += Mutation("picked-null", Json.write(it)) }
+        fun addMembers(kind: String, accepts: (Any?) -> Boolean, change: (Any?) -> Any?) {
+            members(parsed, accepts, change).take(MAX_MEMBER_MUTATIONS).forEach { result += Mutation(kind, Json.write(it)) }
+        }
+        addMembers("picked-null", { it != null }, { null })
+        addMembers("long-values", { it is String }, { longer(it as String) })
+        addMembers("numeric-overflow", { it is Number }, { Long.MAX_VALUE })
+        addMembers("wrong-types", { it is Number }, { "invalid" })
         return result.distinctBy { it.kind to it.body }
     }
 }

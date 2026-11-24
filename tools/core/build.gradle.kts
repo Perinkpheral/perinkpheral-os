@@ -122,3 +122,10 @@ val documentationTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.DocumentationTest")
 }
 tasks.check { dependsOn(documentationTest) }
+
+val responseMutationsTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.check.ResponseMutationsTest")
+}
+tasks.check { dependsOn(responseMutationsTest) }
