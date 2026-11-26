@@ -37,8 +37,8 @@ one header, sdk/host_api.h, ABI 3
 Memory
 Память
 
-32 KB per application
-32 КБ на приложение
+Up to 64 KB per application
+До 64 КБ на приложение
 
 Build and upload
 Сборка и загрузка
@@ -91,8 +91,8 @@ Display: 400 x 300 pixels, 1 bit, dithered greys, partial refresh in about 0.5 s
 Input: four buttons; short press, long press, key down and key up events
 Ввод: четыре кнопки; события короткого нажатия, длинного нажатия, нажатия и отпускания
 
-Sandbox: 32 KB of private memory; network access through Perinkpheral OS only
-Песочница: 32 КБ собственной памяти; доступ в сеть только через Perinkpheral OS
+Sandbox: up to 64 KB of private memory; network access through Perinkpheral OS only
+Песочница: до 64 КБ собственной памяти; доступ в сеть только через Perinkpheral OS
 
 Network: HTTP and HTTPS requests performed by Perinkpheral OS, as scheduled polls or on request from the code
 Сеть: запросы HTTP и HTTPS выполняются Perinkpheral OS - опросы по расписанию или запросы из кода
@@ -271,11 +271,11 @@ Sandbox
 Linear memory
 Линейная память
 
-32 KB, fixed
-32 КБ, фиксированная
+max. 64 KB
+до 64 КБ
 
-One page: 8 KB stack, static data, remainder for <code>app_alloc()</code>. Fixed size
-Одна страница: стек 8 КБ, статические данные, остаток для <code>app_alloc()</code>. Размер фиксирован
+8 KB stack and static data, sized by the build. Cannot grow
+Стек 8 КБ и статические данные, размер определяет сборка. Расти не может
 
 Module (<code>app.wasm</code>)
 Модуль (<code>app.wasm</code>)
@@ -286,26 +286,26 @@ max. 48 KB
 Executed from flash
 Исполняется из флеш-памяти
 
-Interpreter memory
-Память интерпретатора
+Application area
+Область приложения
 
 64 KB
 64 КБ
 
-80 KB
-80 КБ
+112 KB
+112 КБ
 
-About 11 KB base plus 4 bytes per byte of executed code
-Около 11 КБ базовых плюс 4 байта на каждый байт исполненного кода
+Linear memory, plus about 11 KB base and 4 bytes per byte of executed code
+Линейная память, плюс около 11 КБ базовых и 4 байта на каждый байт исполненного кода
 
 Executable code, all paths run
 Исполняемый код, пройдены все ветви
 
-about 17 KB
-около 17 КБ
+about 22 KB
+около 22 КБ
 
-Derived from the interpreter memory. The build warns when the estimate is exceeded
-Выводится из памяти интерпретатора. Сборка предупреждает, когда оценка превышена
+With 10 KB of linear memory; each 4 KB of data leaves 1 KB less. The build warns when the estimate is exceeded
+При 10 КБ линейной памяти; каждые 4 КБ данных оставляют на 1 КБ меньше. Сборка предупреждает, когда оценка превышена
 
 Handler time limit
 Лимит времени обработчика
@@ -832,8 +832,8 @@ See "Memory" in section 13
 memory
 =
 
-The 32 KB page: stack, static data, and the remainder for the arena
-Страница 32 КБ: стек, статические данные и остаток для арены
+Stack, static data, and the arena declared with <code>APP_ALLOC_ARENA()</code>
+Стек, статические данные и арена, объявленная через <code>APP_ALLOC_ARENA()</code>
 
 Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. Call <code>app_alloc_release(mark)</code> when finished. Read files in parts; see app_alloc.h in section 23
 Перед выделением временных буферов через <code>app_alloc()</code> вызывайте <code>app_alloc_mark()</code>. По завершении вызывайте <code>app_alloc_release(mark)</code>. Читайте файлы по частям; см. app_alloc.h в разделе 23
@@ -2284,8 +2284,8 @@ data is valid until the handler returns
 the response is complete
 ответ получен целиком
 
-Process each piece when it arrives and keep only the data to display. Use a state machine, the SDK's <code>json_pick</code> or a custom parser. A response can be several megabytes; the application has 32 KB. <code>json_pick</code> takes list paths too, with a buffer the application gives (section 23).
-Обрабатывайте каждый кусок по приходу и храните только данные для показа. Используйте конечный автомат, <code>json_pick</code> из SDK или свой разборщик. Ответ может занимать несколько мегабайт; у приложения 32 КБ. <code>json_pick</code> принимает и пути списков, с буфером, который даёт приложение (раздел 23).
+Process each piece when it arrives and keep only the data to display. Use a state machine, the SDK's <code>json_pick</code> or a custom parser. A response can be several megabytes; the application has at most 64 KB. <code>json_pick</code> takes list paths too, with a buffer the application gives (section 23).
+Обрабатывайте каждый кусок по приходу и храните только данные для показа. Используйте конечный автомат, <code>json_pick</code> из SDK или свой разборщик. Ответ может занимать несколько мегабайт; у приложения не больше 64 КБ. <code>json_pick</code> принимает и пути списков, с буфером, который даёт приложение (раздел 23).
 
 Replace the displayed data only on <code>HOST_DATA_LAST</code>. Delivery can stop without a last piece and without a failure (section 3). <code>HOST_DATA_FIRST</code> always starts a new response.
 Заменяйте отображаемые данные только по <code>HOST_DATA_LAST</code>. Доставка может прекратиться без последнего фрагмента и без ошибки (раздел 3). <code>HOST_DATA_FIRST</code> всегда начинает новый ответ.
@@ -2716,8 +2716,8 @@ Use common words: "Save", "Remove", "Not set up". If a label needs an explanatio
 Minimize code size before data size.
 Сокращайте сначала размер кода, затем размер данных.
 
-Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 32 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.
-Каждый байт исполняемого кода занимает примерно четыре байта из 80 КБ интерпретатора. Каждый байт данных занимает один байт страницы 32 КБ. Предпочитайте таблицу цепочке <code>if</code>, готовые элементы собственному рисованию, <code>pick</code> собственному разбору и <code>time_text()</code> собственному форматированию даты. Арена интерпретатора выросла с 64 КБ до 80 КБ в прошивке 0.1.95. Приложения, которым нужно больше прежних 64 КБ, обязаны указать <code>"firmware": "0.1.95"</code>. Сборка предупреждает, если оценка превышает 64 КБ, а итоговая минимальная версия ниже; оценка справочная и не доказывает фактический пик потребления.
+Each byte of executed code uses about four bytes of the 112 KB application area. Each byte of data uses one. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.
+Каждый байт исполняемого кода занимает примерно четыре байта из 112 КБ области приложения. Каждый байт данных занимает один. Предпочитайте таблицу цепочке <code>if</code>, готовые элементы собственному рисованию, <code>pick</code> собственному разбору и <code>time_text()</code> собственному форматированию даты. Арена интерпретатора выросла с 64 КБ до 80 КБ в прошивке 0.1.95. Приложения, которым нужно больше прежних 64 КБ, обязаны указать <code>"firmware": "0.1.95"</code>. Сборка предупреждает, если оценка превышает 64 КБ, а итоговая минимальная версия ниже; оценка справочная и не доказывает фактический пик потребления.
 
 Keep shared helpers out of line.
 Не встраивайте общие вспомогательные функции.
@@ -4098,6 +4098,9 @@ app_date_seconds() возвращает календарные секунды, �
 
 app_alloc.h: arena allocation
 app_alloc.h: выделение памяти в арене
+
+once, at file scope: the arena, part of the static data
+один раз, на уровне файла: арена, часть статических данных
 
 NULL if the arena is too small; memory is not zeroed
 NULL, если в арене мало места; память не обнуляется

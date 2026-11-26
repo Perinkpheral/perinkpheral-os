@@ -20,7 +20,7 @@ This assessment is based on code review, not adversarial testing.
 Applications are untrusted. The interpreter and Perinkpheral OS API enforce their isolation.
 
 Holds:
-- It runs in the interpreter with 32 KB of its own. Every pointer, length and coordinate
+- It runs in the interpreter with memory of its own, at most 64 KB. Every pointer, length and coordinate
   it passes is checked before use (`firmware/components/appsys/app.c`); it cannot read or write Perinkpheral OS's
   memory. A handler that does not return in 3 seconds is stopped.
 - Its store is its own (`a.<name>`; a name has no dot), its files are its own folder, and

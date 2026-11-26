@@ -17,7 +17,7 @@
     <tr><td>Application</td><td>WebAssembly module and manifest</td></tr>
     <tr><td>Language</td><td>C, no standard library</td></tr>
     <tr><td>Interface</td><td>one header, sdk/host_api.h, ABI 3</td></tr>
-    <tr><td>Memory</td><td>32 KB per application</td></tr>
+    <tr><td>Memory</td><td>Up to 64 KB per application</td></tr>
     <tr><td>Build and upload</td><td>build and upload without reflashing</td></tr>
   </table>
   <ul class="steps">
@@ -45,7 +45,7 @@
 <ul>
   <li>Display: 400 x 300 pixels, 1 bit, dithered greys, partial refresh in about 0.5 s</li>
   <li>Input: four buttons; short press, long press, key down and key up events</li>
-  <li>Sandbox: 32 KB of private memory; network access through Perinkpheral OS only</li>
+  <li>Sandbox: up to 64 KB of private memory; network access through Perinkpheral OS only</li>
   <li>Network: HTTP and HTTPS requests performed by Perinkpheral OS, as scheduled polls or on request from the code</li>
   <li>Data: Perinkpheral OS extracts values and lists from JSON responses; any response can be streamed in 1 KB pieces</li>
   <li>Background work: responses, alarms and device events are delivered while the application is off the screen</li>
@@ -98,10 +98,10 @@
 <h2 id="char-sandbox">Sandbox</h2>
 <table>
   <tr><th style="width:38%">Parameter</th><th style="width:24%">Value</th><th>Notes</th></tr>
-  <tr><td>Linear memory</td><td class="n">32 KB, fixed</td><td>One page: 8 KB stack, static data, remainder for <code>app_alloc()</code>. Fixed size</td></tr>
+  <tr><td>Linear memory</td><td class="n">max. 64 KB</td><td>8 KB stack and static data, sized by the build. Cannot grow</td></tr>
   <tr><td>Module (<code>app.wasm</code>)</td><td class="n">max. 48 KB</td><td>Executed from flash</td></tr>
-  <tr><td>Interpreter memory</td><td class="n">80 KB</td><td>About 11 KB base plus 4 bytes per byte of executed code</td></tr>
-  <tr><td>Executable code, all paths run</td><td class="n">about 17 KB</td><td>Derived from the interpreter memory. The build warns when the estimate is exceeded</td></tr>
+  <tr><td>Application area</td><td class="n">112 KB</td><td>Linear memory, plus about 11 KB base and 4 bytes per byte of executed code</td></tr>
+  <tr><td>Executable code, all paths run</td><td class="n">about 22 KB</td><td>With 10 KB of linear memory; each 4 KB of data leaves 1 KB less. The build warns when the estimate is exceeded</td></tr>
   <tr><td>Handler time limit</td><td class="n">3 s</td><td>On expiry the handler is stopped and the application terminated</td></tr>
   <tr><td>Loaded instances</td><td class="n">1</td><td>Across all applications</td></tr>
   <tr><td>Floating point</td><td class="n">integer only</td><td>The build rejects a module with a float operation</td></tr>
@@ -290,7 +290,7 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   <tr><th style="width:14%">Line</th><th>Measures</th><th style="width:36%">When exceeded</th></tr>
   <tr><td class="c">module</td><td>File size: code and initial data. Executed from flash</td><td>Move pictures and tables to <code>files/</code>. Use the kit instead of custom drawing</td></tr>
   <tr><td class="c">code</td><td>Code size and the estimated interpreter memory needed to run all of it. <b>The scarcest resource</b>: one byte of code uses four bytes of memory</td><td>See "Memory" in section 13</td></tr>
-  <tr><td class="c">memory</td><td>The 32 KB page: stack, static data, and the remainder for the arena</td><td>Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. Call <code>app_alloc_release(mark)</code> when finished. Read files in parts; see app_alloc.h in section 23</td></tr>
+  <tr><td class="c">memory</td><td>Stack, static data, and the arena declared with <code>APP_ALLOC_ARENA()</code></td><td>Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. Call <code>app_alloc_release(mark)</code> when finished. Read files in parts; see app_alloc.h in section 23</td></tr>
   <tr><td class="c">firmware</td><td>The oldest firmware the application runs on, and the Perinkpheral OS call that asks for it</td><td>-</td></tr>
 </table>
 <p>The log reports two conditions of a running application, once per instance or per minute: a handler that runs longer than 400 ms (<code>slow handler: on_draw took 520 ms</code>), and more than 12 store writes in a minute. Each store write is a flash write: state is saved in <code>app_on_terminate()</code>.</p>
@@ -862,7 +862,7 @@ app_text_add_fixed(&amp;text, price - previous, 2, APP_FIXED_SIGN);        /* "+
     }
 }</pre>
 <ul>
-  <li>Process each piece when it arrives and keep only the data to display. Use a state machine, the SDK's <code>json_pick</code> or a custom parser. A response can be several megabytes; the application has 32 KB. <code>json_pick</code> takes list paths too, with a buffer the application gives (section 23).</li>
+  <li>Process each piece when it arrives and keep only the data to display. Use a state machine, the SDK's <code>json_pick</code> or a custom parser. A response can be several megabytes; the application has at most 64 KB. <code>json_pick</code> takes list paths too, with a buffer the application gives (section 23).</li>
   <li>Replace the displayed data only on <code>HOST_DATA_LAST</code>. Delivery can stop without a last piece and without a failure (section 3). <code>HOST_DATA_FIRST</code> always starts a new response.</li>
   <li>Inside the handler, <code>answer_info(&amp;response, sizeof response)</code> copies response metadata and returns the bytes written: status, Content-Length, Content-Type, ETag, Last-Modified, Location, Link and Retry-After. It copies at most Perinkpheral OS's struct size; absent fields are zeroed, except length is -1 when absent.</li>
 </ul>
@@ -1036,7 +1036,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <div class="rule"><b>Keep interface text short and standard.</b> Use common words: "Save", "Remove", "Not set up". If a label needs an explanation, change the label.</div>
 
 <h2 id="design-memory">Memory</h2>
-<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the interpreter's 80 KB. Each byte of data uses one byte of the 32 KB page. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.</div>
+<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the 112 KB application area. Each byte of data uses one. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.</div>
 <div class="rule"><b>Keep shared helpers out of line.</b> Mark a small helper that is called from many places with <code>__attribute__((noinline))</code> and compare the build reports.</div>
 <div class="rule"><b>Store pictures as bits.</b> Put pictures in <code>pictures/</code>. Put large pictures in <code>files/</code>.</div>
 <div class="rule"><b>Process responses as a stream.</b> Process a response as it arrives and keep only the data to display. Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. When finished, call <code>app_alloc_release(mark)</code> to release every allocation made since that mark (section 23).</div>
@@ -1504,7 +1504,8 @@ int64_t         app_date_seconds(const app_date_t *date);
 <p>To handle BACK on these screens, export <code>app_on_back()</code> and pass <code>BTN_BACK_PRESSED</code> from it to the same button function.</p>
 <p>app_date_seconds() returns calendar seconds as if the selected fields were UTC. For actual Unix time, pass those fields in a host_local_time_t to time_from_local(&amp;parts, &amp;unix_time) and check for HOST_OK. Perinkpheral OS applies the local zone, moves skipped times forward by the gap and chooses the earlier occurrence of repeated times.</p>
 <h2 id="lib-alloc">app_alloc.h: arena allocation</h2>
-<pre>void   *app_alloc(int32_t bytes);            /* NULL if the arena is too small; memory is not zeroed */
+<pre>APP_ALLOC_ARENA(bytes);                      /* once, at file scope: the arena, part of the static data */
+void   *app_alloc(int32_t bytes);            /* NULL if the arena is too small; memory is not zeroed */
 int32_t app_alloc_left(void);
 /* app_alloc_release(mark) frees everything allocated after the mark */
 int32_t app_alloc_mark(void);

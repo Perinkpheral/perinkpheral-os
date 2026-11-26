@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-/* One loaded wasm application: the module, 32 KB of linear memory and
+/* One loaded wasm application: the module, its linear memory and
  * the host API. Independent of scenes, the panel and ESP-IDF: device
  * functions are supplied as app_services_t. The same code runs in the host
  * tests with the real interpreter. */
@@ -106,7 +106,7 @@ typedef enum {
     APP_ERR_NO_MEMORY,
     APP_ERR_OTHER_API,  /* imports a call missing in this host or with another
                            signature: built for another host version */
-    APP_ERR_BAD_MODULE, /* not wasm, more than one page of memory, or an import
+    APP_ERR_BAD_MODULE, /* not wasm, more than 64 KB of memory, or an import
                            outside the host API */
     APP_ERR_NO_AREA, /* the application area's boot reservation failed */
 } app_load_result_t;

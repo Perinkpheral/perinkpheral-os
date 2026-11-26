@@ -16,8 +16,8 @@ over or check whether upstream has closed its own TODO at that spot.
 
 `wasm3/m3_core.c`, the allocator: with `d_m3ApplicationArea` defined the
 interpreter's `calloc`, `free` and `realloc` are those of `m3_area.c`,
-which reserves a 112 KB application arena at startup: one fixed 32 KB wasm page
-and 80 KB for interpreter allocations and contract scratch memory. Unloading the application resets
+which reserves a 112 KB application arena at startup: the module's memory, at most
+64 KB, and the interpreter's allocations and contract scratch memory. Unloading the application resets
 the arena. Perinkpheral OS storage and network services have separate allocations;
 this isolation applies to interpreter memory. The lines are marked `perinkpheral`.
 

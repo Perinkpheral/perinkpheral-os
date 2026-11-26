@@ -25,9 +25,8 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
     # Small pages waste less at the end of each: measured, an application
     # takes 6-8 KB less of its area with these than with pages of 4 KB.
     d_m3CodePageAlignSize=512
-    # An application gets one page (32 KB, M3_AREA_PAGE_BYTES) and can never
-    # grow: this bounds a module to 64 KB, and the host refuses one whose
-    # memory is not the page exactly.
+    # An application's memory is at most one standard page of 64 KB and can
+    # never grow: a module that asks for more does not load.
     d_m3MaxLinearMemoryPages=1
     # How much of the host task's stack an application may take by calling
     # itself deeper and deeper; past it the call traps. Off by default on

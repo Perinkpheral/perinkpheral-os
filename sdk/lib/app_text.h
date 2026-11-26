@@ -3,7 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  *
  * String building without a C library. printf alone would take about
- * half of the 32 KB an application has.
+ * 16 KB of an application's memory.
  */
 #pragma once
 

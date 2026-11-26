@@ -120,7 +120,7 @@ application that imports it does not link there.
 
 The tools are `tools/perinkpheral` (Kotlin: `tools/cli` over the library `tools/core`; Java 21, built on first use).
 An application: `tools/perinkpheral build sdk/apps/<name> --out <dir>`
-builds `app.wasm` without a C library, with one page of memory,
+builds `app.wasm` without a C library, with memory sized to its stack and data,
 refuses a module that imports anything `sdk/host_api.h` does not
 declare, and checks `manifest.json` by Perinkpheral OS's rules. The firmware
 build builds the system applications of `firmware/system` this way; `sdk/apps`

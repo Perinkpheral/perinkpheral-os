@@ -6,7 +6,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.101
 
-- The application page is 32 KB, down from 64 KB, and the application area 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back. Applications built for the 64 KB page do not load: rebuild them with this SDK and update the catalog applications after updating the firmware.
+- An application's memory is now what its stack and data take, at most 64 KB, instead of a fixed 64 KB page, and the application area is 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back, and what an application does not use for data is room for its code. Applications built earlier still load when they fit; rebuilding with this SDK makes them smaller. An application that calls `app_alloc()` declares its arena with `APP_ALLOC_ARENA(bytes)`.
 - The catalog and application installs no longer answer "Device busy" while an application's poll is in progress: they wait their turn behind it. Memory refusals are counted once per refused request, not once per look.
 
 ## 0.1.100
