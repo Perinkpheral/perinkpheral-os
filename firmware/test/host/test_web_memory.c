@@ -118,6 +118,7 @@ esp_err_t httpd_req_async_handler_begin(httpd_req_t *request, httpd_req_t **copy
 esp_err_t httpd_req_async_handler_complete(httpd_req_t *request) { (void)request; return ESP_OK; }
 void web_connections_complete(httpd_req_t *request, esp_err_t result) { (void)request; (void)result; }
 void vTaskDelete(void *task) { (void)task; }
+void vTaskDelay(unsigned ticks) { (void)ticks; CHECK(false); }
 int xTaskCreate(void (*task)(void *), const char *name, unsigned stack, void *argument, unsigned priority, void *handle)
 { (void)task; (void)name; (void)stack; (void)argument; (void)priority; (void)handle; CHECK(false); return 0; }
 int heap_caps_register_failed_alloc_callback(void (*callback)(size_t, uint32_t, const char *))

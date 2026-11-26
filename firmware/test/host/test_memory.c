@@ -72,6 +72,31 @@ static void test_glyph_admission(void)
     CHECK(after.refusals == before.refusals + 10);
 }
 
+static void test_peeking(void)
+{
+    /* A look agrees with the counted question and is not itself a refusal. */
+    memory_counts_t before, after;
+    memory_read(&before);
+    free_bytes = 50 * KB;
+    block_bytes = 17 * KB;
+    CHECK(!memory_peek(MEMORY_FOR_A_SESSION));
+    CHECK(!memory_peek(MEMORY_FOR_A_SESSION));
+    free_bytes = 60 * KB;
+    block_bytes = 17 * KB;
+    CHECK(memory_peek(MEMORY_FOR_A_SESSION));
+    free_bytes = 100 * KB;
+    block_bytes = 64 * KB;
+    CHECK(memory_peek(MEMORY_FOR_A_GLYPH_PACK));
+    free_bytes = 50 * KB;
+    CHECK(!memory_peek(MEMORY_FOR_A_GLYPH_PACK));
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals);
+    /* The counted question still counts, once, on the same short heap. */
+    CHECK(!memory_has(MEMORY_FOR_A_SESSION));
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals + 1);
+}
+
 int main(void)
 {
     memory_start();
@@ -138,5 +163,6 @@ int main(void)
     memory_read(&counts);
     CHECK(counts.failed_allocations == 1 && counts.sheds == 2 && counts.refusals == 4);
     test_glyph_admission();
+    test_peeking();
     REPORT();
 }

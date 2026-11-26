@@ -367,16 +367,52 @@ bool web_server_has_memory(httpd_req_t *request, memory_need_t need)
 typedef struct {
     esp_err_t (*handler)(httpd_req_t *request);
     httpd_req_t *request; /* the server's copy, ours until it is completed */
+    memory_need_t memory; /* what its route needs room for, if anything */
 } waiting_t;
 
 static atomic_bool s_is_waiting; /* one such request at a time */
 
+/* How long a waiting request gives the heap to come back, and how often
+ * it looks: longer than the poller's own wait for memory, so the fetch
+ * that was in the way ends before the browser is told there is none. */
+#define ROOM_WAIT_MS (20 * MS_PER_SECOND)
+#define ROOM_LOOK_MS 500
+
+/* Room for what the route asked for, waited for off the server's task.
+ * Looking while waiting is not refusing: the refusal is counted once, at
+ * the end, when there is still no room. */
+static bool waits_for_room(memory_need_t need)
+{
+    if (need == WEB_NO_MEMORY_NEED || need == MEMORY_FOR_A_GLYPH_PACK) {
+        return true; /* a pack is checked by its size, on the server's task */
+    }
+    if (need == MEMORY_FOR_A_SESSION) {
+        poller_web_waits_for_session(true);
+    }
+    const int64_t until_ms = esp_timer_get_time() / US_PER_MS + ROOM_WAIT_MS;
+    while (!memory_peek(need)) {
+        if (esp_timer_get_time() / US_PER_MS >= until_ms) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(ROOM_LOOK_MS));
+    }
+    if (need == MEMORY_FOR_A_SESSION) {
+        poller_web_waits_for_session(false);
+    }
+    return memory_has(need); /* the last look: counted when it is the refusal */
+}
+
 static void answer_waiting(void *argument)
 {
     waiting_t *waiting = argument;
-    esp_err_t      result = waiting->handler(waiting->request);
-    /* A catalog cut short is known to the page only by a closed connection. */
-    web_connections_complete(waiting->request, result);
+    if (waits_for_room(waiting->memory)) {
+        esp_err_t result = waiting->handler(waiting->request);
+        /* A catalog cut short is known to the page only by a closed connection. */
+        web_connections_complete(waiting->request, result);
+    } else {
+        send_failure(waiting->request, STATUS_BUSY, "Not enough memory.");
+        httpd_req_async_handler_complete(waiting->request);
+    }
     free(waiting);
     atomic_store(&s_is_waiting, false);
     vTaskDelete(NULL);
@@ -384,6 +420,12 @@ static void answer_waiting(void *argument)
 
 static esp_err_t answer_off_the_server(httpd_req_t *request, const web_route_t *route)
 {
+    if (route->memory == MEMORY_FOR_A_GLYPH_PACK &&
+        !web_server_has_memory(request, route->memory)) {
+        /* No waiting route carries a pack today; its size check, which
+         * needs the request's length, stays where it was. */
+        return ESP_OK;
+    }
     if (atomic_exchange(&s_is_waiting, true)) {
         return send_failure(request, STATUS_BUSY, "Device busy.");
     }
@@ -394,6 +436,7 @@ static esp_err_t answer_off_the_server(httpd_req_t *request, const web_route_t *
         return send_failure(request, STATUS_BUSY, "Not enough memory.");
     }
     waiting->handler = route->handler;
+    waiting->memory = route->memory;
     if (xTaskCreate(answer_waiting, "web_waits", STACK_WEB_WAITS, waiting, PRIORITY_SERVER, NULL) !=
         pdPASS) {
         /* The copy is the request now: answered through it, and let go. */
@@ -411,11 +454,13 @@ static esp_err_t answer_route(httpd_req_t *request)
     if (route->scope != WEB_OPEN && refuses_cross_site(request)) {
         return ESP_OK;
     }
+    if (route->pace == WEB_WAITS) {
+        /* Its room is waited for off the server's task: a fetch that is
+         * in the way ends, and the page is not told "busy" for it. */
+        return answer_off_the_server(request, route);
+    }
     if (route->memory != WEB_NO_MEMORY_NEED && !web_server_has_memory(request, route->memory)) {
         return ESP_OK;
-    }
-    if (route->pace == WEB_WAITS) {
-        return answer_off_the_server(request, route);
     }
     return route->handler(request);
 }

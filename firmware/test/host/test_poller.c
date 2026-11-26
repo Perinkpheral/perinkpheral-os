@@ -64,6 +64,7 @@ bool memory_has(memory_need_t need)
     if (need == MEMORY_FOR_A_PAGE) return page_memory;
     return true;
 }
+bool memory_peek(memory_need_t need) { return memory_has(need); }
 bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
 void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }

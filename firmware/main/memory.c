@@ -81,13 +81,34 @@ void memory_start(void)
     deadlines_set_in(DEADLINE_MEMORY_LOOK, 0, 0, LOOK_EVERY_MS);
 }
 
-bool memory_has(memory_need_t need)
+static bool room_for(memory_need_t need)
+{
+    return esp_get_free_heap_size() >= NEEDS[need].free_bytes &&
+           heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >= NEEDS[need].one_block_bytes;
+}
+
+static bool glyph_pack_room(size_t pack_bytes)
+{
+    /* Keep both compaction buffers in the same block as the upload, with
+     * the page's spare block left for allocator overhead and other work. */
+    size_t overhead = GLYPHS_COMPACTION_BYTES;
+    return pack_bytes > 0 && pack_bytes <= GLYPHS_PACK_MAX_BYTES &&
+           esp_get_free_heap_size() >= pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].free_bytes &&
+           heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >=
+               pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].one_block_bytes;
+}
+
+bool memory_peek(memory_need_t need)
 {
     if (need == MEMORY_FOR_A_GLYPH_PACK) {
-        return memory_has_glyph_pack(GLYPHS_PACK_MAX_BYTES);
+        return glyph_pack_room(GLYPHS_PACK_MAX_BYTES);
     }
-    bool has = esp_get_free_heap_size() >= NEEDS[need].free_bytes &&
-               heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >= NEEDS[need].one_block_bytes;
+    return room_for(need);
+}
+
+bool memory_has(memory_need_t need)
+{
+    bool has = memory_peek(need);
     if (!has) {
         s_refusals++;
     }
@@ -103,13 +124,7 @@ bool memory_has(memory_need_t need)
 
 bool memory_has_glyph_pack(size_t pack_bytes)
 {
-    /* Keep both compaction buffers in the same block as the upload, with
-     * the page's spare block left for allocator overhead and other work. */
-    size_t overhead = GLYPHS_COMPACTION_BYTES;
-    bool has = pack_bytes > 0 && pack_bytes <= GLYPHS_PACK_MAX_BYTES &&
-               esp_get_free_heap_size() >= pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].free_bytes &&
-               heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >=
-                   pack_bytes + overhead + NEEDS[MEMORY_FOR_A_PAGE].one_block_bytes;
+    bool has = glyph_pack_room(pack_bytes);
     if (!has) {
         s_refusals++;
     }

@@ -39,6 +39,10 @@ void memory_start(void);
 /* Whether there is room for it now. A refusal is counted. From any task. */
 bool memory_has(memory_need_t need);
 
+/* The same question, uncounted: for whoever waits and asks again, where a
+ * look is not yet a refusal. The counted one belongs at the giving up. */
+bool memory_peek(memory_need_t need);
+
 /* The declared upload size plus compaction and the page's spare heap.
  * A refusal is counted. Invalid pack sizes are refused too. */
 bool memory_has_glyph_pack(size_t pack_bytes);
