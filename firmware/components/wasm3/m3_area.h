@@ -12,12 +12,15 @@ extern "C" {
 #endif
 
 /* The application area: the one piece of memory an application lives in.
- * Its page of 64 KB and everything the interpreter needs to run it - the
+ * Its page of 32 KB and everything the interpreter needs to run it - the
  * compiled code, the stack, its own records - are taken from here and from
  * nowhere else, so that the host's heap is the same whichever application
  * is on the screen, and an application that needs more than there is
- * fails to start, every time, instead of now and then. */
-#define M3_AREA_PAGE_BYTES    (64 * 1024)
+ * fails to start, every time, instead of now and then. The page is 32 KB
+ * from 2026-11-26 so that the whole area fits the heap with the interpreter
+ * at 80 KB; modules declare it with the custom page size the linker gives
+ * (--page-size), which the interpreter reads. */
+#define M3_AREA_PAGE_BYTES    (32 * 1024)
 /* The owner enlarged interpreter space from 64 KB to 80 KB on 2026-11-24.
  * This includes allocator overhead, compiled code, interpreter records and
  * contract scratch memory. Code-size estimates guide builds with warnings;

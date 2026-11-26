@@ -234,8 +234,9 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
                 throw BuildError("the module imports $moduleName.$name, which Perinkpheral OS does not offer")
             }
         }
-        if (module.memory != (1L to 1L)) {
-            throw BuildError("the module's memory is ${module.memory} pages, it must be exactly one")
+        if (module.memoryBytes != BuildFlags.WASM_PAGE.toLong()) {
+            throw BuildError("the module's memory is ${module.memoryBytes} bytes, it must be exactly " +
+                "one page of ${BuildFlags.WASM_PAGE}")
         }
     }
 

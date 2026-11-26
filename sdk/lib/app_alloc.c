@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#define PAGE_BYTES 65536
+#define PAGE_BYTES 32768
 #define ALIGNMENT  8
 
 /* Where the linker ended the module's own data: the free part of the page

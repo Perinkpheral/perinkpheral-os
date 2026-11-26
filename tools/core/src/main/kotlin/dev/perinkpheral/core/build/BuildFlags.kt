@@ -7,8 +7,10 @@ package dev.perinkpheral.core.build
  * them into its toolchain file, so that what an IDE compiles is what the device gets.
  */
 object BuildFlags {
-    /** One wasm page: the whole memory of an application, fixed for every one. */
-    const val WASM_PAGE = 65536
+    /** One wasm page: the whole memory of an application, fixed for every one.
+     *  32 KB from 2026-11-26: the linker declares it with `--page-size`, and the
+     *  interpreter and the application area agree on it. */
+    const val WASM_PAGE = 32768
 
     /** The stack at the bottom of that page. */
     const val APP_STACK = 8192
@@ -20,6 +22,7 @@ object BuildFlags {
 
     /** What the linker is told: no entry, nothing kept that is not called, one page and no more. */
     val linker = listOf("-Wl,--no-entry", "-Wl,--strip-all", "-Wl,--gc-sections",
+        "-Wl,--page-size=1", // one-byte pages: the memory is exactly WASM_PAGE bytes
         "-Wl,--initial-memory=$WASM_PAGE", "-Wl,--max-memory=$WASM_PAGE", "-Wl,-z,stack-size=$APP_STACK")
 
     /** The link step on its own, as a build system makes it: the driver has to hear again
