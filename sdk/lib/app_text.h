@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * String building without a C library. printf alone would take about a
- * quarter of the 64 KB an application has.
+ * String building without a C library. printf alone would take about
+ * half of the 32 KB an application has.
  */
 #pragma once
 

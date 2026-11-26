@@ -25,8 +25,9 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
     # Small pages waste less at the end of each: measured, an application
     # takes 6-8 KB less of its area with these than with pages of 4 KB.
     d_m3CodePageAlignSize=512
-    # An application gets one 64 KB page and can never grow: a module
-    # that asks for more does not load.
+    # An application gets one page (32 KB, M3_AREA_PAGE_BYTES) and can never
+    # grow: this bounds a module to 64 KB, and the host refuses one whose
+    # memory is not the page exactly.
     d_m3MaxLinearMemoryPages=1
     # How much of the host task's stack an application may take by calling
     # itself deeper and deeper; past it the call traps. Off by default on
@@ -34,7 +35,7 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
     d_m3MaxNativeStack=6144
     d_m3VerboseErrorMessages=0
     d_m3LogOutput=0
-    # What an application may be made of is kept to what a 64 KB module
+    # What an application may be made of is kept to what a small module
     # built without a C library uses. No floating point: the chip has no
     # FPU and every such operation would be the host's soft float, 34 KB
     # of it; a module with float operations loads and traps when it gets

@@ -553,7 +553,7 @@ static standin_stored_file_t *file_of(const char *name, int32_t length)
     return NULL;
 }
 
-#define WASM_PAGE_BYTES 65536
+#define WASM_PAGE_BYTES 32768
 
 static int32_t blocks_of(int32_t size)
 {
@@ -2656,7 +2656,7 @@ int32_t ui_draw_date(const host_date_t *date)
 /* ---- The SDK's arena (sdk/lib/app_alloc.h), which on the device is what the
  * module's page has left: here a room of its own, as large as the built module leaves ---- */
 
-#define ARENA_BYTES     (64 * 1024)
+#define ARENA_BYTES     (32 * 1024)
 #define ARENA_ALIGNMENT 8
 
 static _Alignas(ARENA_ALIGNMENT) uint8_t arena[ARENA_BYTES];

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-/* One loaded wasm application: the module, 64 KB of linear memory and
+/* One loaded wasm application: the module, 32 KB of linear memory and
  * the host API. Independent of scenes, the panel and ESP-IDF: device
  * functions are supplied as app_services_t. The same code runs in the host
  * tests with the real interpreter. */

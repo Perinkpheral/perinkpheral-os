@@ -160,7 +160,7 @@ async function read_log() {
 }
 
 /* ---- memory: what the application on the screen took at its most ---- */
-const PAGE_BYTES = 65536;
+const PAGE_BYTES = 32768;
 const kb = bytes => (bytes / 1024).toFixed(1) + " KB";
 
 async function read_memory() {

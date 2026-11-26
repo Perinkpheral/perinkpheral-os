@@ -4,6 +4,11 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.101
+
+- The application page is 32 KB, down from 64 KB, and the application area 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back. Applications built for the 64 KB page do not load: rebuild them with this SDK and update the catalog applications after updating the firmware.
+- The catalog and application installs no longer answer "Device busy" while an application's poll is in progress: they wait their turn behind it. Memory refusals are counted once per refused request, not once per look.
+
 ## 0.1.100
 
 - Applications can read elements and attributes from small XML documents using native SDK calls, including a single-pass query for several attributes.
