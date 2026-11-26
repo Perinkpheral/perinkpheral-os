@@ -164,7 +164,8 @@ int main(void)
     CHECK(pack_allocations == 2 && received_chunks == 1 && installs == 1);
 
     /* A waiting route's session follows the poll in progress, and the poller
-     * asks for its room then: on arrival it is neither refused nor counted. */
+     * asks for its room then: on arrival, with what such a poll leaves, it
+     * reaches its handler and nothing is counted. */
     /* The production route's declaration, with a handler of the test's own. */
     web_route_t catalog = { .uri = WEB_APPS_ROUTES[8].uri, .method = WEB_APPS_ROUTES[8].method,
                             .handler = waited_handler, .memory = WEB_APPS_ROUTES[8].memory,
@@ -180,12 +181,20 @@ int main(void)
     waits_expected = false;
     memory_read(&after);
     CHECK(after.refusals == before.refusals);
-    /* The same need on the server's own task is refused at once, and counted. */
-    catalog.pace = WEB_AT_ONCE;
+    /* Less than a page's worth is refused before the handler, and counted. */
+    free_bytes = 20 * 1024;
     CHECK(answer_route(&request) == ESP_OK && waited == 1);
     CHECK(strcmp(response_status, "503 Service Unavailable") == 0);
     memory_read(&after);
     CHECK(after.refusals == before.refusals + 1);
+    /* The same need on the server's own task is asked whole, at once. */
+    free_bytes = 30 * 1024;
+    catalog.pace = WEB_AT_ONCE;
+    response_status = "";
+    CHECK(answer_route(&request) == ESP_OK && waited == 1);
+    CHECK(strcmp(response_status, "503 Service Unavailable") == 0);
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals + 2);
     free_bytes = 100 * 1024;
 
     const web_route_t status = ROUTES[1];

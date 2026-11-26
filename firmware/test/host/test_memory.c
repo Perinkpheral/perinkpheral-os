@@ -91,6 +91,18 @@ static void test_peeking(void)
     CHECK(!memory_peek(MEMORY_FOR_A_GLYPH_PACK));
     memory_read(&after);
     CHECK(after.refusals == before.refusals);
+    /* Room seen by a look ends a refused period: no restart ten minutes on. */
+    int restarts_before = restarts;
+    free_bytes = 50 * KB;
+    block_bytes = 17 * KB;
+    CHECK(!memory_has(MEMORY_FOR_A_SESSION));
+    free_bytes = 60 * KB;
+    CHECK(memory_peek(MEMORY_FOR_A_SESSION));
+    free_bytes = 50 * KB; /* a session of the poller's own, when the look comes */
+    at_second(100000);
+    memory_look();
+    CHECK(restarts == restarts_before);
+    memory_read(&before);
     /* The counted question still counts, once, on the same short heap. */
     CHECK(!memory_has(MEMORY_FOR_A_SESSION));
     memory_read(&after);

@@ -103,7 +103,11 @@ bool memory_peek(memory_need_t need)
     if (need == MEMORY_FOR_A_GLYPH_PACK) {
         return glyph_pack_room(GLYPHS_PACK_MAX_BYTES);
     }
-    return room_for(need);
+    bool has = room_for(need);
+    if (has && need == MEMORY_FOR_A_SESSION) {
+        s_session_refused_since_s = 0; /* room seen is the end of a refused period */
+    }
+    return has;
 }
 
 bool memory_has(memory_need_t need)

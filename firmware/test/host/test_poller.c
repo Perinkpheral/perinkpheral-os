@@ -58,13 +58,14 @@ unsigned ulTaskNotifyTake(int clear, TickType_t timeout)
     return 0;
 }
 int64_t esp_timer_get_time(void) { return clock_ms * US_PER_MS; }
-bool memory_has(memory_need_t need)
+static int counted_asks; /* memory_has: the question that counts a refusal */
+bool memory_peek(memory_need_t need)
 {
     if (need == MEMORY_FOR_A_SESSION) return session_memory;
     if (need == MEMORY_FOR_A_PAGE) return page_memory;
     return true;
 }
-bool memory_peek(memory_need_t need) { return memory_has(need); }
+bool memory_has(memory_need_t need) { counted_asks++; return memory_peek(need); }
 bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
 void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }
@@ -506,8 +507,11 @@ static void test_local_failure_keeps_pace(void)
         CHECK(schedule_installed() == 1);
         advance_to(0);
         session_memory = false;
+        counted_asks = 0;
         for (int look = 1; look < MEMORY_LOOKS_MAX; look++) CHECK(!run_wanted_poll());
+        CHECK(counted_asks == 0); /* looking while waiting is not a refusal */
         CHECK(run_wanted_poll());
+        CHECK(counted_asks == 1); /* the giving up is, once */
         CHECK(network.phase == WIFI_PHASE_ONLINE && network.was_reached);
         session_memory = true;
         poller_network_is_back();

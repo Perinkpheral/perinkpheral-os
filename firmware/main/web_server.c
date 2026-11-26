@@ -414,10 +414,14 @@ static esp_err_t answer_route(httpd_req_t *request)
     /* A waiting route's session is the poller's to begin: it follows the
      * poll in progress, and the poller asks for its room then (run_fetch_job).
      * Asked here, on arrival, the question is answered by that poll's own
-     * session and refuses a request that only had to wait its turn. */
-    bool session_follows = route->pace == WEB_WAITS && route->memory == MEMORY_FOR_A_SESSION;
-    if (route->memory != WEB_NO_MEMORY_NEED && !session_follows &&
-        !web_server_has_memory(request, route->memory)) {
+     * session and refuses a request that only had to wait its turn. What the
+     * handler takes itself before that - a body, the list of applications -
+     * is a page's worth, which a session in progress leaves. */
+    memory_need_t need = route->memory;
+    if (route->pace == WEB_WAITS && need == MEMORY_FOR_A_SESSION) {
+        need = MEMORY_FOR_A_PAGE;
+    }
+    if (need != WEB_NO_MEMORY_NEED && !web_server_has_memory(request, need)) {
         return ESP_OK;
     }
     if (route->pace == WEB_WAITS) {

@@ -480,9 +480,11 @@ static bool run_fetch_job(void)
             rest();
             return true;
         }
-        /* Waited out the wait: the refusal, the only one counted here. */
-        memory_has(MEMORY_FOR_A_SESSION);
-        job->http_status = HOST_FAILED_NO_MEMORY;
+        /* Waited out the wait: the last look, counted when it is the refusal. */
+        has_room = memory_has(MEMORY_FOR_A_SESSION);
+        if (!has_room) {
+            job->http_status = HOST_FAILED_NO_MEMORY;
+        }
     }
 
     /* The waiting caller keeps the job, callback and context alive until
@@ -591,9 +593,9 @@ static bool has_waited_for_memory_enough(void)
     }
     s_memory_looks = 0;
     /* The giving up is the refusal, and the only one counted: the looks
-     * that led here were waiting, not refusing. */
-    memory_has(MEMORY_FOR_A_SESSION);
-    return true;
+     * that led here were waiting, not refusing. Room at this last look is
+     * no giving up: the caller looks again and finds it. */
+    return !memory_has(MEMORY_FOR_A_SESSION);
 }
 
 /* Whether anything is waiting for the network now. */

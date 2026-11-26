@@ -40,7 +40,8 @@ void memory_start(void);
 bool memory_has(memory_need_t need);
 
 /* The same question, uncounted: for whoever waits and asks again, where a
- * look is not yet a refusal. The counted one belongs at the giving up. */
+ * look is not yet a refusal. The counted one belongs at the giving up.
+ * Room seen for a session ends a refused period, as with memory_has(). */
 bool memory_peek(memory_need_t need);
 
 /* The declared upload size plus compaction and the page's spare heap.
