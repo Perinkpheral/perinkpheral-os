@@ -410,13 +410,6 @@ static app_load_result_t load_module(app_t *app, const uint8_t *wasm, size_t was
         m3_FreeModule(module);
         return load_result == m3Err_mallocFailed ? APP_ERR_NO_MEMORY : APP_ERR_BAD_MODULE;
     }
-#ifdef d_m3ApplicationArea
-    /* The module's memory is the area's page exactly: a module linked for
-     * another page size would take what the interpreter needs. */
-    if (m3_GetMemorySize(app->runtime) != M3_AREA_PAGE_BYTES) {
-        return APP_ERR_BAD_MODULE;
-    }
-#endif
     return link_host_api(module) ? APP_OK : APP_ERR_OTHER_API;
 }
 

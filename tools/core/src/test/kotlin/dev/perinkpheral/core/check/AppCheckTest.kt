@@ -424,9 +424,6 @@ object AppCheckTest {
         check(AppCheck.applies("network", emptySet(), emptySet(), mapOf("polls" to listOf(mapOf("url" to "https://a")))))
         check(!AppCheck.applies("network", setOf("poll_run"), emptySet(), emptyMap<String, Any>()))
         check(!AppCheck.applies("drawing", emptySet(), setOf("app_on_load"), emptyMap<String, Any>()))
-        // A module whose stack and data fill the page leaves app_alloc() nothing, not the default.
-        check(AppCheck.arenaBytes(BuildFlags.WASM_PAGE - 6L) == 0L && AppCheck.arenaBytes(BuildFlags.WASM_PAGE.toLong()) == 0L)
-        check(AppCheck.arenaBytes(24000) == BuildFlags.WASM_PAGE - 24000L && AppCheck.arenaBytes(0) == -1L)
 
         val root = generateSequence(File(System.getProperty("user.dir")).canonicalFile) { it.parentFile }
             .first { File(it, "sdk/host_api.h").isFile }

@@ -234,9 +234,10 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
                 throw BuildError("the module imports $moduleName.$name, which Perinkpheral OS does not offer")
             }
         }
-        if (module.memoryBytes != BuildFlags.WASM_PAGE.toLong()) {
-            throw BuildError("the module's memory is ${module.memoryBytes} bytes, it must be exactly " +
-                "one page of ${BuildFlags.WASM_PAGE}")
+        val memoryBytes = module.memoryBytes ?: throw BuildError("the module has no memory")
+        if (memoryBytes > BuildFlags.WASM_PAGE || module.memory?.second != module.memory?.first) {
+            throw BuildError("the module's memory is $memoryBytes bytes: it must not grow and must be " +
+                "at most ${BuildFlags.WASM_PAGE}")
         }
     }
 
@@ -353,13 +354,14 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         val running = INTERPRETER_BASE_BYTES + INTERPRETER_BYTES_PER_CODE_BYTE * code + if (drawsMaps) MAP_WORKING_BYTES else 0
         say("${wasm.path}: $moduleBytes bytes, ${module.imports.size} Perinkpheral OS calls")
         say("  module  ${kb(moduleBytes)} of ${kb(moduleMax)}")
-        say("  code    ${kb(code)}; running it takes about ${kb(running)} of the interpreter's ${kb(INTERPRETER_ROOM_BYTES)}" +
+        val memory = module.memoryBytes ?: 0L
+        say("  code    ${kb(code)}; running it takes about ${kb(running)}" +
             if (drawsMaps) ", ${kb(MAP_WORKING_BYTES)} of it while gfx_draw_map() draws" else "")
         if (memoryEnd > 0) {
-            say("  memory  ${kb(memoryEnd)} of ${kb(BuildFlags.WASM_PAGE.toLong())}: " +
-                "${kb(BuildFlags.APP_STACK.toLong())} of stack, ${kb(memoryEnd - BuildFlags.APP_STACK)} of data; " +
-                "${kb(BuildFlags.WASM_PAGE - memoryEnd)} left for app_alloc()")
+            say("  memory  ${kb(memory)} of at most ${kb(BuildFlags.WASM_PAGE.toLong())}: " +
+                "${kb(BuildFlags.APP_STACK.toLong())} of stack, ${kb(memory - BuildFlags.APP_STACK)} of data")
         }
+        say("  area    about ${kb(memory + running)} of ${kb(BuildFlags.APP_AREA.toLong())}: the memory and the running code together")
         if (filesBytes > 0 || filesLimit == writerFilesMax) say("  files   ${kb(filesBytes)} of ${kb(filesLimit)}")
         if (settingsBytes > 0) {
             say("  store   its settings at their longest take ${kb(settingsBytes)} of ${kb(sdk.storeMax)}")
@@ -370,7 +372,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             say("  warning: estimated interpreter use exceeds 64 KB; if the application needs the larger arena, " +
                 "declare \"firmware\": \"$LARGER_ARENA_FIRMWARE\" (estimate is advisory, not peak use)")
         }
-        if (running > INTERPRETER_ROOM_BYTES) say("  warning: this much code may not fit when all of it runs")
+        if (memory + running > BuildFlags.APP_AREA) say("  warning: this much memory and code may not fit when all of the code runs")
     }
 
     companion object {
@@ -401,7 +403,6 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         // for any application, and about four bytes for every byte of the code section.
         private const val INTERPRETER_BASE_BYTES = 11L * 1024
         private const val INTERPRETER_BYTES_PER_CODE_BYTE = 4L
-        private const val INTERPRETER_ROOM_BYTES = 80L * 1024
         private const val PREVIOUS_INTERPRETER_ROOM_BYTES = 64L * 1024
         private const val LARGER_ARENA_FIRMWARE = "0.1.95"
         /** MAP_SCRATCH_BYTES of firmware/components/map/include/map.h. */

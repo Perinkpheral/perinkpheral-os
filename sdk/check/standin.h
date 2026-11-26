@@ -118,7 +118,6 @@ typedef struct {
     int32_t                  zone_offset; /* before the first change */
     const standin_zone_change_t *zone_changes;
     int32_t                  zone_change_count;
-    int32_t                  arena_bytes; /* what the module's page leaves for app_alloc(); negative: 32 KB */
     const standin_pair_t    *store;
     int32_t                  store_count;
     const standin_answer_t  *answers;

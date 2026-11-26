@@ -7,6 +7,8 @@
  * answers one question about the host API.
  */
 #include "app_alloc.h"
+
+APP_ALLOC_ARENA(4096);
 #include "app_values.h"
 #include "host_api.h"
 #include "json_pick.h"

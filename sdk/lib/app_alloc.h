@@ -4,10 +4,15 @@
  *
  * Arena allocator for application memory.
  *
- * An application has one 32 KB page. The stack and the static data take
- * its beginning (tools/perinkpheral build reports the size). The rest is the arena.
+ * An application's memory is as large as its stack and static data
+ * (tools/perinkpheral build reports the size), and cannot grow. The arena is
+ * part of that data: an application that allocates declares its size once,
+ * in one source file, with APP_ALLOC_ARENA(bytes). Without the declaration
+ * the application does not link.
  * Allocations are sequential and are released together, back to a mark.
  * There is no free() for a single allocation.
+ *
+ *     APP_ALLOC_ARENA(4096);
  *
  *     int32_t   before = app_alloc_mark();
  *     event_t  *events = app_alloc(count * sizeof *events);
@@ -18,6 +23,11 @@
 #pragma once
 
 #include <stdint.h>
+
+/* Declares the arena of `bytes` bytes. Once, at file scope. */
+#define APP_ALLOC_ARENA(bytes)                                  \
+    _Alignas(8) unsigned char app_alloc_arena[(bytes)];         \
+    const int32_t             app_alloc_arena_bytes = (bytes)
 
 /* Returns `bytes` of memory, aligned to eight bytes, or NULL if the arena
  * is too small. The memory is not zeroed. */

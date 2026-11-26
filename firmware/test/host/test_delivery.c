@@ -167,9 +167,9 @@ static void install_probe(void)
     snprintf(path, sizeof path, "%s/probe", root);
     mkdir(path, 0755);
     snprintf(path, sizeof path, "%s/probe/app.wasm", root);
-    copy_file("build/probe/app.wasm", path);
+    copy_file("../../../sdk/abi/3/probe/app.wasm", path);
     snprintf(path, sizeof path, "%s/probe/manifest.json", root);
-    copy_file("apps/probe/manifest.json", path);
+    copy_file("../../../sdk/abi/3/probe/manifest.json", path);
 
     app_manifest_t manifest;
     CHECK(app_store_list(root, &manifest, 1) == 1);
@@ -284,24 +284,6 @@ static void test_missing_application_area(void)
     words_use("en");
     start_on(&menu.scene);
     area_available = true;
-    start_on(probe);
-    CHECK(app_scene_app(probe) != NULL);
-}
-
-/* The frozen ABI 3 package was linked for a 64 KB page. The application
- * area belongs to the interpreter as much as to the application, so a
- * module that would take a whole page of its own is refused before it
- * runs - the break the 32 KB page made, kept honest by the fixture. */
-static void test_frozen_module_refused(void)
-{
-    start_on(&menu.scene);
-    size_t module_size;
-    uint8_t *module = app_store_read_module("../../../sdk/abi/3", "probe", &module_size);
-    CHECK(module != NULL);
-    app_t *loaded = NULL;
-    CHECK(app_load("probe", 3, module, module_size, 0, &SERVICES, &loaded) == APP_ERR_BAD_MODULE);
-    CHECK(loaded == NULL);
-    free(module);
     start_on(probe);
     CHECK(app_scene_app(probe) != NULL);
 }
@@ -777,6 +759,9 @@ static void test_a_scene_that_is_not_an_application(void)
 
 static void test_scene_state_lifetime(void)
 {
+    char path[128];
+    snprintf(path, sizeof path, "%s/probe/app.wasm", root);
+    copy_file("build/probe/app.wasm", path);
     start_on(probe);
     app_button(app_scene_app(probe), 13, BTN_PRESSED);
     wm_suspend(&wm);
@@ -799,6 +784,7 @@ static void test_scene_state_lifetime(void)
     app_draw(app_scene_app(probe), &surface);
     CHECK(!gfx_get(&surface, 2, 61));
     wm_close(&wm, probe);
+    copy_file("../../../sdk/abi/3/probe/app.wasm", path);
 }
 
 static void count_notification(void *context)
@@ -848,12 +834,12 @@ static void test_notification_consumption(void)
     probe->ops->leave(probe);
 }
 
-static int32_t settings_file_read(const char *name, const char *file, int32_t offset,
-                                  void *bytes, int32_t capacity)
+static int32_t frozen_file_read(const char *name, const char *file, int32_t offset,
+                                 void *bytes, int32_t capacity)
 {
     (void)name;
     char path[256];
-    snprintf(path, sizeof path, "build/settings/%s", file);
+    snprintf(path, sizeof path, "../../../sdk/abi/3/settings/%s", file);
     FILE *input = fopen(path, "rb");
     if (input == NULL) {
         return HOST_ERR_NOT_FOUND;
@@ -864,19 +850,19 @@ static int32_t settings_file_read(const char *name, const char *file, int32_t of
     return (int32_t)length;
 }
 
-static int32_t settings_file_size(const char *name, const char *file)
+static int32_t frozen_file_size(const char *name, const char *file)
 {
     (void)name;
     char path[256];
-    snprintf(path, sizeof path, "build/settings/%s", file);
+    snprintf(path, sizeof path, "../../../sdk/abi/3/settings/%s", file);
     struct stat info;
     return stat(path, &info) == 0 ? (int32_t)info.st_size : HOST_ERR_NOT_FOUND;
 }
 
 static const char *fixture_language;
-static const char *fixture_language_get(void) { return fixture_language; }
+static const char *frozen_language(void) { return fixture_language; }
 
-static int32_t fixture_setting_get(const char *key, char *value, int32_t capacity)
+static int32_t frozen_setting_get(const char *key, char *value, int32_t capacity)
 {
     if (strcmp(key, SYS_KEY_LANGUAGE) != 0) {
         return HOST_ERR_NOT_FOUND;
@@ -888,24 +874,20 @@ static int32_t fixture_setting_get(const char *key, char *value, int32_t capacit
     return 2;
 }
 
-/* The settings application, as this firmware builds it, answers in the
- * language the person chose. The frozen ABI 3 package cannot be used
- * here: it was linked for a 64 KB page, which this host refuses (see
- * test_frozen_module_refused). */
-static void test_settings_translation(void)
+static void test_frozen_settings_translation(void)
 {
     start_on(&menu.scene);
-    char *text = app_store_read_manifest("build", "settings");
+    char *text = app_store_read_manifest("../../../sdk/abi/3", "settings");
     app_manifest_t manifest;
     CHECK(text != NULL && app_manifest_parse(text, &manifest) == APP_MANIFEST_OK);
     free(text);
     CHECK(manifest.abi == 3 && manifest.system);
     app_services_t services = SERVICES;
-    services.language = fixture_language_get;
-    services.file_read = settings_file_read;
-    services.file_size = settings_file_size;
-    services.system_setting_get = fixture_setting_get;
-    scene_t *settings = app_scene_create(&manifest, "build", &services);
+    services.language = frozen_language;
+    services.file_read = frozen_file_read;
+    services.file_size = frozen_file_size;
+    services.system_setting_get = frozen_setting_get;
+    scene_t *settings = app_scene_create(&manifest, "../../../sdk/abi/3", &services);
     CHECK(settings != NULL);
     static uint8_t english[(400 * 260 / 8)], russian[(400 * 260 / 8)];
     gfx_t surface;
@@ -1092,8 +1074,7 @@ int main(void)
     install_probe();
     test_manifest_ownership();
     test_missing_application_area();
-    test_frozen_module_refused();
-    test_settings_translation();
+    test_frozen_settings_translation();
     test_notification_consumption();
     test_on_the_screen();
     test_foreground_stream_interrupted_by_another_owner();

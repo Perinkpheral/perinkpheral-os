@@ -553,7 +553,7 @@ static standin_stored_file_t *file_of(const char *name, int32_t length)
     return NULL;
 }
 
-#define WASM_PAGE_BYTES 32768
+#define WASM_PAGE_BYTES 65536
 
 static int32_t blocks_of(int32_t size)
 {
@@ -2653,21 +2653,21 @@ int32_t ui_draw_date(const host_date_t *date)
     return HOST_OK;
 }
 
-/* ---- The SDK's arena (sdk/lib/app_alloc.h), which on the device is what the
- * module's page has left: here a room of its own, as large as the built module leaves ---- */
+/* ---- The SDK's arena (sdk/lib/app_alloc.h): as large as the application
+ * declared it with APP_ALLOC_ARENA(), none without the declaration ---- */
 
-#define ARENA_BYTES     (32 * 1024)
+#define ARENA_BYTES     (64 * 1024)
 #define ARENA_ALIGNMENT 8
 
 static _Alignas(ARENA_ALIGNMENT) uint8_t arena[ARENA_BYTES];
 static int32_t arena_taken;
 
-/* What the tools read off the built module (the end of its data), or the whole room. */
+/* The application's declaration overrides this one, which stands for none. */
+__attribute__((weak)) const int32_t app_alloc_arena_bytes = 0;
+
 static int32_t arena_bytes(void)
 {
-    /* Negative: the tools could not tell, and the whole page is the arena's. */
-    return standin_subject.arena_bytes >= 0 && standin_subject.arena_bytes <= ARENA_BYTES ? standin_subject.arena_bytes
-                                                                                          : ARENA_BYTES;
+    return app_alloc_arena_bytes >= 0 && app_alloc_arena_bytes <= ARENA_BYTES ? app_alloc_arena_bytes : 0;
 }
 
 int32_t app_alloc_left(void)

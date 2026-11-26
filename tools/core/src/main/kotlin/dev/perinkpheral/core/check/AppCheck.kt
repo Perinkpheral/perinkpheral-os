@@ -405,7 +405,6 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 }
                 appendLine("};")
             }
-            val arena = arenaBytes(built.memoryEnd)
             val intents = (manifest["intents"] as? List<*>).orEmpty().sumOf { 1 shl (INTENTS.indexOf(it) + 1) }
             appendLine()
             appendLine("const standin_subject_t standin_subject = {")
@@ -424,7 +423,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (mutations.isNotEmpty()) appendLine("    .mutations = MUTATIONS, .mutation_count = ${mutations.size},")
             if (probeValues.isNotEmpty()) appendLine("    .clock_probes = CLOCK_PROBES, .clock_probe_count = ${probeValues.size},")
             appendLine("    .zones = CLOCK_ZONES, .zone_count = ${profiles.size},")
-            appendLine("    .intents = $intents, .at = ${at}LL, .zone_offset = $zone, .arena_bytes = $arena,")
+            appendLine("    .intents = $intents, .at = ${at}LL, .zone_offset = $zone,")
             appendLine("};")
             if (exports != null) {
                 appendLine()
@@ -497,7 +496,6 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
         private const val MANIFEST = "manifest.json"
         private const val MODULE = "app.wasm"
         /** wasm-ld puts __heap_base, where app_alloc() begins, on 16 bytes after the data. */
-        private const val HEAP_ALIGNMENT = 16L
         private const val ZONE_YEARS_BEFORE = 2L
         private const val ZONE_YEARS_AFTER = 3L
         private const val SECONDS_A_YEAR = 366L * 24 * 3600
@@ -521,13 +519,6 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             "-Wno-attributes", "-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-fno-omit-frame-pointer",
             "-DHOST_IMPORT(name,...)=__VA_ARGS__", "-DAPP_EXPORT(name,...)=__VA_ARGS__")
         private val LIBRARIES = listOf("-lm")
-
-        /** What app_alloc() has of the page after the module's stack and data, which end at
-         * `memoryEnd`: none when they fill it. Negative when the build could not say where they
-         * end, which the stand-in host takes for the whole page. */
-        fun arenaBytes(memoryEnd: Long): Long =
-            if (memoryEnd <= 0) -1L
-            else maxOf(0L, BuildFlags.WASM_PAGE - (memoryEnd + HEAP_ALIGNMENT - 1) / HEAP_ALIGNMENT * HEAP_ALIGNMENT)
 
         /** Which applications a capability is checked on. Every application is loaded and unloaded;
          * the rest is what its module asks of the host. */
