@@ -85,11 +85,6 @@ typedef bool (*poller_take_fn)(void *context, const uint8_t *piece, size_t lengt
 bool poller_fetch(const char *url, size_t max_bytes, poller_take_fn take, void *context,
                   int *http_status);
 
-/* A web request is waiting for room to start a network session: while it
- * does, the poller holds its own polls back, so the browser's work goes
- * through first. The web server says when. From any task. */
-void poller_web_waits_for_session(bool waits);
-
 #ifdef __cplusplus
 }
 #endif

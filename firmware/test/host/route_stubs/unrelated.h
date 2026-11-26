@@ -53,7 +53,6 @@
 #pragma weak ota_enter_recovery
 #pragma weak poller_fetch
 #pragma weak poller_hurry
-#pragma weak poller_web_waits_for_session
 #pragma weak power_hold_radio
 #pragma weak power_release_radio
 #pragma weak settings_change

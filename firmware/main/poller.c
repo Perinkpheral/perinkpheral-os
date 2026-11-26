@@ -34,7 +34,6 @@
 #include "text_template.h"
 #include "wifi.h"
 #include "units.h"
-#include <stdatomic.h>
 
 /* What ties the polls to the host: which are wanted (poll_schedule.c),
  * when each is due (a deadline), the one task that asks the network
@@ -54,16 +53,6 @@ static const char *TAG = "poller";
  * request waits for a better moment instead of taking the device down. */
 /* And its largest buffer is one piece of 16 KB: the sum is not enough. */
 #define NO_APP               0 /* no application has this id */
-
-/* A browser request waiting for room for a session: its own waiting is
- * short and bounded, so the polls give way rather than keep a person
- * looking at "Device busy". */
-static atomic_bool s_web_waits_for_session;
-
-void poller_web_waits_for_session(bool waits)
-{
-    atomic_store(&s_web_waits_for_session, waits);
-}
 
 static poll_schedule_t   s_schedule;
 /* The installed applications as the poller last took them: its own copy,
@@ -477,16 +466,11 @@ static bool run_fetch_job(void)
         rest();
         return true;
     }
-    bool yields = online && atomic_load(&s_web_waits_for_session);
-    bool has_room = online && !yields && memory_peek(MEMORY_FOR_A_SESSION);
+    /* Looking while waiting is not a refusal: that is counted once, below. */
+    bool has_room = online && memory_peek(MEMORY_FOR_A_SESSION);
     if (online && !has_room) {
         if (job->wait_until_ms == 0) {
             job->wait_until_ms = now + FETCH_MEMORY_WAIT_MS;
-        }
-        if (yields) {
-            /* The browser goes first; its waiting does not use up this
-             * job's own, which is bounded by the browser's end. */
-            job->wait_until_ms = now + MEMORY_LOOK_AGAIN_MS;
         }
         if (now < job->wait_until_ms) {
             int64_t left = job->wait_until_ms - now;
@@ -591,9 +575,6 @@ static int s_memory_looks;
 
 static bool has_memory_for_session(void)
 {
-    if (atomic_load(&s_web_waits_for_session)) {
-        return false; /* the browser's request goes first; this is not a look */
-    }
     if (memory_peek(MEMORY_FOR_A_SESSION)) {
         s_memory_looks = 0;
         return true;

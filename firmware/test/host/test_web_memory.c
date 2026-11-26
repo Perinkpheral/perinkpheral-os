@@ -112,15 +112,17 @@ bool glyphs_install(const uint8_t *pack, size_t size)
 bool glyphs_remove(const char *name) { (void)name; CHECK(false); return false; }
 void host_redraw(bool full) { (void)full; }
 
-/* The waiting branch is not involved in these synchronous routes. */
+/* The waiting branch runs at once here, and only where a test expects it. */
+static bool waits_expected;
+static int  waited;
+static esp_err_t waited_handler(httpd_req_t *request) { (void)request; waited++; return ESP_OK; }
 esp_err_t httpd_req_async_handler_begin(httpd_req_t *request, httpd_req_t **copy)
-{ (void)request; (void)copy; CHECK(false); return ESP_FAIL; }
+{ CHECK(waits_expected); *copy = request; return ESP_OK; }
 esp_err_t httpd_req_async_handler_complete(httpd_req_t *request) { (void)request; return ESP_OK; }
 void web_connections_complete(httpd_req_t *request, esp_err_t result) { (void)request; (void)result; }
 void vTaskDelete(void *task) { (void)task; }
-void vTaskDelay(unsigned ticks) { (void)ticks; CHECK(false); }
 int xTaskCreate(void (*task)(void *), const char *name, unsigned stack, void *argument, unsigned priority, void *handle)
-{ (void)task; (void)name; (void)stack; (void)argument; (void)priority; (void)handle; CHECK(false); return 0; }
+{ (void)name; (void)stack; (void)priority; (void)handle; CHECK(waits_expected); task(argument); return pdPASS; }
 int heap_caps_register_failed_alloc_callback(void (*callback)(size_t, uint32_t, const char *))
 { (void)callback; return 0; }
 bool deadlines_set_in(deadline_kind_t kind, uint32_t owner, int number, int64_t in_ms)
@@ -160,6 +162,31 @@ int main(void)
     CHECK(answer_route(&request) == ESP_OK);
     CHECK(strcmp(response_status, "200 OK") == 0);
     CHECK(pack_allocations == 2 && received_chunks == 1 && installs == 1);
+
+    /* A waiting route's session follows the poll in progress, and the poller
+     * asks for its room then: on arrival it is neither refused nor counted. */
+    /* The production route's declaration, with a handler of the test's own. */
+    web_route_t catalog = { .uri = WEB_APPS_ROUTES[8].uri, .method = WEB_APPS_ROUTES[8].method,
+                            .handler = waited_handler, .memory = WEB_APPS_ROUTES[8].memory,
+                            .scope = WEB_APPS_ROUTES[8].scope, .pace = WEB_APPS_ROUTES[8].pace };
+    CHECK(strcmp(catalog.uri, "/api/catalog") == 0 && catalog.method == HTTP_GET);
+    CHECK(catalog.memory == MEMORY_FOR_A_SESSION && catalog.pace == WEB_WAITS);
+    request = (httpd_req_t){ .user_ctx = (void *)&catalog };
+    memory_counts_t before, after;
+    memory_read(&before);
+    free_bytes = 30 * 1024;
+    waits_expected = true;
+    CHECK(answer_route(&request) == ESP_OK && waited == 1);
+    waits_expected = false;
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals);
+    /* The same need on the server's own task is refused at once, and counted. */
+    catalog.pace = WEB_AT_ONCE;
+    CHECK(answer_route(&request) == ESP_OK && waited == 1);
+    CHECK(strcmp(response_status, "503 Service Unavailable") == 0);
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals + 1);
+    free_bytes = 100 * 1024;
 
     const web_route_t status = ROUTES[1];
     CHECK(strcmp(status.uri, "/api/status") == 0 && status.method == HTTP_GET);
