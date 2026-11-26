@@ -51,6 +51,15 @@
 #define OFF_THE_SURFACE     300
 #define HUGE                2000000000
 
+/* One past the last byte of this module's memory: the bound every pointer
+ * check here leans on. The project links applications with one-byte pages,
+ * so `memory.size` already counts bytes; a module linked for another page
+ * size would say otherwise, and the host would refuse it before loading. */
+static size_t memory_end(void)
+{
+    return (size_t)__builtin_wasm_memory_size(0);
+}
+
 static int32_t presses;
 static int32_t fired_timer = -1;
 static int32_t result_outside_draw;
@@ -250,15 +259,15 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
             same_bytes(realm, "router") &&
             answer_header("set-cookie", 10, 2, second, sizeof second) == HOST_ERR_NOT_FOUND &&
             answer_header("empty", 5, 0, second, 0) == 0 &&
-            answer_header("empty", 5, 0, (char *)65536, 0) == 0 &&
+            answer_header("empty", 5, 0, (char *)memory_end(), 0) == 0 &&
             answer_header("set-cookie", 10, 0, guard, sizeof guard) == HOST_ERR_NO_SPACE &&
             guard[0] == 'k' && guard[3] == 'p' &&
             answer_header("set-cookie", 10, -1, second, sizeof second) == HOST_ERR_ARGUMENT &&
             answer_header("set-cookie", 10, 0, second, -1) == HOST_ERR_ARGUMENT &&
             answer_header("set-cookie", -1, 0, second, sizeof second) == HOST_ERR_ARGUMENT &&
             answer_header("bad name", 8, 0, second, sizeof second) == HOST_ERR_ARGUMENT &&
-            answer_header((char *)65534, 10, 0, second, sizeof second) == HOST_ERR_ARGUMENT &&
-            answer_header("set-cookie", 10, 0, (char *)65534, 7) == HOST_ERR_ARGUMENT) {
+            answer_header((char *)(memory_end() - 2), 10, 0, second, sizeof second) == HOST_ERR_ARGUMENT &&
+            answer_header("set-cookie", 10, 0, (char *)(memory_end() - 2), 7) == HOST_ERR_ARGUMENT) {
             screen_request();
         }
         return;
@@ -315,7 +324,7 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
             prefix.status == 304 && prefix.length == 12345 &&
             zero_bytes == 0 && prefix_unchanged &&
             answer_info(&prefix, -1) == HOST_ERR_ARGUMENT &&
-            answer_info((host_answer_info_t *)65534, 4) == HOST_ERR_ARGUMENT &&
+            answer_info((host_answer_info_t *)(memory_end() - 2), 4) == HOST_ERR_ARGUMENT &&
             output.response.status == 304 &&
             output.response.length == -1 && output.response.retry_after == 30 &&
             same_bytes(output.response.etag, "\"v7\"") && output.response.link[0] == '\0') {
@@ -428,7 +437,8 @@ static bool memory_is_handed_out(void)
     int32_t  before = app_alloc_mark();
     uint8_t *first = app_alloc(100);
     int64_t *second = app_alloc(sizeof(int64_t));
-    if (first == NULL || second == NULL || left_at_first < 1024 || left_at_first >= 65536) {
+    if (first == NULL || second == NULL || left_at_first < 1024 ||
+        (size_t)left_at_first >= memory_end()) {
         return false;
     }
     for (int32_t i = 0; i < 100; i++) {
@@ -730,8 +740,8 @@ void app_on_draw(void)
         mark(16, ROW_LOCAL_TIME);
     }
     moment = 12345;
-    if (time_from_local((const host_local_time_t *)65534, &moment) == HOST_ERR_ARGUMENT &&
-        moment == 12345 && time_from_local(&then, (int64_t *)65534) == HOST_ERR_ARGUMENT) {
+    if (time_from_local((const host_local_time_t *)memory_end(), &moment) == HOST_ERR_ARGUMENT &&
+        moment == 12345 && time_from_local(&then, (int64_t *)memory_end()) == HOST_ERR_ARGUMENT) {
         mark(18, ROW_LOCAL_TIME);
     }
     static const int64_t invalid_moments[] = {
