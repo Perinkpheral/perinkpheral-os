@@ -99,7 +99,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
 
     private fun hostObjects(into: File): Host {
         into.mkdirs()
-        // The module's own C library and its arena over the module's page are the device's:
+        // The module's own C library and its arena in the module's data are the device's:
         // this computer has a C library, and the stand-in host has the arena.
         val library = sdk.library.listFiles().orEmpty()
             .filter { it.isFile && it.name.endsWith(".c") && it.name !in DEVICE_ONLY }.sortedBy { it.path }
@@ -495,7 +495,6 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
 
         private const val MANIFEST = "manifest.json"
         private const val MODULE = "app.wasm"
-        /** wasm-ld puts __heap_base, where app_alloc() begins, on 16 bytes after the data. */
         private const val ZONE_YEARS_BEFORE = 2L
         private const val ZONE_YEARS_AFTER = 3L
         private const val SECONDS_A_YEAR = 366L * 24 * 3600

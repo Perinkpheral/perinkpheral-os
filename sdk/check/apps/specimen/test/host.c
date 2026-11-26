@@ -17,6 +17,8 @@
 #include "standin.h"
 #include "app_alloc.h"
 
+APP_ALLOC_ARENA(64);
+
 static void test_arena_alignment(void)
 {
     app_alloc_release(0);

@@ -681,6 +681,13 @@ static void test_bad_modules(void)
     CHECK(app_load("x", HOST_API_VERSION, two_pages, sizeof two_pages, 0, &SERVICES, &app) == APP_ERR_BAD_MODULE);
     CHECK(app == NULL);
 
+    /* A memory of 65537 one-byte pages, initial and maximum: a byte more than an application gets */
+    static const uint8_t byte_over[] = { 0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+                                         0x05, 0x09, 0x01, 0x09, 0x81, 0x80, 0x04, 0x81, 0x80, 0x04, 0x00 };
+    app = (app_t *)1;
+    CHECK(app_load("x", HOST_API_VERSION, byte_over, sizeof byte_over, 0, &SERVICES, &app) == APP_ERR_BAD_MODULE);
+    CHECK(app == NULL);
+
     /* (module (type (func)) (import "host" "evil" (func (type 0)))) */
     static const uint8_t unknown_import[] = { 0x00, 'a',  's',  'm',  0x01, 0x00, 0x00, 0x00,
                                               0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x02, 0x0D,

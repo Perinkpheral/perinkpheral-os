@@ -432,7 +432,7 @@ void app_on_alarm(int32_t id)
 
 /* The arena of sdk/lib/app_alloc.h: pieces that do not overlap, at
  * addresses anything may stand at, given back to a mark, and no more of
- * them than the page has. */
+ * them than the arena declared. */
 static bool memory_is_handed_out(void)
 {
     int32_t  left_at_first = app_alloc_left();

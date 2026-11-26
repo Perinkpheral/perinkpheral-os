@@ -636,7 +636,7 @@ int32_t file_write(const char *name, int32_t name_length, int32_t offset, const 
     if (!standin_subject.writes_files || !is_file_name(name, name_length) || ends_with(name, name_length, ".new") ||
         is_named(name, name_length, "app.wasm") || is_named(name, name_length, "manifest.json") ||
         offset < 0 || length < 0 || (bytes == NULL && length > 0) ||
-        /* The device reads the bytes from the module's page (app_memory_at): no more than it has. */
+        /* The device reads the bytes from the module's memory (app_memory_at): no more than the most it has. */
         length > WASM_PAGE_BYTES || offset > HOST_FILES_MAX ||
         /* Nothing written somewhere but at the start is no removal: app_store.c refuses it. */
         (length == 0 && offset != 0)) {

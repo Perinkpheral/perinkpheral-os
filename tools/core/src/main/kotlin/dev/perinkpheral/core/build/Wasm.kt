@@ -21,7 +21,7 @@ class Wasm(file: File) {
     var memory: Pair<Long, Long?>? = null
         private set
     /** The wasm page size the module declares; the custom one-byte page lets
-     *  a module ask for a memory of any size, which is how a 32 KB page is. */
+     *  a module ask for a memory of any size, which is how a memory is sized to the byte. */
     var memoryPageSize = 65536L
         private set
     val memoryBytes: Long? get() = memory?.first?.times(memoryPageSize)
@@ -91,7 +91,11 @@ class Wasm(file: File) {
                     if (flags and 0xF6 != 0) throw BuildError("unsupported wasm memory")
                     val initial = unsigned()
                     val max = if (flags and 1 != 0) unsigned() else null
-                    if (flags and 8 != 0) memoryPageSize = 1L shl unsigned().toInt()
+                    if (flags and 8 != 0) {
+                        val log = unsigned()
+                        if (log > 16) throw BuildError("unsupported wasm memory page size")
+                        memoryPageSize = 1L shl log.toInt()
+                    }
                     memory = initial to max
                 }
                 7 -> repeat(count()) {

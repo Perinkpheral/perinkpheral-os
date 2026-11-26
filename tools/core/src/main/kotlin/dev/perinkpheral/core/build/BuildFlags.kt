@@ -28,7 +28,8 @@ object BuildFlags {
      *  as the stack and the data, which cannot grow. */
     val linker = listOf("-Wl,--no-entry", "-Wl,--strip-all", "-Wl,--gc-sections",
         "-Wl,--page-size=1", // one-byte pages: the memory is what is needed, to the byte
-        "-Wl,--no-growable-memory", "-Wl,-z,stack-size=$APP_STACK")
+        "-Wl,--no-growable-memory", "-Wl,-z,stack-size=$APP_STACK",
+        "-Wl,--stack-first") // the stack below the data: an overflow leaves the memory and traps
 
     /** The link step on its own, as a build system makes it: the driver has to hear again
      * that there is no C library and that the code is link-time optimized. */
