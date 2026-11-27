@@ -134,3 +134,40 @@ Round 3 removes the hooks, changes the bowl proportions and lowers Һ's shoulder
 to expose the left ascender. These are review candidates, not production acceptance.
 Cross-script equivalents such as Ѕ/S and һ/h retain their shared forms; the proofs
 include them explicitly.
+
+## Replacement candidates on the device, 2026-11-27: Jersey stays
+
+The owner asked for a second family whose heights match Departure Mono's (cap/x 8/6,
+16/12, 24/18, 32/24, 48/36, 80/60 px at Small, Text, Medium, Large, Display and Huge)
+and tried the candidates on the physical panel in two throwaway development builds,
+switching them from Settings > Appearance > Font. Latin and Russian were required;
+other letters were to be drawn by hand. The owner rejected every candidate; Jersey
+stays. Neither build is in this repository.
+
+First build - pixel fonts scaled from their own masters, descriptors set to the nearest
+Departure Mono ascent and descent (29 families screened, these five tried):
+
+| Candidate | License | Masters | Notes from the screening |
+|---|---|---|---|
+| Pixeloid Sans Bold 1.0 | SIL OFL 1.1 (RFN "Pixeloid") | one, cap/x 7/5 | О and 0 identical, З/3 close; blocks at the two largest sizes |
+| Ark Pixel proportional 10/12/16 | SIL OFL 1.1 | three, 7/5, 9/6, 11/8 | all pairs distinct; no bold weight |
+| Galmuri 9/11 Regular | SIL OFL 1.1 | two, 9/6, 11/8 | thin; Galmuri 9 has О/0 and З/3 identical |
+| Handjet Black, square elements | SIL OFL 1.1 | variable outline | strokes merge; 0 reads as 8 |
+| BoutiqueBitmap9x9 Bold 1.930 | SIL OFL 1.1 | one | serifed; clipped headers and Russian picker actions |
+
+Second build - outline fonts rasterized natively at every size with hinting and
+per-size thresholds, cap and x heights exactly Departure Mono's:
+
+| Candidate | License | Construction |
+|---|---|---|
+| PT Sans Caption Bold | SIL OFL 1.1 | weight 700 at every size |
+| Golos Text | SIL OFL 1.1 | weight 650 at every size |
+| IBM Plex Sans | SIL OFL 1.1 | weight 650 at every size |
+| Impactful Bits + Fira Sans | CC0 + SIL OFL 1.1 | pixel masters at Small and Text, Fira Sans SemiBold 600 above |
+
+Not tried on the device after screening: Pixelify Sans (no О and П), Silkscreen,
+Micro 5, Jacquard (no Russian), Tiny5 and its Bold, Mono and Duo variants, the
+monospaced bitmap families (Press Start 2P, DotGothic16, Monocraft, Cozette, Spleen,
+Terminus, Unifont, Fairfax), Fusion Pixel, LanaPixel, m5x7/m6x11, Zpix (license).
+Four outline candidates fill the main slot (2,017,248 of 2,097,152 bytes); five pixel
+candidates took 1,782,640.
