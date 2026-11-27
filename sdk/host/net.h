@@ -326,7 +326,12 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
 #define HOST_SINCE_document_buffer_set "0.1.100"
 HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, int32_t capacity));
 
-/* Opt-in notification after the final raw piece, for recognized formats.
+/* Opt-in notification for recognized formats, normally after the final raw piece.
+ * When no app_on_data handler consumes the response, a decided size error,
+ * missing document buffer (HOST_FAILED_NOT_READY) or non-2xx status is delivered
+ * before the body ends. The rest of the response is not read and no second
+ * document result is delivered. A live raw-piece consumer still receives the
+ * stream through its final piece, followed by the document result.
  * A successful 2xx body is complete and validated, in the registered buffer,
  * with the given length (no NUL). HEAD, 204 and 205 deliver the HTTP status
  * with zero bytes. It remains usable until the next answer
