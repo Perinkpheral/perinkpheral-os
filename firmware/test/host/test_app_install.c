@@ -14,6 +14,8 @@ static app_manifest_t present;
 static bool has_present, mutex_taken, marker, fail_commit, is_host;
 static bool change_id, change_source, turn_off, mismatch, interrupt_body, reject_body;
 static bool last_retryable, id_conflict;
+static bool certificate_valid = true;
+bool app_certificate_valid_file(const char *path) { (void)path; return certificate_valid; }
 static int network_error, downloads, opens, commits, radio_holds, approved_authorities;
 static appconf_t config;
 static char source_text[CATALOG_SOURCES_TEXT_MAX];
@@ -67,6 +69,18 @@ long app_store_files_bytes(const char *root, const char *name) {
         if (is_data_file(entry->d_name)) taken += bytes_in_blocks((double)app_store_file_size(root, name, entry->d_name));
     if (directory != NULL) closedir(directory);
     return taken;
+}
+bool app_store_is_generated_translation(const char *file) {
+    return strncmp(file, "strings.", 8) == 0 || (strncmp(file, "manifest.", 9) == 0 && strcmp(file, "manifest.json") != 0);
+}
+long app_store_retained_bytes(const char *root, const char *name) {
+    long bytes = app_store_files_bytes(root, name);
+    const char *tables[] = { "strings.en", "strings.ru", "manifest.ru" };
+    for (size_t index = 0; index < sizeof tables / sizeof tables[0]; index++) {
+        long size = app_store_file_size(root, name, tables[index]);
+        if (size > 0) bytes -= bytes_in_blocks((double)size);
+    }
+    return bytes;
 }
 void power_hold_radio(void) { radio_holds++; }
 void power_release_radio(void) { radio_holds--; }
@@ -201,6 +215,9 @@ int main(void) {
     approved_authorities = 2;
     CHECK_STR(run(false), "Not confirmed."); CHECK(commits == 0);
     approved_authorities = 1;
+    certificate_valid = false;
+    CHECK_STR(run(false), "Invalid certificate."); CHECK(commits == 0);
+    certificate_valid = true;
     CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
     reset(OLD);
     new_certificate = "authority bytes";
@@ -222,6 +239,9 @@ int main(void) {
     CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
     kept[sizeof kept - 2] = '\0'; /* a block less beside the package's: it fits */
     reset(OLD); new_manifest = WRITER; new_certificate = "data"; data_name = "new.dat"; put_file("old.dat", kept);
+    CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
+    reset(OLD); new_manifest = WRITER; new_certificate = "data"; data_name = "new.dat";
+    put_file("old.dat", kept); put_file("strings.ru", "obsolete table");
     CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
     /* What the application writes while the package is downloaded counts at the commit. */
     kept[sizeof kept - 2] = 'k'; /* six blocks and a byte again */

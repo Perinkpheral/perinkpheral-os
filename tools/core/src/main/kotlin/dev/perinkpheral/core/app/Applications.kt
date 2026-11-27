@@ -33,6 +33,8 @@ object Applications {
         val packed = Files.createTempDirectory("perinkpheral-app").toFile()
         try {
             val built = builder.build(appDir, packed)
+            // The module starts replacement and removes old generated translations;
+            // current tables follow it, then the manifest completes the package.
             for (file in AppBuilder.packageFiles(packed)) {
                 if (isCancelled()) throw InterruptedException("cancelled")
                 client.uploadAppFile(built.name, file, File(packed, file).readBytes())

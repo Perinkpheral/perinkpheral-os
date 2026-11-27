@@ -25,8 +25,9 @@
 /* Reads a value into `value`. Returns its length. A setting of the manifest
  * with nothing stored reads as its "default", a list's items with line
  * breaks between them. Omit a manifest default when absent; explicit null is
- * invalid. URL/link defaults need HTTP(S), a nonempty host, no userinfo and
- * an optional decimal port 1..65535. URL defaults have no path/query/fragment;
+ * invalid. Choice options are nonempty printable ASCII values; translated
+ * labels may use supported Unicode characters. URL/link defaults need HTTP(S),
+ * a nonempty host, no userinfo and an optional decimal port 1..65535. URL defaults have no path/query/fragment;
  * link defaults may include them and contain no spaces. Companion pages receive
  * effective non-secret, non-link values too: defaults for absent settings,
  * preserved stored empty values, and list defaults joined with line feeds. */
@@ -59,7 +60,9 @@ HOST_IMPORT(kv_set, int32_t kv_set(const char *key, int32_t key_length, const vo
  * file_write() also refuses app.wasm, every name beginning "manifest.",
  * and files listed in the manifest's "certificates" array.
  * A file supplied by an update replaces an existing file of the same
- * name, including one written by the application. At catalog
+ * name, including one written by the application. Generated strings.xx and
+ * manifest.xx language tables absent from a replacement package are removed;
+ * other files are retained. At catalog
  * installation the writer quota counts the manifest too; runtime writes
  * count data files only. */
 #define HOST_FILE_NAME_MAX    23

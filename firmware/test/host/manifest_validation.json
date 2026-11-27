@@ -1,0 +1,290 @@
+[
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"version\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"fullscreen\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"system\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"writes_files\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"certificates\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"icon\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"hosts\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"intents\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"firmware\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"description\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"format\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"author\": null}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"headers\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"pick\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"each\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"prefix\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"body\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"method\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"polls\": [{\"url\": \"https://example.test\", \"every\": 60, \"format\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"text\", \"help\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"text\", \"hidden\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"text\", \"options\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"text\", \"default\": null}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"é\"]}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"\"]}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"a\\n\"]}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"\"]}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"a\\t\"]}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"v\", \"title\": \"Value\", \"type\": \"choice\", \"options\": [\"hello ~\"]}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://example.test\"}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://example.test:443/path?q=x#z\"}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://127.0.0.1:1/\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://?x\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://#x\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https:///x\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://:443\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://user@example.test\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a:\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a:0\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a:65536\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a:no\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a:1:2\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a\\\\b\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a..b\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://-a.test\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a-.test\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"http://example.test\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"polls\":[{\"url\":\"https://example.test\",\"every\":60.5}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"polls\":[{\"url\":\"https://example.test\",\"every\":60.0}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"polls\":[{\"url\":\"https://example.test\",\"every\":1e2}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":9223372036854775807}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":-9223372036854775808}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":9223372036854775808}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":-9223372036854775809}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":1e2}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":0.00000001}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3,\"unknown\":[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://999.999.999.999\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://a.123\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://127.0.0.08\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://123\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test\"}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"pace\", \"type\": \"choice\", \"title\": \"Pace\", \"options\": [\"30 s!\"], \"default\": \"30 s!\"}], \"polls\": [{\"url\": \"https://example.test\", \"every\": \"{{pace}}\"}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"pace\", \"type\": \"choice\", \"title\": \"Pace\", \"options\": [\"30 smuggled\"], \"default\": \"30 smuggled\"}], \"polls\": [{\"url\": \"https://example.test\", \"every\": \"{{pace}}\"}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"pace\", \"type\": \"choice\", \"title\": \"Pace\", \"options\": [\"2 minutes\"], \"default\": \"2 minutes\"}], \"polls\": [{\"url\": \"https://example.test\", \"every\": \"{{pace}}\"}]}"
+  },
+  {
+    "valid": true,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"settings\": [{\"key\": \"pace\", \"type\": \"choice\", \"title\": \"Pace\", \"options\": [\"1 hour\"], \"default\": \"1 hour\"}], \"polls\": [{\"url\": \"https://example.test\", \"every\": \"{{pace}}\"}]}"
+  },
+  {
+    "valid": false,
+    "manifest": "{\"name\": \"probe\", \"title\": \"Probe\", \"abi\": 3, \"companion\": \"https://0x100000000\"}"
+  }
+]

@@ -76,7 +76,7 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
         try {
             val scenarios = folders.mapIndexed { number, scenario ->
                 Scenario(number, scenario, scenario.relativeTo(folder).path.ifEmpty { scenario.name },
-                    runCatching { Json.parse(File(scenario, "scenario.json").readText()) as Map<String, Any?> })
+                    runCatching { readScenario(File(scenario, "scenario.json")) })
             }
             val packages = build(scenarios.mapNotNull { it.appDir }.distinct(), File(scratch, "packages"), workers)
             val failures = ArrayList<String>()
@@ -151,7 +151,7 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
             when (val mocks = scenario["mocks"]) {
                 // a file beside the scenario, whose "file"s are beside it too
                 is String -> command += listOf("--mocks", File(folder, mocks).absolutePath)
-                is Map<*, *> -> command += listOf("--mocks", File(state, "mocks.json").apply { writeText(Json.write(mocks)) }.path)
+                is Map<*, *> -> command += listOf("--mocks", File(state, "mocks.json").apply { writeText(Json.write(resolveInlineMocks(mocks, folder))) }.path)
                 else -> if (scenario.containsKey("mocks")) throw BuildError("\"mocks\" must be an object or the name of a file")
             }
             val builderOfProcess = ProcessBuilder(command).redirectErrorStream(true).redirectOutput(File(state, "sim.log"))
@@ -165,7 +165,7 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
                     val words = step.trim().split(Regex("\\s+"))
                     when (words[0]) {
                         "wait" -> Thread.sleep((words[1].toDouble() * 1000).toLong())
-                        "forward" -> client.raw("/api/sim/forward?seconds=${words[1]}", "POST")
+                        "forward" -> requireCommand("$step", client.raw("/api/sim/forward?seconds=${words[1]}", "POST"))
                         "press" -> for (key in words.drop(1)) {
                             if (!Regex("[1-4][Ll]?").matches(key)) throw BuildError("a key is 1-4 or 1L-4L: $key")
                             val seen = client.screen().number
@@ -236,4 +236,54 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
         private const val POLL_MS = 300L
         private const val INK_BELOW = 128
     }
+}
+
+/** Validated before building applications or starting any simulator. */
+internal fun readScenario(file: File): Map<String, Any?> {
+    val value = Json.parse(file.readText()) as? Map<*, *> ?: throw BuildError("scenario must be an object")
+    fun invalid(field: String): Nothing = throw BuildError("invalid scenario field: $field")
+    if (value["app"] !is String || (value["app"] as String).isBlank()) invalid("app")
+    for (key in listOf("tz", "glyphs")) if (key in value && (value[key] !is String || (value[key] as String).isBlank())) invalid(key)
+    if ("language" in value && value["language"] !in listOf("en", "ru")) invalid("language")
+    if ("font" in value && value["font"] !in listOf("departure", "jersey")) invalid("font")
+    for (key in listOf("clock", "serial")) if (key in value && value[key] !is Boolean) invalid(key)
+    if ("at" in value && (value["at"] !is Long || (value["at"] as Long) < 0)) invalid("at")
+    if ("store" in value && (value["store"] !is Map<*, *> || (value["store"] as Map<*, *>).any {
+            it.key !is String || (it.key as String).isEmpty() || it.value !is String
+        })) invalid("store")
+    if ("mocks" in value && value["mocks"] !is String && value["mocks"] !is Map<*, *>)
+        throw BuildError("\"mocks\" must be an object or the name of a file")
+    val steps = value["steps"] as? List<*> ?: invalid("steps")
+    if (steps.isEmpty()) invalid("steps: at least one step is required")
+    for (step in steps) {
+        if (step !is String) invalid("steps: each step must be text")
+        val words = step.trim().split(Regex("\\s+"))
+        val valid = when (words[0]) {
+            "wait" -> words.size == 2 && words[1].toDoubleOrNull()?.let {
+                it.isFinite() && it >= 0 && it <= Long.MAX_VALUE / 1000
+            } == true
+            "forward" -> words.size == 2 && Regex("[0-9]+").matches(words[1]) &&
+                words[1].toLongOrNull()?.let { it in 1..Int.MAX_VALUE.toLong() } == true
+            "press" -> words.size > 1 && words.drop(1).all { Regex("[1-4][Ll]?").matches(it) }
+            "shot" -> words.size == 2 && Regex("[a-zA-Z0-9_-][a-zA-Z0-9_.-]*").matches(words[1])
+            else -> false
+        }
+        if (!valid) invalid("steps: $step")
+    }
+    @Suppress("UNCHECKED_CAST")
+    return value as Map<String, Any?>
+}
+
+internal fun resolveInlineMocks(mocks: Map<*, *>, folder: File): Map<*, *> = mocks.mapValues { (url, value) ->
+    val mock = value as? Map<*, *> ?: throw BuildError("mock $url must be an object")
+    if ("file" !in mock) mock else {
+        val path = mock["file"] as? String ?: throw BuildError("mock $url: file must be text")
+        val resolved = File(path).let { if (it.isAbsolute) it else File(folder, path) }.canonicalFile
+        if (!resolved.isFile || !resolved.canRead()) throw BuildError("mock file ${resolved.path} cannot be read")
+        mock + ("file" to resolved.path)
+    }
+}
+
+internal fun requireCommand(step: String, answer: DeviceClient.Answer) {
+    if (answer.status !in 200..299) throw BuildError("$step: simulator returned ${answer.status}: ${String(answer.body, Charsets.UTF_8)}")
 }

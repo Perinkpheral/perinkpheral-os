@@ -8,10 +8,20 @@ package dev.perinkpheral.core
  * are Booleans, null is null.
  */
 object Json {
+    private const val MANIFEST_DEPTH_MAX = 16
+
     class Error(message: String) : Exception(message)
 
     fun parse(text: String): Any? {
-        val parser = Parser(text)
+        return parse(text, firmware = false)
+    }
+
+    /** Manifest JSON follows json_tree.c, including unknown metadata. Whole decimals
+     * become Long; other decimals stay exact so writing them cannot introduce exponents. */
+    fun parseManifest(text: String): Any? = parse(text, firmware = true)
+
+    private fun parse(text: String, firmware: Boolean): Any? {
+        val parser = Parser(text, firmware)
         val value = parser.value()
         parser.space()
         if (parser.at != text.length) parser.fail("text after the end")
@@ -59,6 +69,7 @@ object Json {
             is Boolean -> out.append(value)
             is Long, is Int -> out.append(value)
             is Double -> out.append(value)
+            is java.math.BigDecimal -> out.append(value.toPlainString())
             is String -> {
                 out.append('"')
                 for (character in value) {
@@ -103,8 +114,9 @@ object Json {
         }
     }
 
-    private class Parser(val text: String) {
+    private class Parser(val text: String, val firmware: Boolean) {
         var at = 0
+        var depth = 0
 
         fun fail(why: String): Nothing {
             val line = text.substring(0, minOf(at, text.length)).count { it == '\n' } + 1
@@ -119,8 +131,13 @@ object Json {
             space()
             if (at >= text.length) fail("a value is missing")
             return when (text[at]) {
-                '{' -> obj()
-                '[' -> array()
+                '{', '[' -> {
+                    if (firmware && depth >= MANIFEST_DEPTH_MAX) fail("JSON nesting exceeds 16 containers")
+                    depth++
+                    val result = if (text[at] == '{') obj() else array()
+                    depth--
+                    result
+                }
                 '"' -> string()
                 't' -> word("true", true)
                 'f' -> word("false", false)
@@ -189,7 +206,20 @@ object Json {
                 if (at >= text.length) fail("a string is not closed")
                 val character = text[at++]
                 when {
-                    character == '"' -> return out.toString()
+                    character == '"' -> {
+                        val result = out.toString()
+                        if (firmware) {
+                            var index = 0
+                            while (index < result.length) {
+                                val code = result[index++]
+                                if (code == '\u0000') fail("a string must not contain \\u0000")
+                                if (code.isHighSurrogate()) {
+                                    if (index == result.length || !result[index++].isLowSurrogate()) fail("unpaired surrogate")
+                                } else if (code.isLowSurrogate()) fail("unpaired surrogate")
+                            }
+                        }
+                        return result
+                    }
                     character == '\\' -> {
                         if (at >= text.length) fail("a string is not closed")
                         when (val escaped = text[at++]) {
@@ -222,6 +252,11 @@ object Json {
             if (!Regex("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?").matches(written)) {
                 at = start
                 fail("not JSON")
+            }
+            if (firmware) {
+                if (written.any { it in "eE" }) fail("manifest numbers cannot use exponents")
+                val integer = written.substringBefore('.').toLongOrNull() ?: fail("number exceeds signed 64 bits")
+                return if (written.substringAfter('.', "").all { it == '0' }) integer else java.math.BigDecimal(written)
             }
             val isWhole = written.none { it in ".eE" }
             return if (isWhole) written.toLongOrNull() ?: written.toDouble() else written.toDouble()

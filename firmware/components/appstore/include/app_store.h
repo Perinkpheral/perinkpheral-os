@@ -87,6 +87,11 @@ size_t app_store_file_max_bytes(const char *file);
  * made if it is not there. */
 bool app_store_begin_file(const char *root, const char *name, const char *file,
                           char path[APP_STORE_PATH_MAX]);
+bool app_store_is_generated_translation(const char *file);
+
+/* Removes generated language tables before a development package upload. */
+bool app_store_prune_translations(const char *root, const char *name);
+
 bool app_store_commit_file(const char *root, const char *name, const char *file);
 
 /* An application is several files. Every file of it that was begun and
@@ -103,6 +108,9 @@ void app_store_recover(const char *root);
 
 /* What the application's data files take, as they lie: whole blocks. */
 long app_store_files_bytes(const char *root, const char *name);
+/* Bytes retained by replacement before same-name incoming files are subtracted:
+ * generated language tables are replaced as a set. */
+long app_store_retained_bytes(const char *root, const char *name);
 
 typedef enum {
     APP_WRITE_OK,

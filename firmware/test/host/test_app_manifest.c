@@ -636,6 +636,36 @@ static void test_response_formats(void)
     CHECK(app_manifest_parse("{\"abi\":3,\"name\":\"test\",\"title\":\"Test\",\"format\":null}",
                              &manifest) == APP_MANIFEST_BAD_POLL);
 }
+static void test_shared_validation(void)
+{
+    FILE *input = fopen("manifest_validation.json", "rb");
+    CHECK(input != NULL);
+    if (input == NULL) return;
+    char bytes[32768];
+    size_t length = fread(bytes, 1, sizeof bytes - 1, input);
+    bytes[length] = '\0';
+    CHECK(feof(input));
+    fclose(input);
+    json_t *cases = json_parse(bytes);
+    CHECK(json_is_array(cases));
+    const json_t *entry;
+    json_for_each(entry, cases) {
+        const char *text = json_get(entry, "manifest")->text;
+        bool expected = json_is_true(json_get(entry, "valid"));
+        bool accepted = parse(text) == APP_MANIFEST_OK;
+        if (accepted != expected) printf("validation differs: %s\n", text);
+        CHECK(accepted == expected);
+    }
+    json_free(cases);
+    CHECK(app_manifest_interval_seconds("30 seconds") == 30);
+    CHECK(app_manifest_interval_seconds("2 minutes") == 120);
+    CHECK(app_manifest_interval_seconds("1 hour") == 3600);
+    CHECK(app_manifest_interval_seconds("1 day") == 86400);
+    CHECK(app_manifest_interval_seconds("30 s!") == 0);
+    CHECK(app_manifest_interval_seconds("30 smuggled") == 0);
+    CHECK(app_manifest_interval_seconds("30 minutes!") == 0);
+}
+
 int main(void)
 {
     test_response_formats();
@@ -643,6 +673,7 @@ int main(void)
     test_id_collisions();
     test_four_default_links();
     test_list_setting();
+    test_shared_validation();
     test_complete();
     test_defaults_and_unknown_fields();
     test_not_json();

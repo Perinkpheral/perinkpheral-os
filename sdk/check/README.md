@@ -68,7 +68,16 @@ defect of the checks:
   Periodic polls come when the checks give them, not at their pace. Ordinary
   capability rounds advance uptime to an applicable poll delay while keeping the
   comparison wall clock fixed. Timers and alarms still fire only as the scene directs.
+- QR bounds and ink geometry are approximate. Focus permissions and WebAssembly memory
+  offsets are not validated. Some sequences deliver several events before drawing;
+  background delivery does not reproduce interleaving between different applications.
+- `standin_set()` writes raw test state without manifest-setting validation or the
+  destination-change secret clearing performed by the settings API.
 - The system API (`sys_*`) is not stood in for.
+
+Interpreter tests cover memory validation; simulator frames cover rendering; device tests
+cover the shared application area, panel and timing. A checker process must exit zero even
+when it printed successful results for every requested capability.
 
 ## Failure-path checks
 

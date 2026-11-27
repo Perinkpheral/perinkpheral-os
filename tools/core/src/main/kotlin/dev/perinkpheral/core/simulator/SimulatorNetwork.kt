@@ -62,10 +62,9 @@ object SimulatorNetwork {
 
     /** The computer's own authorities and, beside them, the application's. */
     private fun contextTrusting(files: List<String>): javax.net.ssl.SSLContext {
-        val factory = java.security.cert.CertificateFactory.getInstance("X.509")
         val own = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()).apply { load(null) }
         files.forEachIndexed { index, file ->
-            java.io.File(file).inputStream().use { own.setCertificateEntry("app-$index", factory.generateCertificate(it)) }
+            own.setCertificateEntry("app-$index", dev.perinkpheral.core.build.Certificates.read(java.io.File(file), Long.MAX_VALUE))
         }
         fun managerOf(store: java.security.KeyStore?): javax.net.ssl.X509TrustManager {
             val managers = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm())

@@ -17,7 +17,7 @@ object PageTest {
             FirmwareTools.page(File(root, "firmware/main/web"), page, packed)
             val unpacked = GZIPInputStream(packed.inputStream()).use { it.readBytes() }
             check(unpacked.contentEquals(page.readBytes())) { "The served page differs from the assembled page" }
-            for (test in listOf("test_settings_drafts.js", "test_app_navigation.js")) {
+            for (test in listOf("test_settings_drafts.js", "test_app_navigation.js", "test_companion.js")) {
                 val process = ProcessBuilder("node", File(root, "firmware/test/web/$test").path)
                     .directory(root).redirectErrorStream(true).apply {
                         environment()["PERINKPHERAL_TEST_PAGE"] = page.path

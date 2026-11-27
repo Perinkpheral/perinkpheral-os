@@ -21,36 +21,52 @@
   Only fields present in the form can be filled. Hidden settings are omitted
   from the form; an integration writes them through /api/apps/settings.
   The user saves the filled form. Message source and origin are checked by
-  the device page; this example accepts messages only from window.opener.
+  the device page; this example also pins an origin entered independently by the user.
 -->
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Companion</title>
 <h1 id="title">Companion</h1>
+<form id="connect">
+  <label>Device origin <input id="origin" type="url" placeholder="http://192.168.1.10" required></label>
+  <button>Connect</button>
+</form>
 <form id="form">
   <label>Token <input id="token" autocomplete="off"></label>
   <button>Done</button>
 </form>
 <script>
-/* The device's page is whoever opened this window; its address is not
- * known before it speaks, so the first message goes to anyone and
- * carries nothing. */
+/* Enter the device origin from its address bar. Never take it from an
+ * incoming message, query parameter or referrer. It stays pinned until reload. */
 let device = null;
+let connected = false;
+document.getElementById("connect").addEventListener("submit", event => {
+  event.preventDefault();
+  if (device || !window.opener) return;
+  try {
+    const url = new URL(document.getElementById("origin").value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
+        url.pathname !== "/" || url.search || url.hash) return;
+    device = url.origin;
+    window.opener.postMessage({ perinkpheral: "ready" }, device);
+    document.getElementById("origin").disabled = true;
+  } catch (_) { return; }
+});
 
 window.addEventListener("message", event => {
-  if (event.source !== window.opener || !event.data || event.data.perinkpheral !== "app") return;
-  device = event.origin;
+  if (!device || event.origin !== device || event.source !== window.opener || !event.data || event.data.perinkpheral !== "app") return;
+  connected = true;
   document.getElementById("title").textContent = event.data.title;
 });
 
 document.getElementById("form").addEventListener("submit", event => {
   event.preventDefault();
-  if (!device) return;
+  if (!connected) return;
   window.opener.postMessage({ perinkpheral: "settings",
                               values: { token: document.getElementById("token").value } }, device);
 });
 
-if (window.opener) window.opener.postMessage({ perinkpheral: "ready" }, "*");
+
 </script>
 </html>

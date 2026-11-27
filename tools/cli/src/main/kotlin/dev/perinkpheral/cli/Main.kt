@@ -166,13 +166,19 @@ private fun shot(rows: List<BooleanArray>, path: String) {
 
 /** The CMakeLists.txt of an application made from the command line: the checkout as it is now,
  * or PERINKPHERAL. */
-private fun cmakeLists(name: String): String = """
+internal fun cmakeLists(name: String): String = """
+    |# SPDX-License-Identifier: MIT
     |cmake_minimum_required(VERSION 3.20)
     |
-    |if(DEFINED ENV{PERINKPHERAL})
-    |    set(PERINKPHERAL "${'$'}ENV{PERINKPHERAL}")
-    |else()
-    |    set(PERINKPHERAL "${root().path.replace('\\', '/')}")
+    |if(NOT DEFINED PERINKPHERAL)
+    |    if(DEFINED ENV{PERINKPHERAL})
+    |        set(PERINKPHERAL "${'$'}ENV{PERINKPHERAL}")
+    |    else()
+    |        set(PERINKPHERAL "${'$'}{CMAKE_CURRENT_SOURCE_DIR}/../perinkpheral-os")
+    |    endif()
+    |endif()
+    |if(NOT EXISTS "${'$'}{PERINKPHERAL}/sdk/cmake/perinkpheral.cmake")
+    |    message(FATAL_ERROR "Set -DPERINKPHERAL=<perinkpheral-os checkout> or the PERINKPHERAL environment variable.")
     |endif()
     |include("${'$'}{PERINKPHERAL}/sdk/cmake/perinkpheral.cmake")
     |

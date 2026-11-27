@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  */
+#include "app_certificate.h"
 #include "web_apps.h"
 #include "web_app_settings.h"
 #include "web_settings_json.h"
@@ -173,11 +174,10 @@ static void authority_of(const char *app_name, const char *file, char *name, siz
         return;
     }
     bytes[length] = '\0';
-    bool is_pem = length > 10 && memcmp(bytes, "-----BEGIN", 10) == 0;
     mbedtls_x509_crt certificate;
     mbedtls_x509_crt_init(&certificate);
     char subject[256];
-    if (mbedtls_x509_crt_parse(&certificate, bytes, (size_t)length + (is_pem ? 1 : 0)) == 0 &&
+    if (app_certificate_parse(&certificate, bytes, (size_t)length) &&
         mbedtls_x509_dn_gets(subject, sizeof subject, &certificate.subject) > 0) {
         const char *common = strstr(subject, "CN=");
         if (common != NULL) {

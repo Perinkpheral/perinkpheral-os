@@ -167,6 +167,7 @@ const RUSSIAN = {
   "Device busy. Try again shortly.": "Устройство пока занято. Попробуйте чуть позже.",
   "Out of memory.": "Недостаточно памяти.", "Not enough storage.": "Недостаточно места.",
   "Storage error.": "Ошибка хранилища.", "Invalid request.": "Неверный запрос.",
+  "Invalid companion address.": "Неверный адрес companion.", "Invalid certificate.": "Неверный сертификат.",
   "Invalid value.": "Неверное значение.", "Invalid value: {0}.": "Неверное значение: {0}.",
   "Invalid manifest.": "Неверный манифест.", "Invalid pack.": "Неверный пакет.",
   "Invalid catalog entry.": "Неверная запись каталога.", "Invalid source URL.": "Неверный адрес источника.",

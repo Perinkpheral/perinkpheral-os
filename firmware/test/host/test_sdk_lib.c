@@ -487,8 +487,21 @@ static void test_screen_title(void)
 
 }
 
+static void test_complete_durations(void)
+{
+    CHECK(app_seconds_of("0 seconds", -1) == 0);
+    CHECK(app_seconds_of("30 seconds", -1) == 30);
+    CHECK(app_seconds_of("2 minutes", -1) == 120);
+    CHECK(app_seconds_of("1 hour", -1) == 3600);
+    CHECK(app_seconds_of("1 day", -1) == 86400);
+    CHECK(app_seconds_of("30 s!", -1) == -1);
+    CHECK(app_seconds_of("30 smuggled", -1) == -1);
+    CHECK(app_seconds_of("30 minutes!", -1) == -1);
+}
+
 int main(void)
 {
+    test_complete_durations();
     test_screens();
     test_screen_title();
     char filled[8] = "before";

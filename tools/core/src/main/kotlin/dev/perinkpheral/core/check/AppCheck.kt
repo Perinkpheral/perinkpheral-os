@@ -150,7 +150,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 val description = File(scratch, "subject.c").apply { writeText(subject.source(module.exports.toSet())) }
                 val sources = appDir.listFiles().orEmpty().filter { it.isFile && it.name.endsWith(".c") }.sortedBy { it.path }
                 val program = File(scratch, "checks")
-                val (code, said) = execute(listOf(compiler) + FLAGS + includes(appDir, generated) +
+                val (code, said) = execute(listOf(compiler) + FLAGS + includes(appDir) + listOf("-iquote", generated.path) +
                     (sources + strings + description).map { it.path } +
                     (host.library + host.standin + host.checks).map { it.path } + listOf("-o", program.path) + LIBRARIES, appDir)
                 if (code != 0) {
@@ -167,7 +167,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 val description = File(scratch, "manifest.c").apply { writeText(subject.source(null)) }
                 for (test in tests) {
                     val program = File(scratch, "test-" + test.nameWithoutExtension)
-                    val (code, said) = execute(listOf(compiler) + FLAGS + includes(appDir, generated, own) +
+                    val (code, said) = execute(listOf(compiler) + FLAGS + includes(appDir, own) + listOf("-iquote", generated.path) +
                         (listOf(test) + strings + description).map { it.path } +
                         (host.library + host.standin).map { it.path } + listOf("-o", program.path) + LIBRARIES, own)
                     val what = "$OWN_TESTS ${test.name}"
@@ -187,7 +187,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
     }
 
     /** What the checks program printed, as lines of the report. */
-    private fun capabilityLines(name: String, asked: List<String>, ran: Pair<Int, String>): List<Line> {
+    internal fun capabilityLines(name: String, asked: List<String>, ran: Pair<Int, String>): List<Line> {
         val (code, output) = ran
         val states = HashMap<String, State>()
         val details = HashMap<String, MutableList<String>>()
@@ -201,12 +201,21 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 "note" -> details.getOrPut(words[1]) { ArrayList() } += "note: " + words[2]
             }
         }
-        if (asked.any { it !in states }) {
+        // A complete report with findings normally exits 1.
+        val hasFinding = asked.any { states[it] == State.FAILED }
+        val processFailed = code != 0 && !(code == 1 && hasFinding)
+        if (processFailed || asked.any { it !in states }) {
             // The program itself ended badly: nothing of what it found can be trusted.
             val why = listOf("the checks stopped with code $code") + output.lines().filter { it.isNotBlank() }.takeLast(12)
             return asked.map { Line(name, it, State.FAILED, why) }
         }
-        return asked.map { Line(name, it, states.getValue(it), details[it].orEmpty()) }
+        val diagnostics = output.lines().filter { line ->
+            line.isNotBlank() && line.substringBefore(' ') !in setOf("check", "problem", "exception", "note")
+        }.takeLast(12)
+        return asked.map {
+            val state = states.getValue(it)
+            Line(name, it, state, details[it].orEmpty() + if (code != 0 && state == State.FAILED) diagnostics else emptyList())
+        }
     }
 
     /** Runs a command; its exit code and what it said. A program that outlives `seconds` is stopped. */

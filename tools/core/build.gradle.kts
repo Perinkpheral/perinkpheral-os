@@ -161,3 +161,10 @@ val graphicsContractTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.GraphicsContractTest")
 }
 tasks.check { dependsOn(graphicsContractTest) }
+
+val sdkDevexTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.SdkDevexTest")
+}
+tasks.check { dependsOn(sdkDevexTest) }

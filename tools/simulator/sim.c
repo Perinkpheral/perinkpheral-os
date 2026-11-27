@@ -482,6 +482,7 @@ static void answer_from_mock(job_t *job, const json_t *mock)
         snprintf(path, sizeof path, "%s%s", file->text[0] == '/' ? "" : s_mocks_folder, file->text);
         FILE *opened = fopen(path, "rb");
         if (opened == NULL) {
+            say('E', "sim", "mock file %s cannot be read: %s", path, strerror(errno));
             job->status = HOST_FAILED_NO_ANSWER;
             return;
         }
@@ -2047,15 +2048,17 @@ static const unsigned char PAGE[] = {
 static void answer_page(int socket_fd)
 {
     /* No application to build and run from here: the Run button stays hidden. */
-    static const char PLACE[] = "{{app}}";
+    static const char PLACE[] = "{{app_json}}";
     const char *page = (const char *)PAGE;
     size_t      length = sizeof PAGE;
     const char *at = memmem(page, length, PLACE, sizeof PLACE - 1);
-    char       *body = malloc(length);
+    char       *body = malloc(length + 2);
     size_t      before = at != NULL ? (size_t)(at - page) : length;
     memcpy(body, page, before);
     size_t written = before;
     if (at != NULL) {
+        body[written++] = '"';
+        body[written++] = '"';
         size_t after = length - before - (sizeof PLACE - 1);
         memcpy(body + written, at + sizeof PLACE - 1, after);
         written += after;
@@ -2108,6 +2111,10 @@ static void handle(int socket_fd, const request_t *request)
         snprintf(folder, sizeof folder, "%s/%s", s_options.apps, name);
         make_folders(folder);
         snprintf(file_path, sizeof file_path, "%s/%s", folder, value);
+        if (strcmp(value, "app.wasm") == 0 && !app_store_prune_translations(s_options.apps, name)) {
+            answer_text(socket_fd, 500, "translations could not be removed");
+            return;
+        }
         FILE *file = fopen(file_path, "wb");
         bool is_written = file != NULL &&
                           fwrite(request->body, 1, request->body_length, file) == request->body_length;
@@ -2175,8 +2182,13 @@ static void handle(int socket_fd, const request_t *request)
         answer_due(&id);
         answer_text(socket_fd, 200, "rang");
     } else if (is_post && strcmp(path, "/api/sim/forward") == 0) {
-        long seconds = query_value(request, "seconds", value, sizeof value) ? atol(value) : 0;
-        if (seconds <= 0) {
+        char *end = NULL;
+        bool supplied = query_value(request, "seconds", value, sizeof value);
+        errno = 0;
+        long seconds = supplied ? strtol(value, &end, 10) : 0;
+        if (!supplied || value[0] < '0' || value[0] > '9' || end == NULL || *end != '\0' ||
+            errno != 0 || seconds <= 0 || seconds > INT32_MAX ||
+            s_forward_ms > INT64_MAX - (int64_t)seconds * MS_PER_SECOND) {
             answer_text(socket_fd, 400, "seconds=N");
             return;
         }
@@ -2343,20 +2355,40 @@ static bool load_mocks(void)
         s_mocks = NULL;
         return false;
     }
+    const char *slash = strrchr(s_options.mocks, '/');
+    snprintf(s_mocks_folder, sizeof s_mocks_folder, "%.*s", slash != NULL ? (int)(slash - s_options.mocks + 1) : 0,
+             s_options.mocks);
     const json_t *mock;
     json_for_each(mock, s_mocks) {
         if (!json_is_object(mock)) {
             say('E', "sim", "mocks %s: the answer for %s is not a JSON object", s_options.mocks, mock->name);
-            json_free(s_mocks);
-            s_mocks = NULL;
-            return false;
+            goto invalid;
+        }
+        const json_t *fixture = json_get(mock, "file");
+        if (fixture != NULL) {
+            char path[PATH_BYTES];
+            if (!json_is_string(fixture) ||
+                snprintf(path, sizeof path, "%s%s", fixture->text[0] == '/' ? "" : s_mocks_folder,
+                         fixture->text) >= (int)sizeof path) {
+                say('E', "sim", "mock %s: invalid file path", mock->name);
+                goto invalid;
+            }
+            FILE *input = fopen(path, "rb");
+            struct stat found;
+            bool readable = input != NULL && fstat(fileno(input), &found) == 0 && S_ISREG(found.st_mode);
+            if (input != NULL) fclose(input);
+            if (!readable) {
+                say('E', "sim", "mock file %s cannot be read", path);
+                goto invalid;
+            }
         }
     }
-    const char *slash = strrchr(s_options.mocks, '/');
-    snprintf(s_mocks_folder, sizeof s_mocks_folder, "%.*s", slash != NULL ? (int)(slash - s_options.mocks + 1) : 0,
-             s_options.mocks);
     say('I', "sim", "%d mocked addresses from %s", json_count(s_mocks), s_options.mocks);
     return true;
+invalid:
+    json_free(s_mocks);
+    s_mocks = NULL;
+    return false;
 }
 
 static void usage(void)

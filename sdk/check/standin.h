@@ -327,7 +327,8 @@ int32_t standin_refused_sessions(void);
 bool standin_session_failure_reported(void);
 void standin_forget_session(void);         /* the application left the stack */
 
-/* A value as a setting is saved; NULL forgets it. */
+/* Raw test state: no manifest validation or destination-change secret clearing.
+ * NULL forgets the key. */
 void standin_set(const char *key, const char *text);
 /* What is stored under the key, or NULL; a default is not stored. */
 const uint8_t *standin_value(const char *key, int32_t *length);

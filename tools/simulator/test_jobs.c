@@ -79,7 +79,9 @@ static void test_mocks(const char *state)
     s_options.mocks = path;
     assert(!load_mocks());
     assert(strstr(s_log, "cannot be read") != NULL);
-    const char *invalid[] = { "", "{", "[]", "null", "{} trailing", "{\"http://example.test\":null}" };
+    const char *invalid[] = { "", "{", "[]", "null", "{} trailing", "{\"http://example.test\":null}",
+        "{\"http://example.test\":{\"file\":\"missing-body.json\"}}",
+        "{\"http://example.test\":{\"file\":5}}" };
     for (size_t index = 0; index < sizeof invalid / sizeof invalid[0]; index++) {
         FILE *file = fopen(path, "wb");
         assert(file != NULL);
@@ -439,6 +441,25 @@ static void test_question_and_long_back(void)
     s_screen = (gfx_t){0};
 }
 
+
+static void test_forward_arguments(void)
+{
+    static const char *invalid[] = { "", "0", "-1", "1.5", "1garbage", "99999999999999999999999999" };
+    for (size_t index = 0; index < sizeof invalid / sizeof invalid[0]; index++) {
+        request_t request = { .method = "POST", .path = "/api/sim/forward" };
+        snprintf(request.query, sizeof request.query, "seconds=%s", invalid[index]);
+        int sockets[2];
+        assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
+        int64_t before = s_forward_ms;
+        handle(sockets[0], &request);
+        close(sockets[0]);
+        char response[512] = {0};
+        assert(read(sockets[1], response, sizeof response - 1) > 0);
+        assert(strstr(response, "400") != NULL && s_forward_ms == before);
+        close(sockets[1]);
+    }
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -450,6 +471,8 @@ int main(void)
     test_time_and_recurrence();
     test_poll_scheduling();
     test_question_and_long_back();
+
+    test_forward_arguments();
     test_network_icon();
     test_mocks(state);
     test_content_lengths();

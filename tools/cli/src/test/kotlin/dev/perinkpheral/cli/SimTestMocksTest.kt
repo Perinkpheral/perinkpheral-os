@@ -18,12 +18,14 @@ object SimTestMocksTest {
         try {
             val cases = mapOf("missing" to "missing.json", "malformed" to "invalid.json",
                 "number" to 1L, "boolean" to false, "array" to emptyList<String>(), "null" to null,
-                "empty" to emptyMap<String, Any>())
+                "empty" to emptyMap<String, Any>(), "inline" to mapOf("https://example.test/*" to mapOf("file" to "answer.json")),
+                "inline-missing" to mapOf("https://example.test/*" to mapOf("file" to "absent.json")))
             for ((name, mocks) in cases) {
                 val folder = File(scratch, name).apply { mkdirs() }
                 File(folder, "scenario.json").writeText(Json.write(mapOf(
-                    "app" to File(root, "sdk/apps/hello").path, "mocks" to mocks, "steps" to emptyList<String>())))
+                    "app" to File(root, "sdk/apps/hello").path, "mocks" to mocks, "steps" to listOf("wait 0"))))
                 File(folder, "invalid.json").writeText("{")
+                File(folder, "answer.json").writeText("{}")
             }
             for ((name, status, body) in listOf(
                 Triple("picked-html-refusal", 503, "<html>refused</html>"),
@@ -56,12 +58,13 @@ object SimTestMocksTest {
             }
             val wasi = File(System.getenv("WASI_SDK_PATH") ?: error("WASI_SDK_PATH is required"))
             val failures = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scratch, false, workers = 3)
-            check(failures.size == cases.size - 1) { failures.joinToString("\n") }
-            for (name in cases.keys - "empty") {
+            check(failures.size == cases.size - 2) { failures.joinToString("\n") }
+            for (name in cases.keys - setOf("empty", "inline")) {
                 val failure = failures.single { it.startsWith("$name:") }
                 val expected = when (name) {
                     "missing" -> "cannot be read"
                     "malformed" -> "JSON object"
+                    "inline-missing" -> File(scratch, "inline-missing/absent.json").path
                     else -> "\"mocks\" must be an object or the name of a file"
                 }
                 check(expected in failure) { failure }

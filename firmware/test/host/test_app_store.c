@@ -332,8 +332,39 @@ static void test_package_files_are_not_written(void)
     CHECK(app_store_file_size(root, "certs", "root.pem") == 5);
 }
 
+static void test_translation_replacement(void)
+{
+    fresh_root();
+    CHECK(put_file("app", "strings.ru", "old ids"));
+    CHECK(put_file("app", "manifest.ru", "old title"));
+    CHECK(put_file("app", "user.bin", "retained"));
+    CHECK(app_store_retained_bytes(root, "app") == MANIFEST_FILE_BLOCK_BYTES);
+    CHECK(begin_file("app", "app.wasm", "new module"));
+    CHECK(begin_file("app", "strings.en", "new ids"));
+    CHECK(begin_file("app", "manifest.json", "new manifest"));
+    CHECK(app_store_commit_all(root, "app"));
+    CHECK(app_store_file_size(root, "app", "strings.ru") < 0);
+    CHECK(app_store_file_size(root, "app", "manifest.ru") < 0);
+    CHECK(app_store_file_size(root, "app", "strings.en") == 7);
+    CHECK(app_store_file_size(root, "app", "user.bin") == 8);
+    CHECK(put_file("app", "manifest.ru", "another title"));
+    CHECK(put_file("app", "app.wasm", "development module"));
+    CHECK(app_store_file_size(root, "app", "strings.en") < 0);
+    CHECK(app_store_file_size(root, "app", "manifest.ru") < 0);
+    CHECK(app_store_file_size(root, "app", "user.bin") == 8);
+    /* Recovery finishes deletion records and keeps already renamed tables. */
+    CHECK(put_file("app", "strings.ru", "old"));
+    CHECK(begin_file("app", "strings.ru", ""));
+    CHECK(put_file("app", "strings.en", "new"));
+    leave_mark("app");
+    app_store_recover(root);
+    CHECK(app_store_file_size(root, "app", "strings.ru") < 0);
+    CHECK(app_store_file_size(root, "app", "strings.en") == 3);
+}
+
 int main(void)
 {
+    test_translation_replacement();
     test_list_is_sorted_by_title();
     test_broken_ones_are_passed_over();
     test_capacity_and_missing_root();

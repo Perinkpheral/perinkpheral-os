@@ -1063,8 +1063,8 @@ every
 10 to 86400 seconds, or <code>"{{key}}"</code> of a setting
 от 10 до 86400 секунд либо <code>"{{key}}"</code> настройки
 
-Interval. With a setting, the stored text is a number and a unit; the unit is identified by its first letter: <code>s</code>, <code>m</code>, <code>h</code>, <code>d</code> ("30 s", "15 min", "1 h", "1 day"). A number alone is seconds. Perinkpheral OS applies the user's choice. Before the user chooses, the interval is the <code>default</code> of the setting, or 15 minutes without one; the application stores no value for it
-Интервал. При использовании настройки сохранённый текст - число и единица; единица определяется по первой букве: <code>s</code>, <code>m</code>, <code>h</code>, <code>d</code> ("30 s", "15 min", "1 h", "1 day"). Число без единицы - секунды. Выбор пользователя применяется Perinkpheral OS. Пока пользователь не выбрал, интервал равен <code>default</code> настройки, а без него - 15 минутам; приложение не сохраняет для него значение
+Interval. A setting value is 1 to 6 decimal digits, zero or more ASCII spaces, and an optional unit: <code>s</code>, <code>sec</code>, <code>second</code>, <code>seconds</code>; <code>m</code>, <code>min</code>, <code>minute</code>, <code>minutes</code>; <code>h</code>, <code>hour</code>, <code>hours</code>; <code>d</code>, <code>day</code>, <code>days</code>. A number alone is seconds. The complete text must match; suffixes and trailing spaces after a unit are invalid. The result must be 10 to 86400 seconds. Perinkpheral OS uses the setting default, or 15 minutes when it is omitted, until the user chooses
+Интервал. Значение настройки: от 1 до 6 десятичных цифр, ноль или более ASCII-пробелов и необязательная единица: <code>s</code>, <code>sec</code>, <code>second</code>, <code>seconds</code>; <code>m</code>, <code>min</code>, <code>minute</code>, <code>minutes</code>; <code>h</code>, <code>hour</code>, <code>hours</code>; <code>d</code>, <code>day</code>, <code>days</code>. Число без единицы означает секунды. Весь текст должен соответствовать грамматике; суффиксы и пробелы после единицы недопустимы. Результат должен составлять от 10 до 86400 секунд. До выбора пользователя Perinkpheral OS использует значение по умолчанию или 15 минут, если оно не задано
 
 headers
 =
@@ -1153,8 +1153,8 @@ Optional: up to 95 characters and 190 UTF-8 bytes; empty when omitted. Translata
 Optional: a nonempty string, or a nonempty array for list. Unset when omitted. Not allowed for secret or place
 Необязательный: непустая строка или непустой массив для list. Без него значение не задано. Запрещён для secret и place
 
-Required for choice, forbidden otherwise: 1 - 8 strings, each 1 - 23 characters and at most 46 UTF-8 bytes. Saved values must be printable ASCII
-Обязателен для choice, запрещён для остальных: 1 - 8 строк, каждая 1 - 23 символа и до 46 байт UTF-8. Сохраняемые значения должны быть печатным ASCII
+Required for choice, forbidden otherwise: 1 - 8 nonempty strings, each 1 - 23 printable ASCII characters. Translated labels may use supported Unicode
+Обязательно для choice, запрещено для остальных типов: 1 - 8 непустых строк по 1 - 23 печатных ASCII-символа. Переведённые подписи могут использовать поддерживаемые символы Unicode
 
 Optional: true for a setting written through the device API by an integration. Omitted from the page form, except coordinate inputs referenced by a <code>place</code> setting. Stored and read like any other. The companion can fill any matching input present in the form
 Необязательно: true для настройки, которую интеграция записывает через API устройства. Исключается из формы страницы, кроме полей координат, на которые ссылается настройка <code>place</code>. Хранится и читается как любая другая. Companion может заполнить любое соответствующее поле формы
@@ -1195,8 +1195,8 @@ Decimal digits with an optional leading minus and at most one decimal point. At 
 choice
 =
 
-Selection from up to 8 <code>options</code>
-Выбор из <code>options</code>, до 8 вариантов
+Selection from up to 8 <code>options</code>. Values are nonempty printable ASCII; translated labels may use the language's supported Unicode characters
+Выбор из <code>options</code>, до 8 вариантов. Значения - непустой печатный ASCII; переведённые подписи могут содержать поддерживаемые языком символы Unicode
 
 The option text, 1 - 23 characters. Translations add labels; the stored value is the option
 Текст варианта, 1 - 23 символа. Переводы добавляют подписи; хранится сам вариант
@@ -1282,8 +1282,8 @@ Host a static HTTPS page and put its URL in companion. The device page opens it 
 The companion sends ready; the device page replies with app, the manifest settings and their effective values: manifest defaults for absent settings, stored empty values preserved, and list defaults joined with line feeds. Both secret and link values are omitted. The companion returns settings with declared keys and string values of at most 255 bytes. Only inputs present in the form can be filled, including coordinate inputs referenced by a place setting even when marked hidden. Other hidden settings have no inputs. An integration can write hidden settings through <code>/api/apps/settings</code>. The user must press Save to store filled values.
 Компаньон отправляет ready; страница устройства отвечает app, описаниями настроек из манифеста и их действующими значениями: отсутствующие настройки получают значения по умолчанию, сохранённые пустые значения остаются пустыми, элементы списка по умолчанию соединяются переводами строки. Значения secret и link не передаются. Компаньон возвращает settings с объявленными ключами и строковыми значениями не длиннее 255 байт. Заполняются только поля, присутствующие в форме, включая координаты из настройки place, даже если они скрытые. У остальных скрытых настроек полей нет. Интеграция может записывать скрытые настройки через <code>/api/apps/settings</code>. Чтобы сохранить заполненные значения, пользователь нажимает Save.
 
-Check event.source against window.opener and validate event.origin against the expected device origin. Use that origin as postMessage's target for values. The initial ready message carries no user data.
-Проверяйте event.source на равенство window.opener, а event.origin - на ожидаемый источник страницы устройства. Используйте этот источник как цель postMessage при отправке значений. Первое сообщение ready не содержит данных пользователя.
+Pin the expected device origin independently before accepting setup data: configure it in the companion or have the user enter it from the device page's address bar. Do not take it from an incoming message, query parameter or referrer. Check event.source against window.opener and event.origin against the pinned origin. Send ready and settings only to that origin. The example pins it until the page is reloaded.
+До приёма данных настройки независимо закрепите ожидаемый origin устройства: задайте его в companion или предложите пользователю ввести его из адресной строки страницы устройства. Не берите его из входящего сообщения, параметра запроса или referrer. Проверяйте event.source по window.opener, а event.origin - по закреплённому origin. Отправляйте ready и settings только на этот origin. В примере он закрепляется до перезагрузки страницы.
 
 6. Screen
 6. Экран
@@ -2338,8 +2338,8 @@ Perinkpheral OS проверяет HTTPS-серверы по набору кор
 files/russian-root-ca.pem
 =
 
-Each file is a root certificate of an authority, in PEM or DER, up to 4 KB. The build rejects a file that is missing, is not a certificate, is a server's certificate, or has expired.
-Каждый файл - корневой сертификат центра сертификации в PEM или DER, до 4 КБ. Сборка отклоняет файл, которого нет, который не является сертификатом, является сертификатом сервера или просрочен.
+Each file contains exactly one complete CA certificate in PEM or DER, up to 4 KB. PEM permits only ASCII spaces, tabs and line breaks outside its single CERTIFICATE block; DER permits no extra bytes. Additional certificates, incomplete blocks and other material are rejected by the build and firmware. The build also checks the certificate's validity period and CA authority.
+Каждый файл содержит ровно один полный сертификат CA в PEM или DER, до 4 КБ. В PEM вне единственного блока CERTIFICATE допустимы только ASCII-пробелы, табуляции и переводы строк; в DER лишние байты недопустимы. Сборка и прошивка отклоняют дополнительные сертификаты, неполные блоки и посторонние данные. Сборка также проверяет срок действия и полномочия CA.
 
 The roots are trusted for this application's polls and requests only, in addition to the ESP-IDF's root certificate bundle. Other applications and Perinkpheral OS do not trust them.
 Этим корневым сертификатам доверяют только опросы и запросы этого приложения, в дополнение к набору корневых сертификатов ESP-IDF. Другие приложения и Perinkpheral OS им не доверяют.
@@ -3007,8 +3007,8 @@ Ctrl+C останавливает симулятор, как перезапус�
 <code>set</code> takes a list as its items with line breaks: <code>set stocks tickers $'AAPL\nMSFT'</code> in bash or zsh.
 <code>set</code> принимает список пунктами через перевод строки: <code>set stocks tickers $'AAPL\nMSFT'</code> в bash или zsh.
 
-Not simulated: other applications (the menu holds only this one), device-specific system actions, refresh timing and sleep. Calls for Perinkpheral OS settings and time settings are supported. The interpreter memory limit is not enforced: check the build report.
-Не симулируются: другие приложения (в меню только это), действия системного API, требующие устройства, время обновления панели и сон. Вызовы настройки Perinkpheral OS и установки времени поддерживаются. Ограничение памяти интерпретатора не соблюдается: смотрите отчёт сборки.
+Not simulated: other applications (the menu holds only this one), device-specific system actions, refresh timing and sleep. Calls for Perinkpheral OS settings and time settings are supported. The linear-memory bound is enforced; the shared application area is not. Interpreter-use estimates in the build report are advisory. Verify application-area admission and runtime use on the device.
+Не моделируются: другие приложения (в меню только это), действия системы, зависящие от устройства, время обновления панели и сон. Настройки Perinkpheral OS и времени поддерживаются. Ограничение линейной памяти проверяется, общей области приложения - нет. Оценка памяти интерпретатора в отчёте сборки носит справочный характер. Проверяйте доступность области приложения и её использование при работе на устройстве.
 
 Common problems
 Типичные проблемы
@@ -4747,3 +4747,27 @@ minimum, maximum
 
 HOST_CHART_FIXED_RANGE
 HOST_CHART_FIXED_RANGE
+
+Generated CMake projects resolve the SDK from an explicit <code>-DPERINKPHERAL=&lt;checkout&gt;</code>, then the <code>PERINKPHERAL</code> environment variable, then a sibling <code>../perinkpheral-os</code> checkout. Set the CMake variable when the layout differs. No path from the computer that created the project is embedded.
+Созданные проекты CMake ищут SDK сначала по явному <code>-DPERINKPHERAL=&lt;checkout&gt;</code>, затем по переменной окружения <code>PERINKPHERAL</code>, затем в соседнем репозитории <code>../perinkpheral-os</code>. При другой структуре задайте переменную CMake. Путь с компьютера, создавшего проект, в него не включается.
+
+Optional typed manifest fields must be omitted when absent. A present <code>null</code> is invalid, including nested poll and setting fields. All manifest JSON, including unknown metadata, has at most 16 nested containers; numbers have a signed 64-bit integer part and no exponent. Integer fields accept only whole values, including zero-only decimal fractions such as <code>60.0</code>.
+Необязательные типизированные поля манифеста должны отсутствовать, если не заданы. Явный <code>null</code> недопустим, в том числе в полях опросов и настроек. Весь JSON манифеста, включая неизвестные метаданные, содержит не более 16 вложенных контейнеров; целая часть числа укладывается в знаковые 64 бита, экспонента запрещена. Целочисленные поля принимают только целые значения, включая дроби с нулями после точки, например <code>60.0</code>.
+
+Catalog replacement removes generated <code>strings.xx</code> and <code>manifest.xx</code> tables absent from the new package. Development uploads begin with the module, remove previous generated tables and then upload the current ones. Simulator installation applies the same replacement rule. Other application data files remain unless the incoming package supplies a file of the same name.
+При замене из каталога удаляются созданные таблицы <code>strings.xx</code> и <code>manifest.xx</code>, отсутствующие в новом пакете. Загрузка при разработке начинается с модуля, удаляет прежние созданные таблицы и затем загружает текущие. Установка в симуляторе следует тому же правилу. Остальные файлы данных приложения сохраняются, если новый пакет не содержит файл с тем же именем.
+
+Native checks record drawing calls rather than pixels. Font measurements, QR bounds and ink geometry are approximations; focus permissions and WebAssembly memory offsets are not validated. Some sequences deliver several events before drawing, and background delivery does not reproduce interleaving between different applications. <code>standin_set()</code> writes raw test state without settings validation or destination-change secret clearing. A zero checker exit status is required even after all report lines were printed. Use interpreter tests for memory validation, simulator frames for rendering, and device checks for the shared application area, panel and timing.
+Нативные проверки записывают вызовы рисования, а не пиксели. Метрики шрифтов, границы QR и геометрия чернил приблизительны; права фокуса и смещения памяти WebAssembly не проверяются. Некоторые последовательности доставляют несколько событий до рисования, а фоновая доставка не воспроизводит чередование разных приложений. <code>standin_set()</code> записывает тестовое состояние напрямую, без проверки настроек и удаления секретов при смене назначения. Даже после вывода всех строк отчёта требуется нулевой код завершения проверяющего процесса. Проверяйте память тестами интерпретатора, изображение кадрами симулятора, а общую область приложения, панель и время - на устройстве.
+
+A simulator test folder contains <code>scenario.json</code> and its expected PNGs. From the repository root, create <code>tests/hello/scenario.json</code> with the example below, then run <code>tools/perinkpheral sim-test tests/hello --jobs 1</code>. An empty mocks object disables live requests.
+Папка теста симулятора содержит <code>scenario.json</code> и ожидаемые PNG. Из корня репозитория создайте <code>tests/hello/scenario.json</code> по примеру ниже, затем выполните <code>tools/perinkpheral sim-test tests/hello --jobs 1</code>. Пустой объект mocks отключает реальные запросы.
+
+The <code>app</code> and <code>glyphs</code> paths are relative to the invocation directory. A named <code>mocks</code> file is relative to the scenario; its response <code>file</code> paths are relative to that mocks file. Inline mock <code>file</code> paths are relative to the scenario. Unreadable resolved paths fail the run. <code>store</code> maps keys to string values. <code>steps</code> must be a nonempty array: <code>wait</code> takes nonnegative seconds, <code>forward</code> positive whole seconds, <code>press</code> one or more keys 1-4 or 1L-4L, and <code>shot</code> a filename stem without directories. Rejected commands fail with the simulator response.
+Пути <code>app</code> и <code>glyphs</code> задаются относительно каталога запуска. Имя файла <code>mocks</code> задаётся относительно сценария; пути <code>file</code> его ответов - относительно файла mocks. Пути <code>file</code> во встроенных mocks задаются относительно сценария. Нечитаемые разрешённые пути завершают тест ошибкой. <code>store</code> сопоставляет ключам строковые значения. <code>steps</code> - непустой массив: <code>wait</code> принимает неотрицательное число секунд, <code>forward</code> - положительное целое число секунд, <code>press</code> - одну или несколько кнопок 1-4 или 1L-4L, <code>shot</code> - основу имени файла без каталогов. Отклонённая команда завершает тест ошибкой с ответом симулятора.
+
+<code>wait</code> uses real computer time; <code>forward</code> advances the simulated clock and deadlines. Use a short wait after advancement when delivery needs to settle. <code>--jobs N</code> limits concurrent scenarios; <code>"serial": true</code> runs one without overlap, but does not remove dependence on real-time waits. A missing expected PNG is written and the test fails even without <code>--update</code>. A mismatch writes <code>&lt;name&gt;.actual.png</code>. Inspect new and changed pictures before accepting them. <code>--update</code> writes expected pictures; review those files before committing them.
+<code>wait</code> использует реальное время компьютера; <code>forward</code> сдвигает часы и сроки симулятора. Если доставке нужно завершиться, после сдвига используйте короткое ожидание. <code>--jobs N</code> ограничивает число одновременных сценариев; <code>"serial": true</code> запускает сценарий без пересечений, но не устраняет зависимость от реального времени. Если ожидаемого PNG нет, тест создаёт его и завершается ошибкой даже без <code>--update</code>. При несовпадении записывается <code>&lt;name&gt;.actual.png</code>. Просматривайте новые и изменённые изображения перед принятием. <code>--update</code> записывает ожидаемые изображения; проверьте их перед коммитом.
+
+A companion address must use HTTPS with a nonempty ASCII DNS host or IPv4 address and an optional decimal port from 1 to 65535. User information, backslashes and empty authorities are invalid. The device page reports malformed addresses instead of opening a broken setup window.
+Адрес companion должен использовать HTTPS, непустое ASCII-имя DNS или адрес IPv4 и необязательный десятичный порт от 1 до 65535. Данные пользователя, обратные косые черты и пустой authority недопустимы. Страница устройства сообщает о неверном адресе вместо открытия неработающего окна настройки.
