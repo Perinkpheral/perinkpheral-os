@@ -52,11 +52,13 @@ class ManifestCheck(private val sdk: Sdk) {
             fail("$path: ${error.message}")
         }
         val manifest = try {
-            Json.parse(text)
+            Json.parseManifest(text)
         } catch (error: Json.Error) {
             fail("$path: ${error.message}")
         } as? Map<*, *> ?: fail("$path: not an object")
         if ("\\u0000" in text) fail("$path: a string must not contain \\u0000")
+        rejectNulls(path, manifest, listOf("version", "companion", "fullscreen", "system", "writes_files",
+            "certificates", "icon", "settings", "hosts", "intents", "polls", "firmware"))
         val name = manifest["name"]
         if (name !is String || !Regex("[a-z0-9_-]{1,$nameMax}").matches(name)) {
             fail("$path: \"name\" must be 1-$nameMax of a-z, 0-9, - and _")
@@ -75,7 +77,7 @@ class ManifestCheck(private val sdk: Sdk) {
         }
         val companion = manifest["companion"]
         if (companion != null && !(companion is String && companion.length <= urlMax &&
-                Regex("https://[!#-;=?-~]+").matches(companion))) {
+                isCompanionUrl(companion))) {
             fail("$path: \"companion\" must be an https address of at most $urlMax bytes")
         }
         if ((manifest["fullscreen"] ?: false) !is Boolean) fail("$path: \"fullscreen\" must be true or false")
@@ -151,6 +153,10 @@ class ManifestCheck(private val sdk: Sdk) {
         text is String && text.codePointCount(0, text.length) in least..most &&
             text.toByteArray().size <= most * bytesPerCharacter
 
+    private fun rejectNulls(where: String, fields: Map<*, *>, typed: List<String>) {
+        for (key in typed) if (fields.containsKey(key) && fields[key] == null) fail("$where: \"$key\" must not be null")
+    }
+
     private fun referencesServer(text: String, servers: List<String>): String? {
         for (key in servers) {
             if (text.startsWith("{{$key}}")) return text.substring(key.length + 4)
@@ -163,6 +169,7 @@ class ManifestCheck(private val sdk: Sdk) {
     private fun checkPoll(path: String, number: Int, poll: Any?, servers: List<String>, settings: List<*>) {
         val where = "$path: poll $number"
         if (poll !is Map<*, *>) fail("$where must be an object")
+        rejectNulls(where, poll, listOf("headers", "pick", "each", "prefix"))
         val url = poll["url"]
         if (url is String) checkTemplate("$where: url", url)
         if (url !is String || url.toByteArray().size > urlMax ||
@@ -284,6 +291,7 @@ class ManifestCheck(private val sdk: Sdk) {
         settings.forEachIndexed { number, setting ->
             val where = "$path: setting $number"
             if (setting !is Map<*, *>) fail("$where must be an object")
+            rejectNulls(where, setting, listOf("hidden", "help", "options"))
             val key = setting["key"]
             if (key !is String || key.codePointCount(0, key.length) !in 1..settingKeyMax ||
                 key.any { it < '!' || it > '~' }) {
@@ -304,8 +312,8 @@ class ManifestCheck(private val sdk: Sdk) {
             if (kind != "choice") {
                 if (options != null) fail("$where: only a choice has \"options\"")
             } else if (options !is List<*> || options.size !in 1..settingOptionsMax ||
-                options.any { it !is String || !isWords(it, 1, settingOptionMax) }) {
-                fail("$where: \"options\" must be 1-$settingOptionsMax strings of 1-$settingOptionMax characters")
+                options.any { it !is String || it.length !in 1..settingOptionMax || it.any { c -> c !in ' '..'~' } }) {
+                fail("$where: \"options\" must be 1-$settingOptionsMax strings of 1-$settingOptionMax printable ASCII characters")
             }
         }
         settings.forEachIndexed { number, setting ->
@@ -378,14 +386,33 @@ class ManifestCheck(private val sdk: Sdk) {
         /** A pace as a person writes it, in seconds; 0 when the text is not one. */
         fun paceSeconds(text: Any?): Long {
             if (text !is String) return 0
-            val found = Regex("""(\d{1,6}) *(?:([smhd])[a-z]*)?""").matchEntire(text) ?: return 0
-            val unit = when (found.groupValues[2]) {
+            val found = Regex("""([0-9]{1,6}) *(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours|d|day|days)?""").matchEntire(text) ?: return 0
+            val unit = when (found.groupValues[2].take(1)) {
                 "", "s" -> 1L
                 "m" -> 60L
                 "h" -> 3600L
                 else -> 86400L
             }
-            return found.groupValues[1].toLong() * unit
+            return (found.groupValues[1].toLong() * unit).takeIf { it <= 86400 } ?: 0
+        }
+
+        fun isCompanionUrl(url: String): Boolean {
+            if (!url.startsWith("https://") || url.any { it !in '!'..'~' || it in "\"<>\\" }) return false
+            val authority = url.removePrefix("https://").takeWhile { it !in "/?#" }
+            val host = authority.substringBefore(':')
+            val labels = host.split('.')
+            if (host.length > 253 || host.isEmpty() || labels.any { label ->
+                    label.length !in 1..63 || label.first() == '-' || label.last() == '-' ||
+                        label.any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' && it != '-' }
+                }) return false
+            if ((labels.last().all { it in '0'..'9' } || Regex("0[xX][0-9a-fA-F]+").matches(labels.last())) && (labels.size != 4 || labels.any {
+                    it.any { c -> c !in '0'..'9' } || (it.length > 1 && it[0] == '0') || it.toIntOrNull() !in 0..255
+                })) return false
+            if (':' in authority) {
+                val port = authority.substringAfter(':')
+                if (port.isEmpty() || port.any { it !in '0'..'9' } || port.toIntOrNull() !in 1..65535) return false
+            }
+            return true
         }
 
         fun fail(message: String): Nothing = throw BuildError(message)

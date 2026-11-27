@@ -229,9 +229,17 @@ function openAppSettings(app) {
 let companion = null;
 
 byId("app-companion").addEventListener("click", () => {
-  companion = { app: appInDialog, origin: new URL(appInDialog.companion).origin,
-                page: window.open(appInDialog.companion, "perinkpheral-companion",
-                                  "popup,width=520,height=720") };
+  let url;
+  try {
+    url = new URL(appInDialog.companion);
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) throw new Error();
+  } catch (_) {
+    companion = null;
+    toast("Invalid companion address.", "error");
+    return;
+  }
+  companion = { app: appInDialog, origin: url.origin,
+                page: window.open(url.href, "perinkpheral-companion", "popup,width=520,height=720") };
   if (!companion.page) toast("Allow pop-ups for this page.", "error");
 });
 

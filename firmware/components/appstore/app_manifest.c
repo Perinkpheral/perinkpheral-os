@@ -15,6 +15,7 @@ _Static_assert(MANIFEST_PICK_PATHS_MAX == JSON_PICK_PATHS_MAX &&
 #include "json_tree.h"
 #include "host_api.h"
 #include "units.h"
+#include "app_duration.h"
 
 static bool is_name_character(char character)
 {
@@ -104,6 +105,8 @@ static bool read_pick(const json_t *pick, app_poll_t *poll)
 }
 
 static int address_setting(const json_t *settings, const char *key, size_t key_length);
+static bool is_printable(const char *text);
+static bool is_link_value(const char *value);
 
 /* The page that sets the application up from a browser: somewhere a
  * browser will take a secret from, so https and nothing else. */
@@ -119,34 +122,59 @@ static bool is_companion_url(const json_t *companion)
         return false;
     }
     for (const char *at = url; *at != '\0'; at++) {
-        if (*at <= ' ' || *at > '~' || *at == '"' || *at == '<' || *at == '>') {
+        if (*at <= ' ' || *at > '~' || *at == '"' || *at == '<' || *at == '>' || *at == '\\') {
             return false;
         }
     }
-    return true;
+    const char *host = url + sizeof SCHEME - 1;
+    size_t host_length = strcspn(host, ":/?#");
+    if (host_length == 0 || host[0] == '-' || host[host_length - 1] == '-') return false;
+    for (size_t index = 0; index < host_length; index++) {
+        char character = host[index];
+        if (character == '.') {
+            if (index == 0 || index + 1 == host_length || host[index - 1] == '-' ||
+                host[index + 1] == '-' || host[index + 1] == '.') return false;
+        } else if (!((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+                     (character >= '0' && character <= '9') || character == '-')) return false;
+    }
+    if (host_length > 253) return false;
+    size_t label_start = 0, labels = 0;
+    bool numeric_last = false, ipv4 = true;
+    for (size_t index = 0; index <= host_length; index++) {
+        if (index < host_length && host[index] != '.') continue;
+        size_t label_length = index - label_start;
+        if (label_length > 63) return false;
+        unsigned number = 0;
+        numeric_last = true;
+        for (size_t digit = label_start; digit < index; digit++) {
+            if (host[digit] < '0' || host[digit] > '9') { numeric_last = false; break; }
+            if (number <= 255) number = number * 10 + (unsigned)(host[digit] - '0');
+        }
+        ipv4 = ipv4 && numeric_last && number <= 255 && (label_length == 1 || host[label_start] != '0');
+        labels++;
+        label_start = index + 1;
+    }
+    const char *last_label = host;
+    for (size_t index = 0; index < host_length; index++) {
+        if (host[index] == '.') last_label = host + index + 1;
+    }
+    if (host + host_length - last_label > 2 && last_label[0] == '0' &&
+        (last_label[1] == 'x' || last_label[1] == 'X')) {
+        bool hexadecimal = true;
+        for (const char *digit = last_label + 2; digit < host + host_length; digit++) {
+            hexadecimal = hexadecimal && ((*digit >= '0' && *digit <= '9') ||
+                          (*digit >= 'a' && *digit <= 'f') || (*digit >= 'A' && *digit <= 'F'));
+        }
+        numeric_last = numeric_last || hexadecimal;
+    }
+    if (numeric_last && (!ipv4 || labels != 4)) return false;
+    return is_link_value(url);
 }
 
 uint32_t app_manifest_interval_seconds(const char *text)
 {
-    uint32_t number = 0;
-    int      digits = 0;
-    while (*text >= '0' && *text <= '9' && digits < 6) {
-        number = number * 10 + (uint32_t)(*text++ - '0');
-        digits++;
-    }
-    if (digits == 0) {
-        return 0;
-    }
-    while (*text == ' ') {
-        text++;
-    }
-    uint32_t unit = *text == '\0' || *text == 's' ? 1
-                    : *text == 'm'               ? SECONDS_PER_MINUTE
-                    : *text == 'h'               ? SECONDS_PER_HOUR
-                    : *text == 'd'               ? SECONDS_PER_DAY
-                                                 : 0;
-    /* More than a day is not a pace anybody is given, and would not fit. */
-    return unit == 0 || number > APP_POLL_EVERY_MAX_S / unit ? 0 : number * unit;
+    int32_t seconds = app_duration_seconds(text, APP_POLL_EVERY_MAX_S);
+    return seconds < 0 ? 0 : (uint32_t)seconds;
 }
 
 /* "{{key}}" and nothing else before `rest`: the key, when it is a setting
@@ -239,14 +267,19 @@ static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *pa
             const json_t *preset = json_get(setting, "default");
             uint32_t     pace = json_is_string(preset) ? app_manifest_interval_seconds(preset->text)
                                                        : 0;
-            if (pace >= APP_POLL_EVERY_MIN_S && pace <= APP_POLL_EVERY_MAX_S) {
-                parsed->every_s = pace;
+            if (preset != NULL && pace < APP_POLL_EVERY_MIN_S) return false;
+            if (preset != NULL) parsed->every_s = pace;
+            const json_t *option;
+            json_for_each(option, json_get(setting, "options")) {
+                if (!json_is_string(option) || app_manifest_interval_seconds(option->text) < APP_POLL_EVERY_MIN_S) {
+                    return false;
+                }
             }
         }
         if (!is_found) {
             return false;
         }
-    } else if (!json_is_number(every) || every->number < APP_POLL_EVERY_MIN_S ||
+    } else if (!json_is_number(every) || !every->is_whole || every->number < APP_POLL_EVERY_MIN_S ||
                every->number > APP_POLL_EVERY_MAX_S) {
         return false;
     } else {
@@ -395,7 +428,7 @@ static int setting_type(const json_t *setting)
         const json_t *option;
         json_for_each(option, options)
         {
-            if (!is_words_of(option, 1, APP_SETTING_OPTION_MAX)) {
+            if (!is_text_of(option, 1, APP_SETTING_OPTION_MAX) || !is_printable(option->text)) {
                 return -1;
             }
         }
@@ -406,7 +439,6 @@ static int setting_type(const json_t *setting)
 
 static bool fits_type(const json_t *setting, int type, const char *value);
 static bool is_server_value(const char *value);
-static bool is_link_value(const char *value);
 
 /* The type of the setting with this key when it is an address of the
  * user's - a server ("url") or a whole link - and -1 otherwise. */
@@ -426,7 +458,6 @@ static int address_setting(const json_t *settings, const char *key, size_t key_l
     }
     return -1;
 }
-static bool is_printable(const char *text);
 
 /* What the page shows while nothing is set; the application has to mean
  * the same when it finds nothing in its store. A secret has none, and a
@@ -978,6 +1009,10 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
         !read_string(root, "title", manifest->title, sizeof manifest->title) ||
         manifest->title[0] == '\0') {
         return APP_MANIFEST_BAD_TITLE;
+    }
+    const json_t *description = json_get(root, "description");
+    if (description != NULL && !is_words_of(description, 1, MANIFEST_DESCRIPTION_MAX)) {
+        return APP_MANIFEST_BAD_FIELD;
     }
     if (!read_string(root, "version", manifest->version, sizeof manifest->version)) {
         return APP_MANIFEST_BAD_FIELD;

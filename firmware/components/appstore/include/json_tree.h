@@ -14,7 +14,8 @@ extern "C" {
 
 /* A JSON document as a tree: parsed from text, built in code, printed as
  * text. Numbers are integers of 64 bits: the fraction of a number is
- * dropped and `is_whole` says so; a number with an exponent is refused.
+ * dropped and `is_whole` is false when any fractional digit is nonzero;
+ * a number with an exponent is refused.
  * No floating point is used. Pure, host-tested. For an answer that
  * arrives in pieces see sdk/lib/json_pick.h. */
 
@@ -36,7 +37,7 @@ typedef struct json {
     char        *name;  /* a member of an object: its key; else NULL */
     char        *text;  /* JSON_STRING: the value, unescaped, terminated */
     int64_t      number;   /* JSON_NUMBER */
-    bool         is_whole; /* JSON_NUMBER: the text had no fraction */
+    bool         is_whole; /* JSON_NUMBER: the fraction is absent or zero */
     json_type_t  type;
 } json_t;
 

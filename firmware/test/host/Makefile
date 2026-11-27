@@ -24,7 +24,7 @@ TOOLS   := ../../../tools/perinkpheral
 MKAPP   := $(TOOLS) build
 MAIN    := ../../main
 
-MANIFEST_SRCS := $(APPSTORE)/app_manifest.c $(APPSTORE)/json_tree.c $(SDK_LIB)/json_pick.c
+MANIFEST_SRCS := $(APPSTORE)/certificate_file.c $(APPSTORE)/app_manifest.c $(APPSTORE)/json_tree.c $(SDK_LIB)/json_pick.c
 MANIFEST_FLAGS := -I$(APPSYS)/include -I$(SDK) -I$(SDK_LIB)
 
 # Whatever draws is rebuilt when the drawing code changes.
@@ -39,7 +39,7 @@ APP_SRCS := $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/document_
 QR      := $(COMP)/qr
 QR_SRCS := $(QR)/qrcodegen/qrcodegen.c $(QR)/wifi_qr.c
 QR_INCS := -I$(QR)/include -I$(QR)/qrcodegen
-TESTS   := test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
+TESTS   := test_certificate_file test_sdk_lib test_json_tree test_appconf test_gfx test_btn_core test_refresh_policy test_frame_box test_deadline_table test_scrollbar test_wm test_notice_queue test_scenes test_wifi_plan test_ota test_recovery_ota test_recovery_settings test_log_ring test_setup test_json_pick test_catalog test_app_manifest test_app_store test_polls test_request_queue test_app_room
 TESTS   += test_document_reader test_xml_query test_answer_headers test_web_settings_json test_web_app_settings
 TESTS   += test_map test_map_land
 
@@ -119,7 +119,7 @@ test_system_settings: test_system_settings.c tinytest.h $(SETTINGS_APP)/settings
 	$(CC) $(CFLAGS) -Wno-attributes -I$(SDK) -I$(SDK_LIB) -I$(SETTINGS_HEADERS) -o $@ test_system_settings.c $(SETTINGS_HEADERS)/strings.c
 
 test_app_install: test_app_install.c tinytest.h $(MAIN)/app_install.c $(MAIN)/app_install.h $(MANIFEST_SRCS) $(APPSTORE)/app_update_policy.c $(APPSTORE)/app_room.c $(APPSTORE)/catalog.c $(wildcard install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h)
-	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Iinstall_stubs -Ipersistence_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_app_install.c $(MANIFEST_SRCS) $(APPSTORE)/app_update_policy.c $(APPSTORE)/app_room.c $(APPSTORE)/catalog.c -lm
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Inet_stubs -Iinstall_stubs -Ipersistence_stubs -I$(APPCONF)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_app_install.c $(MANIFEST_SRCS) $(APPSTORE)/app_update_policy.c $(APPSTORE)/app_room.c $(APPSTORE)/catalog.c -lm
 
 test_app_update_schedule: test_app_update_schedule.c tinytest.h $(APPSTORE)/app_update_schedule.c $(APPSTORE)/include/app_update_schedule.h
 	$(CC) $(CFLAGS) -o $@ test_app_update_schedule.c $(APPSTORE)/app_update_schedule.c
@@ -393,3 +393,7 @@ test_catalog_stream: test_catalog_stream.c tinytest.h $(APPSTORE)/catalog_stream
 WEB_POLLER_SRCS := $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/catalog.c $(MANIFEST_SRCS)
 test_web_memory: test_web_memory.c tinytest.h $(MAIN)/web_server.c $(MAIN)/web_apps.c $(MAIN)/poller.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(COMP)/wasm3/m3_area.h $(wildcard $(MAIN)/*.h route_stubs/*.h route_stubs/*/*.h memory_stubs/*.h install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h poller_stubs/freertos/*.h)
 	$(CC) $(CFLAGS) -O2 -Dasm=__asm__ -pthread -ffunction-sections -fdata-sections -DCONFIG_LWIP_MAX_SOCKETS=12 $(MANIFEST_FLAGS) -Ipoller_stubs -Iroute_stubs -Imemory_stubs -Iinstall_stubs -Ipersistence_stubs -I$(COMP)/wasm3 -I$(APPCONF)/include -I$(DEADLINES)/include -I$(NET)/include -I$(UI)/include -I$(GFX)/include -I$(MAIN) -o $@ test_web_memory.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(HOST_TEST_LDFLAGS) -lm
+
+# Complete certificate envelope before X.509 trust parsing.
+test_certificate_file: test_certificate_file.c $(APPSTORE)/certificate_file.c $(APPSTORE)/include/certificate_file.h
+	$(CC) $(CFLAGS) -o $@ test_certificate_file.c $(APPSTORE)/certificate_file.c

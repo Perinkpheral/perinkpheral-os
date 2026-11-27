@@ -980,7 +980,9 @@ paths:
         package file name of at most 23 bytes. Reserved file names are refused. The
         body must be nonempty. app.wasm is limited to 49152 bytes, manifest.json to
         8192 bytes, and other files to 65536 bytes. This stages and commits one file;
-        it does not validate the complete package or reload the installed application
+        uploading app.wasm removes previous generated strings.xx and manifest.xx tables,
+        so upload the module before the current translation files and the manifest.
+        It does not validate the complete package or reload the installed application
         list. Use /api/dev/run to restart into the uploaded application.
         200 text/plain body: stored
         400 text/plain body: name=<application>&file=<its file>, not a file's name,

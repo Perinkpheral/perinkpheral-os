@@ -8,6 +8,8 @@ static int response_status, read_failure, read_calls, cleanups, consumer_calls;
 static size_t body_bytes, received;
 static int64_t clock_ms;
 static bool consumer_accepts, fail_open, expire_read;
+static bool parsed_ca, parsed_extra;
+static int certificate_parse_calls;
 static bool mutex_taken, online = true, complete_body = true;
 static int socket_error, tls_error_code, certificate_flags, header_failure;
 static esp_err_t open_error, tls_failure;
@@ -95,9 +97,9 @@ bool esp_http_client_is_chunked_response(esp_http_client_handle_t client) { (voi
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t client) { (void)client; return (int64_t)body_bytes; }
 int esp_http_client_get_and_clear_last_tls_error(esp_http_client_handle_t client, int *error, int *flags) { (void)client; *error = tls_error_code; *flags = certificate_flags; return tls_failure; }
 int esp_http_client_get_errno(esp_http_client_handle_t client) { (void)client; return socket_error; }
-void mbedtls_x509_crt_init(mbedtls_x509_crt *chain) { (void)chain; }
+void mbedtls_x509_crt_init(mbedtls_x509_crt *chain) { memset(chain, 0, sizeof *chain); }
 void mbedtls_x509_crt_free(mbedtls_x509_crt *chain) { (void)chain; }
-int mbedtls_x509_crt_parse(mbedtls_x509_crt *chain, const unsigned char *bytes, size_t length) { (void)chain; (void)bytes; (void)length; return -1; }
+int mbedtls_x509_crt_parse_der(mbedtls_x509_crt *chain, const unsigned char *bytes, size_t length) { certificate_parse_calls++; chain->ca_istrue = parsed_ca; chain->next = parsed_extra ? chain : NULL; (void)bytes; (void)length; return 0; }
 void mbedtls_ssl_conf_ca_chain(mbedtls_ssl_config *config, mbedtls_x509_crt *chain, void *revocations) { (void)config; (void)chain; (void)revocations; }
 int32_t app_kv_get_or_default(const char *name, const char *key, void *value, int32_t capacity) { (void)name; (void)key; (void)value; (void)capacity; return HOST_ERR_NOT_FOUND; }
 char *app_store_read_manifest(const char *root, const char *name) { (void)root; (void)name; return manifest_json == NULL ? NULL : strdup(manifest_json); }
@@ -377,8 +379,29 @@ static void test_retry_after(void)
     CHECK(cooldown_calls == 0);
 }
 
+static void test_certificate_admission(void)
+{
+    static const uint8_t der[] = {0x30, 3, 1, 2, 3};
+    mbedtls_x509_crt certificate;
+    mbedtls_x509_crt_init(&certificate);
+    parsed_ca = true;
+    CHECK(app_certificate_parse(&certificate, der, sizeof der));
+    parsed_ca = false;
+    CHECK(!app_certificate_parse(&certificate, der, sizeof der));
+    parsed_ca = true;
+    parsed_extra = true;
+    CHECK(!app_certificate_parse(&certificate, der, sizeof der));
+    parsed_extra = false;
+    int before = certificate_parse_calls;
+    static const uint8_t extra[] = {0x30, 3, 1, 2, 3, 0};
+    CHECK(!app_certificate_parse(&certificate, extra, sizeof extra));
+    CHECK(!app_certificate_parse(&certificate, der, sizeof der - 1));
+    CHECK(certificate_parse_calls == before);
+}
+
 int main(void)
 {
+    test_certificate_admission();
     const poller_net_host_t host = { .deliver = deliver, .retry_after = record_retry_after };
     poller_net_start(&host);
     test_poll_memory_failures();

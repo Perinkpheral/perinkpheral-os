@@ -23,9 +23,21 @@ object Certificates {
         if (!file.isFile) throw BuildError("${file.path}: the manifest names it under \"certificates\" and it is not there")
         if (file.length() > most) throw BuildError("${file.path}: ${file.length()} bytes, and a certificate may have $most")
         val certificate = try {
-            CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(file.readBytes())) as X509Certificate
-        } catch (error: CertificateException) {
-            throw BuildError("${file.path}: not a certificate in PEM or DER")
+            val bytes = file.readBytes()
+            val der = if (bytes.firstOrNull() == 0x30.toByte()) bytes else {
+                val text = String(bytes, Charsets.US_ASCII)
+                val block = Regex("""[ \t\r\n]*-----BEGIN CERTIFICATE-----([A-Za-z0-9+/= \t\r\n]+)-----END CERTIFICATE-----[ \t\r\n]*""")
+                    .matchEntire(text) ?: throw CertificateException("not one PEM block")
+                val encoded = block.groupValues[1].filterNot { it in " \t\r\n" }
+                val decoded = java.util.Base64.getDecoder().decode(encoded)
+                if (java.util.Base64.getEncoder().encodeToString(decoded) != encoded) throw CertificateException("incomplete base64")
+                decoded
+            }
+            val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(der)) as X509Certificate
+            if (!certificate.encoded.contentEquals(der)) throw CertificateException("extra or incomplete certificate material")
+            certificate
+        } catch (error: Exception) {
+            throw BuildError("${file.path}: not exactly one complete certificate in PEM or DER")
         }
         if (certificate.basicConstraints < 0) {
             throw BuildError("${file.path}: ${authority(certificate)} is not a certificate authority: an application " +

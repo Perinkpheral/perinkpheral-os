@@ -193,9 +193,25 @@ HOST_IMPORT(answer_header,
  * application memory. Provided by sdk/lib; applications do not define it. */
 APP_EXPORT(app_data_buffer, uint8_t *app_data_buffer(void));
 
+/* Packaged trust files contain exactly one complete CA certificate each, in
+ * PEM or DER. PEM allows only ASCII spaces, tabs and line breaks outside its
+ * CERTIFICATE block; DER allows no extra bytes. Additional or partial
+ * certificates and other material are invalid. Companion URLs use HTTPS with
+ * an ASCII DNS host or IPv4 address and an optional decimal port 1..65535,
+ * without userinfo or backslashes. */
+
 /* ---- Network ---- */
 
-/* Manifest polls accept "method" (the HOST_HTTP_* names, GET by default)
+/* Manifest JSON, including unknown metadata, permits at most 16 nested containers,
+ * signed 64-bit integer parts and no exponent notation. Typed optional fields are
+ * omitted when absent; present nulls are invalid. Integer fields, including
+ * "every", require whole values; zero-only decimal fractions are whole.
+ * A textual interval is 1..6 decimal digits, optional ASCII spaces, then an
+ * optional unit: s/sec/second/seconds, m/min/minute/minutes, h/hour/hours or
+ * d/day/days. The entire text must match. A number alone is seconds; poll
+ * intervals must be within MANIFEST_POLL_EVERY_MIN_S..MANIFEST_POLL_EVERY_MAX_S.
+ *
+ * Manifest polls accept "method" (the HOST_HTTP_* names, GET by default)
  * and "body" (at most 1024 bytes before and after expansion). A body is
  * refused with GET or HEAD. {{key}} values in a body are stored text,
  * including line feeds; a carriage return fails preparation. The developer

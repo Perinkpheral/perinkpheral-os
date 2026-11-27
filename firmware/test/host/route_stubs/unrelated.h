@@ -48,7 +48,7 @@
 #pragma weak log_capture_read
 #pragma weak mbedtls_x509_crt_free
 #pragma weak mbedtls_x509_crt_init
-#pragma weak mbedtls_x509_crt_parse
+#pragma weak mbedtls_x509_crt_parse_der
 #pragma weak mbedtls_x509_dn_gets
 #pragma weak ota_enter_recovery
 #pragma weak poller_fetch

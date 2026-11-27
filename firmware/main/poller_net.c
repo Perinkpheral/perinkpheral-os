@@ -3,6 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  */
 #include "poller_net.h"
+#include "app_certificate.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -291,11 +292,16 @@ static void trust_of(const char *app_name)
             continue;
         }
         bytes[size] = '\0';
-        bool is_pem = size > 10 && memcmp(bytes, "-----BEGIN", 10) == 0;
-        int  parsed = mbedtls_x509_crt_parse(&s_trusted, bytes, (size_t)size + (is_pem ? 1 : 0));
+        mbedtls_x509_crt certificate;
+        mbedtls_x509_crt_init(&certificate);
+        bool valid = app_certificate_parse(&certificate, bytes, (size_t)size);
         free(bytes);
-        if (parsed != 0) {
-            ESP_LOGW(TAG, "%s: certificate %s is not one (%d)", app_name, files[i], parsed);
+        if (valid) {
+            valid = mbedtls_x509_crt_parse_der(&s_trusted, certificate.raw.p, certificate.raw.len) == 0;
+        }
+        mbedtls_x509_crt_free(&certificate);
+        if (!valid) {
+            ESP_LOGW(TAG, "%s: certificate %s is not exactly one CA", app_name, files[i]);
             continue;
         }
         s_has_trusted = true;

@@ -204,6 +204,35 @@ bool app_store_begin_file(const char *root, const char *name, const char *file,
 
 static bool replace_with(const char *incoming, const char *installed);
 
+bool app_store_is_generated_translation(const char *file)
+{
+    const char *language = strncmp(file, "strings.", 8) == 0 ? file + 8
+                         : strncmp(file, "manifest.", 9) == 0 ? file + 9 : "";
+    return strlen(language) == 2 && language[0] >= 'a' && language[0] <= 'z' &&
+           language[1] >= 'a' && language[1] <= 'z';
+}
+
+/* A development upload starts with the module, before any generated tables. */
+bool app_store_prune_translations(const char *root, const char *name)
+{
+    char path[PATH_MAX_BYTES];
+    if (!path_of(path, root, name, "")) return false;
+    DIR *directory = opendir(path);
+    if (directory == NULL) return errno == ENOENT;
+    bool success = true;
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
+        if (app_store_is_generated_translation(entry->d_name)) {
+            char file[PATH_MAX_BYTES];
+            if (!file_path_of(file, root, name, entry->d_name, "") || remove(file) != 0) {
+                success = false;
+                break;
+            }
+        }
+    }
+    return closedir(directory) == 0 && success;
+}
+
 bool app_store_commit_file(const char *root, const char *name, const char *file)
 {
     char incoming[PATH_MAX_BYTES], installed[PATH_MAX_BYTES];
@@ -214,7 +243,8 @@ bool app_store_commit_file(const char *root, const char *name, const char *file)
     /* The file it replaces may be open this very moment - the poller reads
      * a manifest for every request it makes - and a file that is open is
      * not replaced. It is read in a moment: tried again a few times. */
-    return replace_with(incoming, installed);
+    return (strcmp(file, MODULE_FILE) != 0 || app_store_prune_translations(root, name)) &&
+           replace_with(incoming, installed);
 }
 
 /* ---- several files at once ----
@@ -281,7 +311,11 @@ static bool settle_incoming(const char *folder, bool keeps)
         snprintf(incoming, sizeof incoming, "%s/%s", folder, file);
         snprintf(installed, sizeof installed, "%s/%.*s", folder,
                  (int)(strlen(file) - (sizeof INCOMING_SUFFIX - 1)), file);
-        if (!(keeps ? replace_with(incoming, installed) : remove(incoming) == 0)) {
+        const char *base = strrchr(installed, '/') + 1;
+        struct stat found;
+        bool deletes = keeps && app_store_is_generated_translation(base) && stat(incoming, &found) == 0 && found.st_size == 0;
+        if (deletes && remove(installed) != 0 && errno != ENOENT) return false;
+        if (!(keeps && !deletes ? replace_with(incoming, installed) : remove(incoming) == 0)) {
             return false;
         }
     }
@@ -299,12 +333,37 @@ static bool folder_of(char folder[PATH_MAX_BYTES], char mark[PATH_MAX_BYTES + si
     return true;
 }
 
+/* Empty incoming tables are deletion records. They survive an interrupted commit,
+ * so recovery never mistakes an already installed new table for an obsolete one. */
+static bool stage_translation_removals(const char *folder)
+{
+    DIR *directory = opendir(folder);
+    if (directory == NULL) return false;
+    bool success = true;
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
+        if (!app_store_is_generated_translation(entry->d_name)) continue;
+        char incoming[2 * PATH_MAX_BYTES];
+        snprintf(incoming, sizeof incoming, "%s/%.*s%s", folder, APP_FILE_NAME_MAX, entry->d_name, INCOMING_SUFFIX);
+        struct stat found;
+        if (stat(incoming, &found) == 0) continue;
+        if (errno != ENOENT) { success = false; break; }
+        FILE *record = fopen(incoming, "wb");
+        if (record == NULL || fclose(record) != 0) { success = false; break; }
+    }
+    return closedir(directory) == 0 && success;
+}
+
 bool app_store_commit_all(const char *root, const char *name)
 {
     char folder[PATH_MAX_BYTES], mark[PATH_MAX_BYTES + sizeof COMMIT_MARK];
     if (!folder_of(folder, mark, root, name)) {
         return false;
     }
+    char manifest[PATH_MAX_BYTES];
+    struct stat found;
+    if (!file_path_of(manifest, root, name, MANIFEST_FILE, INCOMING_SUFFIX)) return false;
+    if (stat(manifest, &found) == 0 && !stage_translation_removals(folder)) return false;
     FILE *marked = fopen(mark, "wb");
     if (marked == NULL || fclose(marked) != 0) {
         return false;
@@ -440,7 +499,7 @@ static long taken_by(long size)
 }
 
 /* How much the application's data files take, the one named `except` not counted. */
-static long data_bytes(const char *root, const char *name, const char *except)
+static long data_bytes(const char *root, const char *name, const char *except, bool with_translations)
 {
     char folder[PATH_MAX_BYTES];
     snprintf(folder, sizeof folder, "%s/%s", root, name);
@@ -451,7 +510,8 @@ static long data_bytes(const char *root, const char *name, const char *except)
     long total = 0;
     struct dirent *entry;
     while ((entry = readdir(directory)) != NULL) {
-        if (entry->d_name[0] == '.' || !is_data_file(entry->d_name) ||
+        if ((!with_translations && app_store_is_generated_translation(entry->d_name)) ||
+            entry->d_name[0] == '.' || !is_data_file(entry->d_name) ||
             strcmp(entry->d_name, except) == 0) {
             continue;
         }
@@ -464,7 +524,12 @@ static long data_bytes(const char *root, const char *name, const char *except)
 
 long app_store_files_bytes(const char *root, const char *name)
 {
-    return data_bytes(root, name, "");
+    return data_bytes(root, name, "", true);
+}
+
+long app_store_retained_bytes(const char *root, const char *name)
+{
+    return data_bytes(root, name, "", false);
 }
 
 app_write_result_t app_store_write_file(const char *root, const char *name, const char *file,
@@ -491,7 +556,7 @@ app_write_result_t app_store_write_file(const char *root, const char *name, cons
     }
     long end = offset + (long)length;
     long size_after = end > size_before ? end : size_before;
-    if (data_bytes(root, name, file) + taken_by(size_after) > APP_FILES_WRITER_MAX_BYTES) {
+    if (data_bytes(root, name, file, true) + taken_by(size_after) > APP_FILES_WRITER_MAX_BYTES) {
         return APP_WRITE_NO_SPACE;
     }
     FILE *opened = fopen(path, size < 0 ? "wb" : "r+b");

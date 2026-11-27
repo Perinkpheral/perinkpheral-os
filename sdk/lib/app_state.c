@@ -3,6 +3,7 @@
  * Copyright (c) 2026 GrakovNe
  */
 #include "app_state.h"
+#include "app_duration.h"
 #include "manifest_limits.h"
 
 #include "app_text.h"
@@ -115,28 +116,10 @@ int32_t app_setting_item(const char *key, int32_t index, char *text, int32_t tex
     return 0;
 }
 
-#define SECONDS_PER_MINUTE 60
-#define SECONDS_PER_HOUR   3600
-#define SECONDS_PER_DAY    86400
-#define PACE_DIGITS_MAX    6
-
 int32_t app_seconds_of(const char *text, int32_t otherwise)
 {
-    int32_t number = 0, digits = 0;
-    while (*text >= '0' && *text <= '9' && digits < PACE_DIGITS_MAX) {
-        number = number * 10 + (*text++ - '0');
-        digits++;
-    }
-    while (*text == ' ') {
-        text++;
-    }
-    int32_t unit = *text == '\0' || *text == 's' ? 1
-                   : *text == 'm'               ? SECONDS_PER_MINUTE
-                   : *text == 'h'               ? SECONDS_PER_HOUR
-                   : *text == 'd'               ? SECONDS_PER_DAY
-                                                : 0;
-    /* As the host reads a pace (app_manifest.c): more than a day is none, and would not fit. */
-    return digits == 0 || unit == 0 || number > MANIFEST_POLL_EVERY_MAX_S / unit ? otherwise : number * unit;
+    int32_t seconds = app_duration_seconds(text, MANIFEST_POLL_EVERY_MAX_S);
+    return seconds < 0 ? otherwise : seconds;
 }
 
 int32_t app_setting_seconds(const char *key, int32_t otherwise)

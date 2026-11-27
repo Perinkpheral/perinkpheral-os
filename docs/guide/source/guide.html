@@ -232,16 +232,18 @@
 <p>The generated headers are made when the project is configured, and again when it is reloaded after <code>strings/</code> or <code>pictures/</code> change; the CLion plugin remakes them on every change. A string the code does not use yet, or a translation that lacks a string, is accepted in them; the build refuses both.</p>
 <p>Set <code>WASI_SDK_PATH</code> and <code>PERINKPHERAL_HOST</code> in the CMake environment of the IDE.</p>
 <p>The perINKpheral plugin for CLion (repository <code>perinkpheral-clion-plugin</code>) does this setup itself. It downloads the SDK and wasi-sdk on request, opens an application folder as a CMake project, and adds two run configurations: on the device and in the simulator. Its device window shows the live screen, the buttons, the log and the status of the device or the simulator.</p>
+<p>Generated CMake projects resolve the SDK from an explicit <code>-DPERINKPHERAL=&lt;checkout&gt;</code>, then the <code>PERINKPHERAL</code> environment variable, then a sibling <code>../perinkpheral-os</code> checkout. Set the CMake variable when the layout differs. No path from the computer that created the project is embedded.</p>
 <h2 id="start-sample">Sample application</h2>
 <pre>#include "app_text.h"
 #include "host_api.h"
 
-#define MARGIN HOST_UI_MARGIN
+#define MARGIN      HOST_UI_MARGIN
 
 static const char PRESSES_KEY[] = "presses";
 #define PRESSES_KEY_LENGTH ((int32_t)sizeof PRESSES_KEY - 1)
 
 static int32_t presses;
+static int32_t storage_failed;
 
 static void draw_line(int32_t line, const char *text)
 {
@@ -249,31 +251,35 @@ static void draw_line(int32_t line, const char *text)
     gfx_draw_text(MARGIN, MARGIN + line * line_height, HOST_FONT_TEXT, text, app_text_length(text));
 }
 
-void app_on_load(void)                 /* load the state from the store */
+void app_on_load(void)
 {
-    kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &amp;presses, sizeof presses);
+    int32_t loaded = 0;
+    int32_t length = kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &amp;loaded, sizeof loaded);
+    presses = length == (int32_t)sizeof loaded &amp;&amp; loaded &gt;= 0 ? loaded : 0;
+    storage_failed = length &lt; 0 &amp;&amp; length != HOST_ERR_NOT_FOUND;
 }
 
-void app_on_terminate(void)         /* save the state before the unload */
-{
-    kv_set(PRESSES_KEY, PRESSES_KEY_LENGTH, &amp;presses, sizeof presses);
-}
-
-void app_on_button(int32_t event)   /* update the state, request a redraw */
+void app_on_button(int32_t event)
 {
     switch (event) {
     case BTN_UP_PRESSED:
     case BTN_OK_PRESSED:
     case BTN_DOWN_PRESSED:
-        presses++;
+        if (presses &lt; INT32_MAX) {
+            int32_t proposed = presses + 1;
+            storage_failed = kv_set(PRESSES_KEY, PRESSES_KEY_LENGTH, &amp;proposed, sizeof proposed) &lt; 0;
+            if (!storage_failed) {
+                presses = proposed;
+            }
+        }
         screen_redraw(HOST_REDRAW_NORMAL);
         break;
     }
 }
 
-void app_on_draw(void)              /* draw the whole frame from the state */
+void app_on_draw(void)
 {
-    char       counter_buffer[32];
+    char counter_buffer[32];
     app_text_t counter;
     app_text_start(&amp;counter, counter_buffer, sizeof counter_buffer);
     app_text_add(&amp;counter, "Presses: ");
@@ -281,6 +287,9 @@ void app_on_draw(void)              /* draw the whole frame from the state */
 
     draw_line(0, "Hello from wasm");
     draw_line(2, counter_buffer);
+    if (storage_failed) {
+        draw_line(4, "Storage error.");
+    }
 }</pre>
 <p>BACK is handled by Perinkpheral OS here: a short press of BACK closes an application that has no <code>app_on_back()</code> export.</p>
 
@@ -367,11 +376,12 @@ void app_on_draw(void)              /* draw the whole frame from the state */
 <p>The packaged manifest is at most 8192 bytes, including formatting and the firmware version written by the build.</p>
 <p>Perinkpheral OS ignores unknown keys. The build validates the keys listed above.</p>
 
+<p>Optional typed manifest fields must be omitted when absent. A present <code>null</code> is invalid, including nested poll and setting fields. All manifest JSON, including unknown metadata, has at most 16 nested containers; numbers have a signed 64-bit integer part and no exponent. Integer fields accept only whole values, including zero-only decimal fractions such as <code>60.0</code>.</p>
 <h2 id="package-polls">Polls</h2>
 <table>
   <tr><th style="width:13%">Field</th><th style="width:30%">Format</th><th>Description</th></tr>
   <tr><td class="c">url</td><td>Up to 511 bytes. <code>http</code> or <code>https</code>; or starting with <code>{{key}}</code> of a <code>url</code> setting; or exactly <code>{{key}}</code> of a <code>link</code> setting</td><td>Request URL; setting placeholders are described below</td></tr>
-  <tr><td class="c">every</td><td>10 to 86400 seconds, or <code>"{{key}}"</code> of a setting</td><td>Interval. With a setting, the stored text is a number and a unit; the unit is identified by its first letter: <code>s</code>, <code>m</code>, <code>h</code>, <code>d</code> ("30 s", "15 min", "1 h", "1 day"). A number alone is seconds. Perinkpheral OS applies the user's choice. Before the user chooses, the interval is the <code>default</code> of the setting, or 15 minutes without one; the application stores no value for it</td></tr>
+  <tr><td class="c">every</td><td>10 to 86400 seconds, or <code>"{{key}}"</code> of a setting</td><td>Interval. A setting value is 1 to 6 decimal digits, zero or more ASCII spaces, and an optional unit: <code>s</code>, <code>sec</code>, <code>second</code>, <code>seconds</code>; <code>m</code>, <code>min</code>, <code>minute</code>, <code>minutes</code>; <code>h</code>, <code>hour</code>, <code>hours</code>; <code>d</code>, <code>day</code>, <code>days</code>. A number alone is seconds. The complete text must match; suffixes and trailing spaces after a unit are invalid. The result must be 10 to 86400 seconds. Perinkpheral OS uses the setting default, or 15 minutes when it is omitted, until the user chooses</td></tr>
   <tr><td class="c">method</td><td><code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, <code>PATCH</code>, <code>HEAD</code>, <code>PROPFIND</code>, <code>REPORT</code></td><td>Optional request method; defaults to GET. Only GET follows redirects, up to three times; another method delivers its redirect response without sending again. <code>pick</code> works with every method; HEAD delivers no response values.</td></tr>
   <tr><td class="c">body</td><td>Up to 1024 bytes before and after expansion</td><td>Optional text, with <code>{{key}}</code> templates; refused with GET or HEAD, even when empty. Content-Type comes from <code>headers</code>.</td></tr>
   <tr><td class="c">headers</td><td>up to 4; a value up to 255 bytes</td><td><code>{{key}}</code> is supported in values. Used to send a token, or a <code>User-Agent</code> of the application's own in place of Perinkpheral OS's <code>perinkpheral</code></td></tr>
@@ -431,7 +441,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
   <tr><td class="c"><code>title</code></td><td>Required: 1 - 31 characters, at most 62 UTF-8 bytes. Translatable</td></tr>
   <tr><td class="c"><code>help</code></td><td>Optional: up to 95 characters and 190 UTF-8 bytes; empty when omitted. Translatable</td></tr>
   <tr><td class="c"><code>default</code></td><td>Optional: a nonempty string, or a nonempty array for list. Unset when omitted. Not allowed for secret or place</td></tr>
-  <tr><td class="c"><code>options</code></td><td>Required for choice, forbidden otherwise: 1 - 8 strings, each 1 - 23 characters and at most 46 UTF-8 bytes. Saved values must be printable ASCII</td></tr>
+  <tr><td class="c"><code>options</code></td><td>Required for choice, forbidden otherwise: 1 - 8 nonempty strings, each 1 - 23 printable ASCII characters. Translated labels may use supported Unicode</td></tr>
   <tr><td class="c"><code>hidden</code></td><td>Optional: true for a setting written through the device API by an integration. Omitted from the page form, except coordinate inputs referenced by a <code>place</code> setting. Stored and read like any other. The companion can fill any matching input present in the form</td></tr>
   <tr><td class="c"><code>latitude</code>, <code>longitude</code></td><td>Required for place: keys of two distinct number settings declared in the same manifest</td></tr>
 </table>
@@ -440,7 +450,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
   <tr><th style="width:11%">Type</th><th style="width:27%">Form field</th><th>Stored value</th></tr>
   <tr><td class="c">text</td><td>Text line</td><td>The text, up to 255 bytes</td></tr>
   <tr><td class="c">number</td><td>Number</td><td>Decimal digits with an optional leading minus and at most one decimal point. At least one digit is required; <code>+</code> and exponent notation are rejected</td></tr>
-  <tr><td class="c">choice</td><td>Selection from up to 8 <code>options</code></td><td>The option text, 1 - 23 characters. Translations add labels; the stored value is the option</td></tr>
+  <tr><td class="c">choice</td><td>Selection from up to 8 <code>options</code>. Values are nonempty printable ASCII; translated labels may use the language's supported Unicode characters</td><td>The option text, 1 - 23 characters. Translations add labels; the stored value is the option</td></tr>
   <tr><td class="c">toggle</td><td>Checkbox</td><td>Saved as <code>"1"</code> or <code>"0"</code>. Before saving, reads as its declared default, or is unset without one</td></tr>
   <tr><td class="c">secret</td><td>Password field</td><td>The secret. Write-only for the web page; readable by the application with <code>kv_get()</code></td></tr>
   <tr><td class="c">place</td><td>Place search by name</td><td>The place name. The page also fills the two <code>number</code> settings named in <code>latitude</code> and <code>longitude</code></td></tr>
@@ -470,9 +480,10 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 { perinkpheral: "app", name, title, settings, values }
 { perinkpheral: "settings", values: { key: "value" } }</pre>
 <p>The companion sends ready; the device page replies with app, the manifest settings and their effective values: manifest defaults for absent settings, stored empty values preserved, and list defaults joined with line feeds. Both secret and link values are omitted. The companion returns settings with declared keys and string values of at most 255 bytes. Only inputs present in the form can be filled, including coordinate inputs referenced by a place setting even when marked hidden. Other hidden settings have no inputs. An integration can write hidden settings through <code>/api/apps/settings</code>. The user must press Save to store filled values.</p>
-<p>Check event.source against window.opener and validate event.origin against the expected device origin. Use that origin as postMessage's target for values. The initial ready message carries no user data.</p>
+<p>Pin the expected device origin independently before accepting setup data: configure it in the companion or have the user enter it from the device page's address bar. Do not take it from an incoming message, query parameter or referrer. Check event.source against window.opener and event.origin against the pinned origin. Send ready and settings only to that origin. The example pins it until the page is reloaded.</p>
 <h1 id="screen">6. Screen</h1>
 
+<p>A companion address must use HTTPS with a nonempty ASCII DNS host or IPv4 address and an optional decimal port from 1 to 65535. User information, backslashes and empty authorities are invalid. The device page reports malformed addresses instead of opening a broken setup window.</p>
 <h2 id="screen-surface">Surface and colour</h2>
 <ul>
   <li>The origin is the top left corner of the surface. <code>gfx_width()</code> and <code>gfx_height()</code> return its size. Use these values for layout.</li>
@@ -901,7 +912,7 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
 <p>Perinkpheral OS verifies HTTPS servers against the ESP-IDF's root certificate bundle. A server certified by an authority outside that set fails with <code>HOST_FAILED_NOT_TRUSTED</code>. An application that needs such a server brings the authority's root certificate in its package and names it in the manifest:</p>
 <pre>"certificates": ["russian-root-ca.pem"]          /* files/russian-root-ca.pem */</pre>
 <ul>
-  <li>Each file is a root certificate of an authority, in PEM or DER, up to 4 KB. The build rejects a file that is missing, is not a certificate, is a server's certificate, or has expired.</li>
+  <li>Each file contains exactly one complete CA certificate in PEM or DER, up to 4 KB. PEM permits only ASCII spaces, tabs and line breaks outside its single CERTIFICATE block; DER permits no extra bytes. Additional certificates, incomplete blocks and other material are rejected by the build and firmware. The build also checks the certificate's validity period and CA authority.</li>
   <li>The roots are trusted for this application's polls and requests only, in addition to the ESP-IDF's root certificate bundle. Other applications and Perinkpheral OS do not trust them.</li>
   <li>The web page names the authorities before installation, as it does for system access, and on the application's card. The catalog index carries their names.</li>
   <li>Obtain the root certificate from its authority and verify its fingerprint against that authority's published fingerprint.</li>
@@ -1082,6 +1093,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <p><code>log_write(level, text, length)</code> writes one line of up to 200 bytes to the device log. It replaces <code>printf</code>.</p>
 <p><code>press ... --shot</code> waits up to four seconds for a new frame and up to 70 seconds while a newer frame is pending, then saves the frame currently reported. A timeout can therefore save the preceding frame.</p>
 
+<p>Catalog replacement removes generated <code>strings.xx</code> and <code>manifest.xx</code> tables absent from the new package. Development uploads begin with the module, remove previous generated tables and then upload the current ones. Simulator installation applies the same replacement rule. Other application data files remain unless the incoming package supplies a file of the same name.</p>
 <h2 id="tools-app-check">Capability checks</h2>
 <p>Run <code>tools/perinkpheral app-check &lt;folder&gt;</code> before publishing. It builds every application and checks non-system applications natively with address and undefined-behaviour sanitizers. Use <code>--only sessions|store|timers|network|drawing|notices|clock|logic</code> or <code>--app &lt;name&gt;</code> to narrow the run. No device or live service is used.</p>
 <p>Put <code>at</code>, <code>tz</code>, <code>store</code> and <code>mocks</code> in <code>test/check.json</code>; mocks accept <code>status</code>, <code>body</code> or <code>file</code>, and a <code>headers</code> object. Supply good responses and settings that reach the behaviour being tested. Missing responses and unreachable due notices produce coverage notes. The checks also discover <code>test/*.c</code> programs for application-specific rules.</p>
@@ -1126,9 +1138,23 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
   <li>The network sends <code>User-Agent: perinkpheral</code>, as the device does. The header's icon shows whether the last request reached the network.</li>
   <li>Ctrl+C stops the simulator as a restart stops the device: <code>app_on_terminate()</code> is called. A process that is killed loses what was not saved, as at a power loss.</li>
   <li><code>set</code> takes a list as its items with line breaks: <code>set stocks tickers $'AAPL\nMSFT'</code> in bash or zsh.</li>
-  <li>Not simulated: other applications (the menu holds only this one), device-specific system actions, refresh timing and sleep. Calls for Perinkpheral OS settings and time settings are supported. The interpreter memory limit is not enforced: check the build report.</li>
+  <li>Not simulated: other applications (the menu holds only this one), device-specific system actions, refresh timing and sleep. Calls for Perinkpheral OS settings and time settings are supported. The linear-memory bound is enforced; the shared application area is not. Interpreter-use estimates in the build report are advisory. Verify application-area admission and runtime use on the device.</li>
 </ul>
 
+<p>Native checks record drawing calls rather than pixels. Font measurements, QR bounds and ink geometry are approximations; focus permissions and WebAssembly memory offsets are not validated. Some sequences deliver several events before drawing, and background delivery does not reproduce interleaving between different applications. <code>standin_set()</code> writes raw test state without settings validation or destination-change secret clearing. A zero checker exit status is required even after all report lines were printed. Use interpreter tests for memory validation, simulator frames for rendering, and device checks for the shared application area, panel and timing.</p>
+<p>A simulator test folder contains <code>scenario.json</code> and its expected PNGs. From the repository root, create <code>tests/hello/scenario.json</code> with the example below, then run <code>tools/perinkpheral sim-test tests/hello --jobs 1</code>. An empty mocks object disables live requests.</p>
+<pre>{
+  "app": "sdk/apps/hello",
+  "at": 1795262400,
+  "tz": "UTC",
+  "font": "departure",
+  "language": "en",
+  "clock": false,
+  "mocks": {},
+  "steps": ["shot first", "press 3", "forward 60", "wait 1", "shot later"]
+}</pre>
+<p>The <code>app</code> and <code>glyphs</code> paths are relative to the invocation directory. A named <code>mocks</code> file is relative to the scenario; its response <code>file</code> paths are relative to that mocks file. Inline mock <code>file</code> paths are relative to the scenario. Unreadable resolved paths fail the run. <code>store</code> maps keys to string values. <code>steps</code> must be a nonempty array: <code>wait</code> takes nonnegative seconds, <code>forward</code> positive whole seconds, <code>press</code> one or more keys 1-4 or 1L-4L, and <code>shot</code> a filename stem without directories. Rejected commands fail with the simulator response.</p>
+<p><code>wait</code> uses real computer time; <code>forward</code> advances the simulated clock and deadlines. Use a short wait after advancement when delivery needs to settle. <code>--jobs N</code> limits concurrent scenarios; <code>"serial": true</code> runs one without overlap, but does not remove dependence on real-time waits. A missing expected PNG is written and the test fails even without <code>--update</code>. A mismatch writes <code>&lt;name&gt;.actual.png</code>. Inspect new and changed pictures before accepting them. <code>--update</code> writes expected pictures; review those files before committing them.</p>
 <h2 id="tools-problems">Common problems</h2>
 <table>
   <tr><th style="width:34%">Symptom</th><th>Probable cause</th></tr>

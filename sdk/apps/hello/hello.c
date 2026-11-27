@@ -5,9 +5,9 @@
  * The smallest application: a greeting and a count of presses. It shows
  * the shape every application has - handlers change the state and ask for
  * a redraw, app_on_draw() paints the state - and where the state waits
- * while the application is not on the screen: the host unloads it then,
- * so it reads the count back when it starts and saves it when it is about
- * to be unloaded.
+ * while the application is not on the screen: Perinkpheral OS unloads it,
+ * so it reads the count back when it starts and saves each change before
+ * displaying it.
  */
 #include "app_text.h"
 #include "host_api.h"
@@ -18,6 +18,7 @@ static const char PRESSES_KEY[] = "presses";
 #define PRESSES_KEY_LENGTH ((int32_t)sizeof PRESSES_KEY - 1)
 
 static int32_t presses;
+static int32_t storage_failed;
 
 static void draw_line(int32_t line, const char *text)
 {
@@ -27,13 +28,10 @@ static void draw_line(int32_t line, const char *text)
 
 void app_on_load(void)
 {
-    /* Nothing stored yet leaves the count at zero. */
-    kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &presses, sizeof presses);
-}
-
-void app_on_terminate(void)
-{
-    kv_set(PRESSES_KEY, PRESSES_KEY_LENGTH, &presses, sizeof presses);
+    int32_t loaded = 0;
+    int32_t length = kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &loaded, sizeof loaded);
+    presses = length == (int32_t)sizeof loaded && loaded >= 0 ? loaded : 0;
+    storage_failed = length < 0 && length != HOST_ERR_NOT_FOUND;
 }
 
 void app_on_button(int32_t event)
@@ -42,7 +40,13 @@ void app_on_button(int32_t event)
     case BTN_UP_PRESSED:
     case BTN_OK_PRESSED:
     case BTN_DOWN_PRESSED:
-        presses++;
+        if (presses < INT32_MAX) {
+            int32_t proposed = presses + 1;
+            storage_failed = kv_set(PRESSES_KEY, PRESSES_KEY_LENGTH, &proposed, sizeof proposed) < 0;
+            if (!storage_failed) {
+                presses = proposed;
+            }
+        }
         screen_redraw(HOST_REDRAW_NORMAL);
         break;
     }
@@ -58,4 +62,7 @@ void app_on_draw(void)
 
     draw_line(0, "Hello from wasm");
     draw_line(2, counter_buffer);
+    if (storage_failed) {
+        draw_line(4, "Storage error.");
+    }
 }

@@ -11,6 +11,7 @@
 #include "freertos/semphr.h"
 #include "mbedtls/sha256.h"
 #include "app_code.h"
+#include "app_certificate.h"
 #include "app_manifest.h"
 #include "app_room.h"
 #include "app_store.h"
@@ -234,10 +235,11 @@ static long data_files_bytes(const json_t *files)
  * so they count with the package's. */
 static long kept_files_bytes(const char *app_name, const json_t *files)
 {
-    long kept = app_store_files_bytes(STORAGE_APPS_ROOT, app_name);
+    long kept = app_store_retained_bytes(STORAGE_APPS_ROOT, app_name);
     for (int i = 1; i < json_count(files) - 1; i++) {
-        long replaced = app_store_file_size(STORAGE_APPS_ROOT, app_name,
-                                            json_get(json_at(files, i), "name")->text);
+        const char *name = json_get(json_at(files, i), "name")->text;
+        if (app_store_is_generated_translation(name)) continue;
+        long replaced = app_store_file_size(STORAGE_APPS_ROOT, app_name, name);
         kept -= replaced > 0 ? bytes_in_blocks((double)replaced) : 0;
     }
     return kept;
@@ -504,6 +506,14 @@ static const char *install_package(install_job_t *job, const json_t *files)
                 return "Invalid manifest.";
             }
         }
+    }
+    char certificates[MANIFEST_CERTIFICATES_MAX][MANIFEST_FILE_NAME_MAX + 1];
+    int certificate_count = app_manifest_certificates(job->incoming_manifest, certificates, MANIFEST_CERTIFICATES_MAX);
+    if (certificate_count < 0) return "Invalid manifest.";
+    for (int index = 0; index < certificate_count; index++) {
+        char path[APP_STORE_PATH_MAX];
+        if (snprintf(path, sizeof path, "%s/%s/%s.new", STORAGE_APPS_ROOT, job->name, certificates[index]) >= (int)sizeof path ||
+            !app_certificate_valid_file(path)) return "Invalid certificate.";
     }
     if (writes_files && (files_after + manifest_bytes > HOST_FILES_WRITER_MAX ||
                         !files_room_holds(job->name, true, files_after, 0))) {

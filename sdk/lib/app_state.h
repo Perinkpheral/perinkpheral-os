@@ -63,8 +63,10 @@ int32_t app_setting_count(const char *key);
 int32_t app_setting_item(const char *key, int32_t index, char *text, int32_t text_size);
 
 /* A pace or a delay as a person writes it - "30 s", "15 min", "1 h", "1 d" -
- * in seconds, parsed by the same rules as a poll's "every" value; `otherwise` when the
- * text says no such thing ("Off", "At start"). */
+ * in seconds. The complete text is 1..6 digits, optional ASCII spaces, then
+ * an optional unit: s/sec/second/seconds, m/min/minute/minutes,
+ * h/hour/hours or d/day/days. No suffix is ignored. Parsed by the same rules
+ * as a poll's "every" value; `otherwise` when the text says no such thing ("Off", "At start"). */
 int32_t app_seconds_of(const char *text, int32_t otherwise);
 
 /* The same of a setting; `otherwise` too when it is not set. */

@@ -248,7 +248,7 @@ class Layers(firmwareFolder: File) {
             "components/appsys/answer_headers.c", "components/appsys/app.c", "components/appsys/app_api_data.c", "components/appsys/app_api_draw.c", "components/appsys/app_api_map.c",
             "components/appsys/app_api_sys.c", "components/appsys/app_api_time.c", "components/appsys/app_api_ui.c",
             "components/appsys/app_delivery.c", "components/appsys/app_scene.c",
-            "components/appstore/app_manifest.c", "components/appstore/app_store.c", "components/appstore/app_room.c",
+            "components/appstore/certificate_file.c", "components/appstore/app_manifest.c", "components/appstore/app_store.c", "components/appstore/app_room.c",
             "components/appstore/catalog.c", "components/appstore/catalog_stream.c", "components/appstore/app_update_schedule.c", "components/appstore/json_tree.c", "components/appstore/poll_schedule.c", "components/appstore/poll_round.c",
             "components/appstore/request_queue.c", "components/appstore/text_template.c", "components/appstore/app_update_policy.c",
             "main/screens.c", "main/header.c", "main/menu_order.c", "main/log_ring.c", "main/web_settings_json.c", "main/question_press.c", "main/web_app_settings.c",

@@ -3,6 +3,7 @@ package dev.perinkpheral.cli
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.perinkpheral.core.Json
 import dev.perinkpheral.core.device.DeviceClient
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -75,7 +76,7 @@ class PageServer(private val client: DeviceClient, private val appDir: File?, pr
         when {
             exchange.requestMethod == "GET" && path == "/" -> {
                 val page = PageServer::class.java.getResourceAsStream("/dev/perinkpheral/cli/page.html")!!
-                    .use { String(it.readBytes(), Charsets.UTF_8) }.replace("{{app}}", appDir?.path.orEmpty())
+                    .use { String(it.readBytes(), Charsets.UTF_8) }.let { renderPage(it, appDir?.path.orEmpty()) }
                 answer(exchange, 200, page.toByteArray(), "text/html; charset=utf-8")
             }
             exchange.requestMethod == "GET" && path == "/api/screen" ->
@@ -108,3 +109,7 @@ class PageServer(private val client: DeviceClient, private val appDir: File?, pr
         }
     }
 }
+
+internal fun renderPage(template: String, app: String): String =
+    template.replace("{{app_json}}", Json.write(app).replace("<", "\\u003c")
+        .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
