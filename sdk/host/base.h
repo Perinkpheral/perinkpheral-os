@@ -12,15 +12,15 @@
 
 #define HOST_API_VERSION 3
 
-/* ABI 3 starts with the first public release, 0.1.104. Entries in that
+/* ABI 3 starts with the first public release, 0.2.0. Entries in that
  * release need no introduction stamp. Later additions carry a permanent
  * HOST_SINCE_<name> version beside their declaration. The build takes the
  * maximum of the ABI floor, detected introduction stamps and an explicit
  * manifest minimum. Use an explicit minimum for behaviour or increased
  * limits that the build cannot infer from imports, exports or the manifest.
  * Older firmware neither installs nor starts the application. */
-#define HOST_ABI_3_FIRMWARE_FIRST "0.1.104"
-#define HOST_FIRMWARE_FIRST     "0.1.104" /* entries without an introduction stamp */
+#define HOST_ABI_3_FIRMWARE_FIRST "0.2.0"
+#define HOST_FIRMWARE_FIRST     "0.2.0" /* entries without an introduction stamp */
 
 /* Perinkpheral OS includes this header for its constants. Outside a
  * wasm build the declarations expand to nothing, because Perinkpheral OS defines
