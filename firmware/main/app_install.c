@@ -235,11 +235,17 @@ static long data_files_bytes(const json_t *files)
  * so they count with the package's. */
 static long kept_files_bytes(const char *app_name, const json_t *files)
 {
-    long kept = app_store_retained_bytes(STORAGE_APPS_ROOT, app_name);
+    long kept;
+    if (!app_store_retained_bytes(STORAGE_APPS_ROOT, app_name, &kept)) {
+        return -1;
+    }
     for (int i = 1; i < json_count(files) - 1; i++) {
         const char *name = json_get(json_at(files, i), "name")->text;
         if (app_store_is_generated_translation(name)) continue;
         long replaced = app_store_file_size(STORAGE_APPS_ROOT, app_name, name);
+        if (replaced == APP_FILE_FAILED) {
+            return -1;
+        }
         kept -= replaced > 0 ? bytes_in_blocks((double)replaced) : 0;
     }
     return kept;
@@ -261,9 +267,12 @@ static bool files_room_holds(const char *app_name, bool writes_files, long files
     int listed = 0;
     for (int i = 0; i < count; i++) {
         if (strcmp(installed[i].name, app_name) != 0) {
-            apps[listed++] = (app_room_files_t){
-                installed[i].writes_files,
-                app_store_files_bytes(STORAGE_APPS_ROOT, installed[i].name) };
+            long data_bytes;
+            if (!app_store_files_bytes(STORAGE_APPS_ROOT, installed[i].name, &data_bytes)) {
+                free(installed);
+                return false;
+            }
+            apps[listed++] = (app_room_files_t){ installed[i].writes_files, data_bytes };
         }
     }
     free(installed);
@@ -321,7 +330,7 @@ typedef struct {
     int source_index;
     const app_install_options_t *options;
     const json_t *files;
-    long files_bytes, manifest_bytes; /* the package's data files and manifest, in blocks */
+    long files_bytes; /* the package's data files, in blocks */
     bool writes_files;
     char *previous_manifest;
     char *incoming_manifest;
@@ -435,8 +444,12 @@ static void commit_install(void *argument)
     }
     /* Counted again here, where the application cannot write meanwhile: it
      * may have while the package was downloaded. */
-    if (job->writes_files && job->files_bytes + kept_files_bytes(job->name, job->files) +
-                                     job->manifest_bytes > HOST_FILES_WRITER_MAX) {
+    long kept = kept_files_bytes(job->name, job->files);
+    if (kept < 0) {
+        job->problem = "Storage error.";
+        return;
+    }
+    if (job->writes_files && job->files_bytes + kept > HOST_FILES_WRITER_MAX) {
         job->problem = "Not enough storage.";
         return;
     }
@@ -466,7 +479,9 @@ static const char *install_package(install_job_t *job, const json_t *files)
     free(installed);
     long module_bytes = (long)json_get(json_at(files, 0), "size")->number;
     long files_bytes = data_files_bytes(files);
-    long files_after = files_bytes + kept_files_bytes(job->name, files);
+    long kept = job->was_installed ? kept_files_bytes(job->name, files) : 0;
+    if (kept < 0) return "Storage error.";
+    long files_after = files_bytes + kept;
     long manifest_bytes = bytes_in_blocks(json_get(json_at(files, json_count(files) - 1), "size")->number);
     if ((!job->was_installed && count >= CATALOG_INSTALLED_MAX) ||
         !app_code_has_room(job->name, (size_t)module_bytes) ||
@@ -515,13 +530,12 @@ static const char *install_package(install_job_t *job, const json_t *files)
         if (snprintf(path, sizeof path, "%s/%s/%s.new", STORAGE_APPS_ROOT, job->name, certificates[index]) >= (int)sizeof path ||
             !app_certificate_valid_file(path)) return "Invalid certificate.";
     }
-    if (writes_files && (files_after + manifest_bytes > HOST_FILES_WRITER_MAX ||
+    if (writes_files && (files_after > HOST_FILES_WRITER_MAX ||
                         !files_room_holds(job->name, true, files_after, 0))) {
         return "Not enough storage.";
     }
     job->files = files;
     job->files_bytes = files_bytes;
-    job->manifest_bytes = manifest_bytes;
     job->writes_files = writes_files;
     if (asks_for_system && job->options->installed_id == 0) {
         if (job->options->confirm_system == NULL) return "Not confirmed.";

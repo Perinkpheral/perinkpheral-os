@@ -373,25 +373,44 @@ static size_t taken_by(size_t value_length)
 
 /* What the application keeps now, as it lies in the storage, the value
  * under `except_key` left out. */
-static size_t stored_bytes(nvs_handle_t store, const char *app_name, const char *except_key)
+static esp_err_t stored_bytes(nvs_handle_t store, const char *app_name, const char *except_key,
+                               size_t *bytes)
 {
     char namespace[NVS_NS_NAME_MAX_SIZE];
     snprintf(namespace, sizeof namespace, NAMESPACE_PREFIX "%s", app_name);
     size_t total = 0;
     nvs_iterator_t entry = NULL;
     esp_err_t err = nvs_entry_find(PARTITION, namespace, NVS_TYPE_BLOB, &entry);
+    bool complete = err == ESP_ERR_NVS_NOT_FOUND;
     while (err == ESP_OK) {
         nvs_entry_info_t info;
-        nvs_entry_info(entry, &info);
+        err = nvs_entry_info(entry, &info);
+        if (err != ESP_OK) {
+            break;
+        }
         size_t length = 0;
-        if (strcmp(info.key, except_key) != 0 &&
-            nvs_get_blob(store, info.key, NULL, &length) == ESP_OK) {
+        if (strcmp(info.key, except_key) != 0) {
+            err = nvs_get_blob(store, info.key, NULL, &length);
+            if (err != ESP_OK) {
+                break;
+            }
+            if (length > HOST_KV_TOTAL_MAX || taken_by(length) > HOST_KV_TOTAL_MAX ||
+                total > HOST_KV_TOTAL_MAX - taken_by(length)) {
+                err = ESP_FAIL;
+                break;
+            }
             total += taken_by(length);
         }
         err = nvs_entry_next(&entry);
+        complete = err == ESP_ERR_NVS_NOT_FOUND;
     }
     nvs_release_iterator(entry);
-    return total;
+    if (!complete) {
+        /* A value disappearing during a census is a failed read, not its end. */
+        return err == ESP_ERR_NVS_NOT_FOUND ? ESP_FAIL : err;
+    }
+    *bytes = total;
+    return ESP_OK;
 }
 
 static bool is_full(esp_err_t err)
@@ -414,8 +433,17 @@ static int32_t write_value(const char *app_name, const char *key, const void *va
         *storage_error = err;
         return HOST_ERR_FAILED;
     }
+    size_t used = 0;
+    if (value_length > 0 || keep_empty) {
+        err = stored_bytes(store, app_name, key, &used);
+        if (err != ESP_OK) {
+            nvs_close(store);
+            *storage_error = err;
+            return HOST_ERR_FAILED;
+        }
+    }
     if ((value_length > 0 || keep_empty) &&
-        stored_bytes(store, app_name, key) + taken_by((size_t)value_length) > HOST_KV_TOTAL_MAX) {
+        used + taken_by((size_t)value_length) > HOST_KV_TOTAL_MAX) {
         nvs_close(store);
         ESP_LOGW(TAG, "%s: \"%s\" is over what an application may keep", app_name, key);
         return HOST_ERR_NO_SPACE;
@@ -486,24 +514,31 @@ bool app_kv_set_poll_pace(const char *app_name, int poll, uint32_t every_s)
         return false;
     }
     settings_app_record_t record;
-    settings_load_app_record(app_name, &record);
+    if (!settings_load_app_record(app_name, &record)) {
+        return false;
+    }
     record.pace[poll] = every_s;
     return settings_save_app_record(app_name, &record);
 }
 
-uint32_t app_kv_seen_id(const char *app_name)
+bool app_kv_seen_id(const char *app_name, uint32_t *id)
 {
     settings_app_record_t record;
-    settings_load_app_record(app_name, &record);
-    return record.seen;
+    if (!settings_load_app_record(app_name, &record)) {
+        return false;
+    }
+    *id = record.seen;
+    return true;
 }
 
-void app_kv_set_seen_id(const char *app_name, uint32_t id)
+bool app_kv_set_seen_id(const char *app_name, uint32_t id)
 {
     settings_app_record_t record;
-    settings_load_app_record(app_name, &record);
+    if (!settings_load_app_record(app_name, &record)) {
+        return false;
+    }
     record.seen = id;
-    settings_save_app_record(app_name, &record);
+    return settings_save_app_record(app_name, &record);
 }
 
 void app_kv_forget_host_record(const char *app_name)

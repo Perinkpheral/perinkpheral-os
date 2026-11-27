@@ -19,6 +19,7 @@ static const char PRESSES_KEY[] = "presses";
 
 static int32_t presses;
 static int32_t storage_failed;
+static int32_t restore_failed;
 
 static void draw_line(int32_t line, const char *text)
 {
@@ -32,10 +33,12 @@ void app_on_load(void)
     int32_t length = kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &loaded, sizeof loaded);
     presses = length == (int32_t)sizeof loaded && loaded >= 0 ? loaded : 0;
     storage_failed = length < 0 && length != HOST_ERR_NOT_FOUND;
+    restore_failed = storage_failed;
 }
 
 void app_on_button(int32_t event)
 {
+    if (restore_failed) return;
     switch (event) {
     case BTN_UP_PRESSED:
     case BTN_OK_PRESSED:
@@ -54,6 +57,10 @@ void app_on_button(int32_t event)
 
 void app_on_draw(void)
 {
+    if (restore_failed) {
+        draw_line(0, "Storage error.");
+        return;
+    }
     char counter_buffer[32];
     app_text_t counter;
     app_text_start(&counter, counter_buffer, sizeof counter_buffer);

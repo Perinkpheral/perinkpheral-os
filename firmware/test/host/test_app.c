@@ -17,6 +17,7 @@
 #include "memory_wasm.h"
 #include "every_call_wasm.h"
 #include "probe_wasm.h"
+#include "system_probe_wasm.h"
 #include "frozen_probe_wasm.h"
 #include "wrongarg_wasm.h"
 #include "wrongret_wasm.h"
@@ -1449,6 +1450,37 @@ static void test_stress_package(const char *path)
     free(bytes);
 }
 
+static int system_calls;
+static int32_t system_get(const char *key, char *value, int32_t capacity)
+{
+    (void)value; (void)capacity;
+    CHECK_STR(key, "font"); system_calls++; return HOST_OK;
+}
+static int32_t system_set(const char *key, const char *value)
+{
+    CHECK_STR(key, "font"); CHECK_STR(value, "1"); system_calls++; return HOST_OK;
+}
+static int32_t system_range(const char *key, int32_t *value, int32_t *least, int32_t *most)
+{
+    CHECK_STR(key, "font"); system_calls++; *value = *least = *most = 1; return HOST_OK;
+}
+static void test_system_counted_arguments(void)
+{
+    app_services_t services = SERVICES;
+    services.system_setting_get = system_get;
+    services.system_setting_set = system_set;
+    services.system_setting_range = system_range;
+    system_calls = 0;
+    logged[0] = '\0';
+    app_t *app = NULL;
+    CHECK(app_load("system-probe", HOST_API_VERSION, system_probe_wasm, sizeof system_probe_wasm,
+                   APP_GRANT_SYSTEM, &services, &app) == APP_OK);
+    CHECK(app != NULL && !app_has_stopped(app));
+    CHECK_STR(logged, "system arguments ok;");
+    CHECK(system_calls == 3);
+    app_unload(app);
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1], "--builder-memory") == 0) {
@@ -1462,6 +1494,7 @@ int main(int argc, char **argv)
     }
     CHECK(argc == 1);
     test_poll_allocation_delivery();
+    test_system_counted_arguments();
     test_document_delivery();
     test_screen_inversion();
     test_probe_contract();

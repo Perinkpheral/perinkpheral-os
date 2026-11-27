@@ -34,8 +34,8 @@ static bool take_key(IM3Runtime runtime, void *_mem, uint32_t offset, int32_t le
                      char key[SYS_KEY_MAX + 1])
 {
     const uint8_t *bytes = app_memory_at(runtime, _mem, offset, length);
-    length = app_counted_text_length(bytes, length);
-    if (bytes == NULL || length <= 0 || length > SYS_KEY_MAX) {
+    if (bytes == NULL || length <= 0 || length > SYS_KEY_MAX ||
+        memchr(bytes, '\0', (size_t)length) != NULL) {
         return false;
     }
     memcpy(key, bytes, (size_t)length);
@@ -74,7 +74,7 @@ HOST_FUNCTION(sys_setting_set)
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     const uint8_t *value = app_memory_at(runtime, _mem, value_offset, length);
-    if (value == NULL) {
+    if (value == NULL || memchr(value, '\0', (size_t)length) != NULL) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     char terminated[SYS_SETTING_MAX + 1];

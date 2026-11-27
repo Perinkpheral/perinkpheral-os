@@ -769,12 +769,18 @@ void app_on_draw(void)
 <p>The store holds the application's state and its settings. Removal normally keeps the store for reinstall. Perinkpheral OS may reclaim stores belonging to removed applications when the stores partition is full. Removal with "forget" erases it immediately.</p>
 <pre>typedef struct { int32_t version; int32_t minutes; int64_t ends_at; } state_t;
 static state_t state;
+static bool restore_failed;
 
 void app_on_load(void)
 {
-    if (kv_get("state", 5, &amp;state, sizeof state) != sizeof state || state.version != 2) {
-        state = (state_t){ .version = 2, .minutes = 25 };     /* no stored state, or an older version */
-    }
+    int32_t result = app_state_load("state", &amp;state, sizeof state, 2);
+    restore_failed = result != HOST_OK &amp;&amp; result != HOST_ERR_NOT_FOUND;
+    if (result != HOST_OK) state = (state_t){ .version = 2, .minutes = 25 };
+}
+
+void app_on_terminate(void)
+{
+    if (!restore_failed) app_state_save("state", &amp;state, sizeof state);
 }</pre>
 <ul>
   <li>Put a version field in every stored struct and check it on load. A newer version of the application will read data written by an older one.</li>
@@ -782,13 +788,14 @@ void app_on_load(void)
   <li><code>kv_set()</code> with a length of 0 deletes the key.</li>
 </ul>
 <h2 id="storage-files">Files</h2>
+<p>File size and read operations distinguish absence (<code>HOST_ERR_NOT_FOUND</code>) from storage failure (<code>HOST_ERR_FAILED</code>). A clean end of file returns a short read or zero. Seek, read and close failures return <code>HOST_ERR_FAILED</code>, even after copying a prefix. Discard that read result and preserve unreadable durable data. Writes also fail when quota accounting cannot be completed; a failed file write may already have changed part or all of the file.</p>
 <p>Use files for data that does not fit in a store value: a downloaded list, a cache, a picture.</p>
 <p><code>file_read()</code> and <code>file_write()</code> take an offset. A file can be read and extended in parts, so it never has to be held in memory in full.</p>
 <p>The files from the <code>files/</code> folder of the package are installed with the application. Each must contain at least one byte; the build refuses empty data files.</p>
 <ul>
   <li>Existing files remain unless an update supplies a file with the same name, which replaces it. Use names outside the package's filenames for writable caches. Files are removed with the application.</li>
   <li>A write starts inside the file or at its end. To replace a file with a shorter one, delete it first: <code>file_write()</code> with length 0 at offset 0.</li>
-  <li>Writing needs <code>"writes_files": true</code> in the manifest. The total file quota is 32 KB, including packaged data files. Unused space in that quota is reserved for the application. At catalog installation the manifest also counts towards this limit.</li>
+  <li>Writing needs <code>"writes_files": true</code> in the manifest. Builder, installation, update and runtime allow 32 KiB of data, counted in 4 KiB blocks, including translations and certificates. The module and manifest are excluded. Manifest storage is admitted separately. Unused data quota is reserved for the application.</li>
   <li>Each file takes whole blocks of 4 KB of the 32 KB. Keep related records in one file.</li>
 </ul>
 
@@ -1100,6 +1107,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 
 <p>Catalog replacement removes generated <code>strings.xx</code> and <code>manifest.xx</code> tables absent from the new package. Development uploads begin with the module, remove previous generated tables and then upload the current ones. Simulator installation applies the same replacement rule. Other application data files remain unless the incoming package supplies a file of the same name.</p>
 <h2 id="tools-app-check">Capability checks</h2>
+<p>Native checks model failed reads, writes that commit then fail, partial file writes, failed interval persistence, raw-request admission failures and external repeating-alarm occupancy. Drawing records use approximate ink/QR geometry; button events may precede the next draw. Background cases do not cover every interleaving within a retained stream. Focus arbitration and wasm memory-offset validation require interpreter or simulator tests. Settings injected with <code>standin_set()</code> bypass settings validation and destination-secret cleanup. Use simulator pictures for rendering and device tests for panel and timing behavior.</p>
 <p>Run <code>tools/perinkpheral app-check &lt;folder&gt;</code> before publishing. It builds every application and checks non-system applications natively with address and undefined-behaviour sanitizers. Use <code>--only sessions|store|timers|network|drawing|notices|clock|logic</code> or <code>--app &lt;name&gt;</code> to narrow the run. No device or live service is used.</p>
 <p>Put <code>at</code>, <code>tz</code>, <code>store</code> and <code>mocks</code> in <code>test/check.json</code>; mocks accept <code>status</code>, <code>body</code> or <code>file</code>, and a <code>headers</code> object. Supply good responses and settings that reach the behaviour being tested. Missing responses and unreachable due notices produce coverage notes. The checks also discover <code>test/*.c</code> programs for application-specific rules.</p>
 <p>Failure checks refuse button saves, writes in response callbacks, alarm allocation, notification admission and notification receipt writes. They compare draw records after retries and unloads: a displayed change must survive or show a failure; a due notice must eventually be accepted once. Alarms get 60 seconds to recover. A repeating alarm must still be scheduled at its original interval unless the application reports the failure. Button coverage includes the standard navigation paths and all pairs of short and long presses. A full queue is released before retry events. A refused session allocation must be reported if resume state is lost.</p>
@@ -1220,7 +1228,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <p>The contract uses wasm32 little-endian C layouts and two's complement signed integers. Pointers are unsigned 32-bit memory offsets; zero is NULL. 32-bit integers and pointers have size/alignment 4, 64-bit integers 8, bytes 1. Structs keep C field order and natural alignment with trailing padding. sdk/abi/3.txt records every size, alignment, field type and offset. String-table size, count and offsets are little-endian 16-bit words. Picture dimensions are bytes; bitmap rows are high-bit first and padded to whole bytes.</p>
 <p>Ordinary input buffers are consumed or copied before an import returns. The exported app_data_buffer and app_strings_buffer storage must remain valid until unload. A registered document buffer must remain valid until successful replacement or unload. Handler data is valid until the handler returns. Lengths and capacities count bytes. The first NUL within a textual argument's supplied range ends its content; the entire supplied range must still be valid application memory. Input truncation preserves UTF-8 boundaries. KV values, sessions, file bytes, HTTP bodies, bitmaps and document buffers remain byte-exact. log_write sanitizes every supplied byte, including NUL. Text outputs have no appended NUL except fields produced by xml_attrs() and the fixed string fields of host_answer_info_t. Only xml_attrs field capacities include their terminators. Unless documented otherwise, status-returning calls reject negative lengths/capacities or invalid memory ranges with HOST_ERR_ARGUMENT.</p>
 <p>kv_get, answer_value, answer_element, session_get, sys_info, sys_app_title and sys_setting_get fail with HOST_ERR_NO_SPACE without copying when the value does not fit. Capacity zero is valid for an empty value. gfx_fit_text also requires room for its whole fitted result and copies nothing on error. text_fill and time_text instead truncate between UTF-8 characters and return bytes copied; both accept zero capacity. A valid zero-capacity time_text call returns zero, but invalid moments, styles or memory offsets still fail. Read/format/measurement errors leave outputs untouched; file_read may have copied a prefix before a storage error. answer_info copies min(capacity, Perinkpheral OS's struct size), accepts zero and leaves later bytes untouched. sys_app_list writes up to capacity ids but returns the total count; capacity zero is allowed.</p>
-<p>Install and update are consumed after loading and before the callback, including a missing callback or a trap in app_on_load or the callback. A load failure leaves the notification pending until startup or application-list reload. Updated means another module-and-manifest package id, regardless of version-string ordering. An update preserves application files except when an incoming package file replaces an existing file of the same name.</p>
+<p>Install and update are consumed after loading and a committed consumption marker, before the callback, including a missing callback or a trap in app_on_load or the callback. A load failure, marker-read failure or marker-commit failure leaves the notification pending until startup or application-list reload; a failed marker prevents the callback. Updated means another module-and-manifest package id, regardless of version-string ordering. An update preserves application files except when an incoming package file replaces an existing file of the same name.</p>
 <p>Only HOST_DATA_LAST makes a streamed answer whole. HOST_DATA_FAILED may follow earlier pieces and invalidates them all. An interrupted answer may end with neither flag. Piece boundaries are unspecified, even inside a UTF-8 character or a document marker. Keep the previous displayed result until LAST.</p>
 <p>Combined redraw flags choose CLEAN before NO_BLINK before SOON; QUESTION is independent. When dithering is disabled, gfx_set_color shades 1..7 become paper and 8..15 ink. Icon first/last ink coordinates are inclusive; text end_x is exclusive.</p>
 <p>System settings expose only the explicit page-visible keys listed in sdk/host/sys.h, which specifies types, units, inclusive ranges, special values and restart behaviour for each. Unknown and internal keys, including refresh_min_button_ms, return HOST_ERR_NOT_FOUND for get, set and range. The Wi-Fi SSID is read-only here; the password cannot be read or written here (HOST_ERR_ARGUMENT). Network changes use the page or SYS_DO_FORGET_NETWORK.</p>
@@ -1356,7 +1364,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>
   <tr><td class="c">kv_get(key, key_length, value, capacity)</td><td>Reads a value. Returns its length; <code>HOST_ERR_NOT_FOUND</code>; <code>HOST_ERR_NO_SPACE</code> if the buffer is too small</td></tr>
   <tr><td class="c">kv_set(key, key_length, value, length)</td><td>Writes a value. Length 0 deletes the key. Fails for <code>url</code> and <code>link</code> settings</td></tr>
-  <tr><td class="c">file_size(name, name_length)</td><td>Returns the file size, or <code>HOST_ERR_NOT_FOUND</code></td></tr>
+  <tr><td class="c">file_size(name, name_length)</td><td>Returns the file size, <code>HOST_ERR_NOT_FOUND</code> for absence or <code>HOST_ERR_FAILED</code> for a storage failure</td></tr>
   <tr><td class="c">file_read(name, name_length, offset, bytes, capacity)</td><td>Reads from an offset. Returns the number of bytes read; 0 at or past the end</td></tr>
   <tr><td class="c">file_write(name, name_length, offset, bytes, length)</td><td>Writes at an offset within the file or at its end. Length 0 at offset 0 deletes the file. Needs <code>"writes_files": true</code></td></tr>
 </table>
@@ -1402,6 +1410,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 </table>
 
 <h1 id="ref-system">22. System API</h1>
+<p>System-setting keys and set values reject NUL anywhere within the supplied length with <code>HOST_ERR_ARGUMENT</code>. Lengths exclude the C-string terminator; pass zero length only where an empty value is permitted.</p>
 <p>The system API is the set of <code>sys_*</code> calls. Perinkpheral OS's own pages use it.</p>
 <p>Any application can use the system API if its manifest contains <code>"system": true</code>. The web page warns the user before installing such an application. A module that imports a <code>sys_*</code> call without this declaration is rejected.</p>
 <table>
@@ -1455,9 +1464,10 @@ void    app_draw_cells(host_cell_t *cells, const uint8_t *const *pictures,
                        const int32_t *icons, int32_t count);         /* cells in one size: the longest value's */
 </pre>
 <h2 id="lib-state">app_state.h: state and settings</h2>
+<p><code>app_state_load()</code> returns <code>HOST_OK</code> after restoring an exact size/version match, <code>HOST_ERR_NOT_FOUND</code> for absent or incompatible state, and the underlying negative error for a failed read. Initialize the entire struct after any unsuccessful load. After a storage failure, neither save nor delete that key until another restore succeeds or establishes absence/incompatibility. Defaults used for display must not overwrite unreadable saved state.</p>
 <pre>#include "app_state.h"                                       /* the store, by null-terminated key */
 /* first field: int32_t version */
-bool    app_state_load(const char *key, void *state, int32_t size, int32_t version);
+int32_t app_state_load(const char *key, void *state, int32_t size, int32_t version);
 /* one kv_set() call; true on HOST_OK, false on error; storage may change on failure */
 bool    app_state_save(const char *key, const void *state, int32_t size);
 bool    app_state_forget(const char *key);

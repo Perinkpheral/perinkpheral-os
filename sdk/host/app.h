@@ -44,8 +44,11 @@ APP_EXPORT(app_on_terminate, void app_on_terminate(void));
  * and poll intervals set from code are kept across an update, except that
  * a file in the incoming package replaces an existing file of the same name. A load
  * failure leaves the notification pending for the next startup/reload.
- * Once loaded it is consumed before the callback (or a missing callback),
- * even if app_on_load() or the callback traps: it is not retried endlessly. */
+ * Reading the prior package marker or committing its replacement may also
+ * fail: the callback is then skipped and the notification remains pending.
+ * Once loaded and the consumption marker commits, it is consumed before the
+ * callback (or a missing callback), even if app_on_load() or the callback
+ * traps: it is not retried endlessly. */
 APP_EXPORT(app_on_installed, void app_on_installed(void));
 APP_EXPORT(app_on_updated, void app_on_updated(void));
 

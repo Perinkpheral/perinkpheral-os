@@ -38,7 +38,8 @@ HOST_IMPORT(kv_get, int32_t kv_get(const char *key, int32_t key_length, void *va
  * "link" in the manifest belong to the user: kv_set() returns
  * HOST_ERR_ARGUMENT for them, including deletion. Other keys need not be
  * declared in the manifest. kv_get() copies bytes without a terminator;
- * a missing key returns HOST_ERR_NOT_FOUND. Insufficient capacity returns
+ * a missing key returns HOST_ERR_NOT_FOUND; a storage read failure returns
+ * HOST_ERR_FAILED. Insufficient capacity returns
  * HOST_ERR_NO_SPACE without copying; capacity 0 can read an empty value. */
 HOST_IMPORT(kv_set, int32_t kv_set(const char *key, int32_t key_length, const void *value,
                                    int32_t length));
@@ -62,18 +63,22 @@ HOST_IMPORT(kv_set, int32_t kv_set(const char *key, int32_t key_length, const vo
  * A file supplied by an update replaces an existing file of the same
  * name, including one written by the application. Generated strings.xx and
  * manifest.xx language tables absent from a replacement package are removed;
- * other files are retained. At catalog
- * installation the writer quota counts the manifest too; runtime writes
- * count data files only. */
+ * other files are retained. Builder, installation, update and runtime use the
+ * same data quota: translations and certificates count; app.wasm and
+ * manifest.json do not. Manifest storage is admitted separately. An incomplete
+ * quota census fails with HOST_ERR_FAILED. */
 #define HOST_FILE_NAME_MAX    23
 #define HOST_FILES_MAX        (64 * 1024)
 #define HOST_FILES_WRITER_MAX (32 * 1024)
 
-/* Returns the file size, or HOST_ERR_NOT_FOUND. */
+/* Returns the file size, HOST_ERR_NOT_FOUND only for absence, or
+ * HOST_ERR_FAILED for a storage failure. */
 HOST_IMPORT(file_size, int32_t file_size(const char *name, int32_t name_length));
 
 /* Reads up to `capacity` bytes starting at `offset`. Returns the number
- * of bytes read: fewer at the end of the file, 0 past it. */
+ * of bytes read: fewer at a clean end of file, 0 past it. Absence returns
+ * HOST_ERR_NOT_FOUND. Seek, read and close failures return HOST_ERR_FAILED,
+ * including after a partial copy; the destination may then have changed. */
 HOST_IMPORT(file_read, int32_t file_read(const char *name, int32_t name_length, int32_t offset,
                                          void *bytes, int32_t capacity));
 
@@ -83,6 +88,7 @@ HOST_IMPORT(file_read, int32_t file_read(const char *name, int32_t name_length, 
  * Only for an application whose manifest says "writes_files": true; the
  * build and Perinkpheral OS refuse a module that imports this without it.
  * Returns HOST_ERR_NO_SPACE if the files of the application would exceed
- * HOST_FILES_WRITER_MAX. */
+ * HOST_FILES_WRITER_MAX, or HOST_ERR_FAILED when storage or quota accounting
+ * fails. A failed write may already have changed part or all of the file. */
 HOST_IMPORT(file_write, int32_t file_write(const char *name, int32_t name_length, int32_t offset,
                                            const void *bytes, int32_t length));

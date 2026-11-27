@@ -284,9 +284,9 @@ static bool load_app_record(const char *app_name, settings_app_record_t *record)
     return err == ESP_ERR_NVS_NOT_FOUND || (err == ESP_OK && size == sizeof *record);
 }
 
-void settings_load_app_record(const char *app_name, settings_app_record_t *record)
+bool settings_load_app_record(const char *app_name, settings_app_record_t *record)
 {
-    load_app_record(app_name, record);
+    return load_app_record(app_name, record);
 }
 
 bool settings_save_app_record(const char *app_name, const settings_app_record_t *record)

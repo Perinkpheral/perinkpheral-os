@@ -338,7 +338,8 @@ static void test_translation_replacement(void)
     CHECK(put_file("app", "strings.ru", "old ids"));
     CHECK(put_file("app", "manifest.ru", "old title"));
     CHECK(put_file("app", "user.bin", "retained"));
-    CHECK(app_store_retained_bytes(root, "app") == MANIFEST_FILE_BLOCK_BYTES);
+    long retained_bytes;
+    CHECK(app_store_retained_bytes(root, "app", &retained_bytes) && retained_bytes == MANIFEST_FILE_BLOCK_BYTES);
     CHECK(begin_file("app", "app.wasm", "new module"));
     CHECK(begin_file("app", "strings.en", "new ids"));
     CHECK(begin_file("app", "manifest.json", "new manifest"));

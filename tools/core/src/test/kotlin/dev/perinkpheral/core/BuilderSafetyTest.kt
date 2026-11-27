@@ -346,6 +346,18 @@ object BuilderSafetyTest {
                     catch (error: BuildError) { check(reason in error.message.orEmpty()) { error.message.orEmpty() } }
                     check(!File(built, "app.wasm").exists())
                 }
+                val writerManifest = File(packageSource, "manifest.json")
+                val readOnlyManifest = writerManifest.readText()
+                writerManifest.writeText(readOnlyManifest.replace("\"abi\": 3", "\"abi\": 3, \"writes_files\": true"))
+                check("writes_files" in writerManifest.readText())
+                // Data occupies the entire reservation; the manifest is charged separately.
+                val fullData = File(data, "full.dat").apply { writeBytes(ByteArray(32 * 1024) { 42 }) }
+                realBuilder.build(packageSource, built)
+                check(File(built, "full.dat").length() == 32 * 1024L)
+                fullData.appendBytes(byteArrayOf(42))
+                refusedPackage("its files take")
+                fullData.delete()
+                writerManifest.writeText(readOnlyManifest)
                 val emptyFile = File(data, "empty.txt").apply { writeText("") }
                 refusedPackage("empty.txt: data files must not be empty")
                 check(!File(built, "empty.txt").exists())

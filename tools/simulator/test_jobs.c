@@ -460,6 +460,52 @@ static void test_forward_arguments(void)
     }
 }
 
+static void test_storage_failures(const char *state)
+{
+    char bytes[16], path[PATH_BYTES], folder[PATH_BYTES];
+    assert(kv_get("probe", "absent", bytes, sizeof bytes) == HOST_ERR_NOT_FOUND);
+    snprintf(folder, sizeof folder, "%s/store/probe", state);
+    make_folders(folder);
+    store_path(path, "probe", "broken");
+    assert(symlink("/dev/null/nonexistent", path) == 0);
+    assert(kv_get("probe", "broken", bytes, sizeof bytes) == HOST_ERR_FAILED);
+    assert(kv_store("probe", "another", "value", 5, false) == HOST_ERR_FAILED);
+    assert(unlink(path) == 0);
+    assert(kv_store("probe", "another", "value", 5, false) == HOST_OK);
+    store_path(path, "probe", "another"); assert(remove(path) == 0);
+    snprintf(folder, sizeof folder, "%s/probe", state);
+    assert(mkdir(folder, 0700) == 0);
+    snprintf(path, sizeof path, "%s/probe/broken", state);
+    assert(symlink("/dev/null/nonexistent", path) == 0);
+    assert(services_file_size("probe", "absent") == HOST_ERR_NOT_FOUND);
+    assert(services_file_read("probe", "absent", 0, bytes, sizeof bytes) == HOST_ERR_NOT_FOUND);
+    assert(services_file_size("probe", "broken") == HOST_ERR_FAILED);
+    assert(services_file_read("probe", "broken", 0, bytes, sizeof bytes) == HOST_ERR_FAILED);
+    assert(unlink(path) == 0); assert(rmdir(folder) == 0);
+    /* Consumption writes use a staged marker; failed replacement preserves the old one. */
+    seen_version_t version = { .id = 42 };
+    snprintf(version.path, sizeof version.path, "%s/seen", state);
+    uint32_t seen = 99;
+    assert(read_seen_version(version.path, &seen) && seen == 0);
+    assert(mkdir(version.path, 0700) == 0);
+    assert(!read_seen_version(version.path, &seen));
+    assert(!note_loaded_version(&version));
+    assert(rmdir(version.path) == 0);
+    assert(note_loaded_version(&version));
+    FILE *marker = fopen(version.path, "rb");
+    seen = 0;
+    assert(marker != NULL && fread(&seen, sizeof seen, 1, marker) == 1);
+    assert(fclose(marker) == 0 && seen == 42);
+    assert(read_seen_version(version.path, &seen) && seen == 42);
+    marker = fopen(version.path, "ab"); assert(marker != NULL);
+    assert(fputc(0, marker) != EOF && fclose(marker) == 0);
+    assert(!read_seen_version(version.path, &seen) && seen == 42);
+    marker = fopen(version.path, "wb"); assert(marker != NULL);
+    assert(fputc(0, marker) != EOF && fclose(marker) == 0);
+    assert(!read_seen_version(version.path, &seen) && seen == 42);
+    assert(remove(version.path) == 0);
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -473,6 +519,7 @@ int main(void)
     test_question_and_long_back();
 
     test_forward_arguments();
+    test_storage_failures(state);
     test_network_icon();
     test_mocks(state);
     test_content_lengths();

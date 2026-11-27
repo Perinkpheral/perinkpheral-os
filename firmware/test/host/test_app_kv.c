@@ -12,7 +12,7 @@
 typedef enum {
     FAIL_NONE, FAIL_SOURCE_OPEN, FAIL_DESTINATION_OPEN, FAIL_SOURCE_GET, FAIL_DESTINATION_GET,
     FAIL_SET, FAIL_COMMIT, FAIL_FIND, FAIL_NEXT, FAIL_ERASE, FAIL_ERASE_COMMIT, FAIL_GET_MISSING,
-    FAIL_MARKER_READ_OPEN, FAIL_MARKER_OPEN, FAIL_MARKER_GET, FAIL_MARKER_SET, FAIL_MARKER_COMMIT,
+    FAIL_MARKER_READ_OPEN, FAIL_MARKER_OPEN, FAIL_MARKER_GET, FAIL_MARKER_SET, FAIL_MARKER_COMMIT, FAIL_INFO, FAIL_CENSUS_MISSING,
 } failure_t;
 static failure_t failure;
 static int durable[3][2], pending[3][2];
@@ -65,7 +65,8 @@ esp_err_t nvs_get_blob(nvs_handle_t handle, const char *key, void *value, size_t
         return ESP_OK;
     }
     int index = key_index(key);
-    if (handle == 0 && index == 1 && failure == FAIL_GET_MISSING) {
+    if ((handle == 0 && index == 1 && failure == FAIL_GET_MISSING) ||
+        (handle == 1 && index == 1 && failure == FAIL_CENSUS_MISSING)) {
         return ESP_ERR_NVS_NOT_FOUND;
     }
     if ((handle == 0 && index == 1 && failure == FAIL_SOURCE_GET) ||
@@ -172,6 +173,7 @@ esp_err_t nvs_entry_next(nvs_iterator_t *entry)
 
 esp_err_t nvs_entry_info(nvs_iterator_t entry, nvs_entry_info_t *info)
 {
+    if (failure == FAIL_INFO) return ESP_FAIL;
     strcpy(info->namespace_name, entry->partition == 2 ? "migration" : "a.clock");
     strcpy(info->key, entry->partition == 2 ? "a.clock" : keys[entry->key]);
     return ESP_OK;
@@ -193,15 +195,19 @@ esp_err_t nvs_get_stats(const char *partition, nvs_stats_t *stats)
 }
 esp_err_t nvs_flash_init_partition(const char *partition) { (void)partition; return ESP_OK; }
 esp_err_t nvs_flash_erase_partition(const char *partition) { (void)partition; return ESP_OK; }
-void settings_load_app_record(const char *name, settings_app_record_t *record)
+static bool record_read_ok = true, record_write_ok = true;
+static settings_app_record_t saved_record;
+bool settings_load_app_record(const char *name, settings_app_record_t *record)
 {
     (void)name;
-    memset(record, 0, sizeof *record);
+    *record = saved_record;
+    return record_read_ok;
 }
 bool settings_save_app_record(const char *name, const settings_app_record_t *record)
 {
-    (void)name; (void)record;
-    return true;
+    (void)name;
+    if (record_write_ok) saved_record = *record;
+    return record_write_ok;
 }
 void settings_forget_app_record(const char *name) { (void)name; }
 char *app_store_read_manifest(const char *root, const char *name)
@@ -293,5 +299,35 @@ int main(void)
     app_kv_erase("clock");
     CHECK(durable[1][0] == 0 && durable[2][0] == 0);
     CHECK(open_handles == 0 && iterators == 0);
+    /* Quota enumeration and size failures must not permit any mutation. */
+    const failure_t census_failures[] = { FAIL_FIND, FAIL_NEXT, FAIL_INFO, FAIL_DESTINATION_GET, FAIL_CENSUS_MISSING };
+    for (size_t index = 0; index < sizeof census_failures / sizeof census_failures[0]; index++) {
+        memset(durable, 0, sizeof durable);
+        durable[1][0] = 11;
+        durable[1][1] = 22;
+        failure = census_failures[index];
+        nvs_handle_t store;
+        CHECK(open_store("clock", NVS_READWRITE, &store) == ESP_OK);
+        size_t bytes = 99;
+        CHECK(stored_bytes(store, "clock", "first", &bytes) == ESP_FAIL && bytes == 99);
+        nvs_close(store);
+        int replacement = 33;
+        CHECK(app_kv_set("clock", "first", &replacement, sizeof replacement) == HOST_ERR_FAILED);
+        CHECK(durable[1][0] == 11 && durable[1][1] == 22);
+        CHECK(open_handles == 0 && iterators == 0);
+    }
+    failure = FAIL_NONE;
+    uint32_t seen = 99;
+    record_read_ok = false;
+    CHECK(!app_kv_seen_id("clock", &seen) && seen == 99);
+    CHECK(!app_kv_set_seen_id("clock", 2));
+    CHECK(!app_kv_set_poll_pace("clock", 0, 60));
+    record_read_ok = true; record_write_ok = false;
+    CHECK(app_kv_seen_id("clock", &seen) && seen == 0);
+    CHECK(!app_kv_set_seen_id("clock", 2));
+    CHECK(saved_record.seen == 0);
+    record_write_ok = true;
+    CHECK(app_kv_set_seen_id("clock", 2));
+    CHECK(app_kv_seen_id("clock", &seen) && seen == 2);
     REPORT();
 }

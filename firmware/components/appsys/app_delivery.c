@@ -48,8 +48,8 @@ static bool call_handler(app_t *app, const app_delivery_t *delivery)
 
 static bool call(app_t *app, const app_delivery_t *delivery)
 {
-    if (delivery->loaded != NULL) {
-        delivery->loaded(delivery->loaded_context);
+    if (delivery->loaded != NULL && !delivery->loaded(delivery->loaded_context)) {
+        return false;
     }
     bool is_answer = delivery->kind == APP_DELIVERY_PIECE ||
                         delivery->kind == APP_DELIVERY_VALUES || delivery->kind == APP_DELIVERY_POLL_FAILED;

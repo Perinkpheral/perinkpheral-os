@@ -11,12 +11,17 @@
 
 #include "host_api.h"
 
-/* Loads a struct stored under `key`. The first field of the struct is an
- * int32_t version. Returns true if a value of exactly `size` bytes with
- * this `version` is stored. On false `state` may hold any part of what was
- * read: initialise it whole. state must point to an aligned structure of
- * at least sizeof(int32_t) bytes; size must include its version field. */
-bool app_state_load(const char *key, void *state, int32_t size, int32_t version);
+/* Loads a versioned struct stored under `key`. The first field is an int32_t
+ * version. HOST_OK means exactly `size` bytes with this version were restored.
+ * HOST_ERR_NOT_FOUND means absent or incompatible (size or version); other
+ * negative results preserve kv_get() failures, including HOST_ERR_FAILED.
+ * On failure `state` may hold any part of the value: initialise it whole.
+ * After a storage failure, do not save or forget this key until a subsequent
+ * restore succeeds or establishes absence/incompatibility. Defaults used for
+ * display must not replace unreadable durable state.
+ * state must point to an aligned structure of at least sizeof(int32_t) bytes;
+ * size must include its version field. */
+int32_t app_state_load(const char *key, void *state, int32_t size, int32_t version);
 
 /* Stores `size` bytes of `state` under `key` with one kv_set() call.
  * Save when the state changes, in app_on_terminate() or at once for a value

@@ -99,8 +99,13 @@ static int32_t file_size(const char *app_name, const char *file)
     if (launcher_system_file(app_name, file, &embedded_size) != NULL) {
         return (int32_t)embedded_size;
     }
+    /* Bundled applications have no directory on the applications partition. */
+    if (strncmp(app_name, "sys.", 4) == 0) {
+        return HOST_ERR_NOT_FOUND;
+    }
     long size = app_store_file_size(STORAGE_APPS_ROOT, app_name, file);
-    return size >= 0 ? (int32_t)size : HOST_ERR_NOT_FOUND;
+    return size == APP_FILE_NOT_FOUND ? HOST_ERR_NOT_FOUND
+           : size < 0 ? HOST_ERR_FAILED : (int32_t)size;
 }
 
 static int32_t file_read(const char *app_name, const char *file, int32_t offset, void *bytes,
@@ -119,9 +124,13 @@ static int32_t file_read(const char *app_name, const char *file, int32_t offset,
         memcpy(bytes, embedded + offset, count);
         return (int32_t)count;
     }
+    if (strncmp(app_name, "sys.", 4) == 0) {
+        return HOST_ERR_NOT_FOUND;
+    }
     long count = app_store_read_file(STORAGE_APPS_ROOT, app_name, file, offset, bytes,
                                      (size_t)capacity);
-    return count >= 0 ? (int32_t)count : HOST_ERR_NOT_FOUND;
+    return count == APP_FILE_NOT_FOUND ? HOST_ERR_NOT_FOUND
+           : count < 0 ? HOST_ERR_FAILED : (int32_t)count;
 }
 
 static int32_t file_write(const char *app_name, const char *file, int32_t offset,

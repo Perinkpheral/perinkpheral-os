@@ -2,6 +2,7 @@
 package dev.perinkpheral.cli
 
 import dev.perinkpheral.core.Json
+import dev.perinkpheral.core.BuildError
 import dev.perinkpheral.core.build.AppBuilder
 import dev.perinkpheral.core.build.Sdk
 import java.io.File
@@ -57,6 +58,18 @@ object SimTestMocksTest {
                 ImageIO.write(expected, "png", File(folder, "picked.png"))
             }
             val wasi = File(System.getenv("WASI_SDK_PATH") ?: error("WASI_SDK_PATH is required"))
+            val writer = File(scratch, "writer").apply { mkdirs() }
+            File(writer, "manifest.json").writeText("""{"name":"writer","title":"Writer","abi":3,"writes_files":true}""")
+            File(writer, "main.c").writeText("/* SPDX-License-Identifier: MIT */\nvoid app_on_load(void) {}\n")
+            val data = File(writer, "files/cache").apply { parentFile.mkdirs(); writeBytes(ByteArray(32 * 1024)) }
+            val output = File(scratch, "writer-built")
+            val builder = AppBuilder(Sdk(root), wasi) {}
+            builder.build(writer, output)
+            check(File(output, "manifest.json").length() > 0 && File(output, "cache").length() == 32768L)
+            data.appendBytes(byteArrayOf(0))
+            try { builder.build(writer, output); error("writer quota overflow accepted") }
+            catch (error: BuildError) { check("its files take" in error.message.orEmpty()) }
+            writer.deleteRecursively()
             val failures = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scratch, false, workers = 3)
             check(failures.size == cases.size - 2) { failures.joinToString("\n") }
             for (name in cases.keys - setOf("empty", "inline")) {

@@ -54,7 +54,11 @@ static uint8_t *read_file(const char *path, size_t max_bytes, size_t *size)
     }
     /* Closing the file must not hide a memory refusal from the scene loader. */
     int read_errno = errno;
-    fclose(file);
+    if (fclose(file) != 0 && content != NULL) {
+        free(content);
+        content = NULL;
+        read_errno = EIO;
+    }
     errno = read_errno;
     return content;
 }
@@ -430,10 +434,13 @@ long app_store_file_size(const char *root, const char *name, const char *file)
 {
     char        path[PATH_MAX_BYTES];
     struct stat found;
-    if (!file_path_of(path, root, name, file, "") || stat(path, &found) != 0) {
-        return -1;
+    if (!file_path_of(path, root, name, file, "")) {
+        return APP_FILE_FAILED;
     }
-    return (long)found.st_size;
+    if (stat(path, &found) != 0) {
+        return errno == ENOENT ? APP_FILE_NOT_FOUND : APP_FILE_FAILED;
+    }
+    return S_ISREG(found.st_mode) ? (long)found.st_size : APP_FILE_FAILED;
 }
 
 long app_store_read_file(const char *root, const char *name, const char *file, long offset,
@@ -441,16 +448,20 @@ long app_store_read_file(const char *root, const char *name, const char *file, l
 {
     char path[PATH_MAX_BYTES];
     if (offset < 0 || !file_path_of(path, root, name, file, "")) {
-        return -1;
+        return APP_FILE_FAILED;
     }
     FILE *opened = fopen(path, "rb");
     if (opened == NULL) {
-        return -1;
+        return errno == ENOENT ? APP_FILE_NOT_FOUND : APP_FILE_FAILED;
     }
-    long count = fseek(opened, offset, SEEK_SET) == 0 ? (long)fread(bytes, 1, capacity, opened)
-                                                      : -1;
-    fclose(opened);
-    return count;
+    long count = APP_FILE_FAILED;
+    if (fseek(opened, offset, SEEK_SET) == 0) {
+        count = (long)fread(bytes, 1, capacity, opened);
+        if (ferror(opened)) {
+            count = APP_FILE_FAILED;
+        }
+    }
+    return fclose(opened) == 0 ? count : APP_FILE_FAILED;
 }
 
 static bool is_data_file(const char *file)
@@ -498,38 +509,54 @@ static long taken_by(long size)
                            MANIFEST_FILE_BLOCK_BYTES;
 }
 
-/* How much the application's data files take, the one named `except` not counted. */
-static long data_bytes(const char *root, const char *name, const char *except, bool with_translations)
+/* An incomplete census cannot authorize a write against a quota. */
+static bool data_bytes(const char *root, const char *name, const char *except, bool with_translations, long *bytes)
 {
     char folder[PATH_MAX_BYTES];
-    snprintf(folder, sizeof folder, "%s/%s", root, name);
+    if (snprintf(folder, sizeof folder, "%s/%s", root, name) >= (int)sizeof folder) {
+        return false;
+    }
     DIR *directory = opendir(folder);
     if (directory == NULL) {
-        return 0;
+        return false;
     }
     long total = 0;
-    struct dirent *entry;
-    while ((entry = readdir(directory)) != NULL) {
+    bool complete = false;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            complete = errno == 0;
+            break;
+        }
         if ((!with_translations && app_store_is_generated_translation(entry->d_name)) ||
             entry->d_name[0] == '.' || !is_data_file(entry->d_name) ||
             strcmp(entry->d_name, except) == 0) {
             continue;
         }
         long size = app_store_file_size(root, name, entry->d_name);
+        if (size < 0 || size > APP_FILES_MAX_BYTES || total > APP_FILES_MAX_BYTES - taken_by(size)) {
+            break;
+        }
         total += taken_by(size);
     }
-    closedir(directory);
-    return total;
+    if (closedir(directory) != 0) {
+        complete = false;
+    }
+    if (complete) {
+        *bytes = total;
+    }
+    return complete;
 }
 
-long app_store_files_bytes(const char *root, const char *name)
+bool app_store_files_bytes(const char *root, const char *name, long *bytes)
 {
-    return data_bytes(root, name, "", true);
+    return data_bytes(root, name, "", true, bytes);
 }
 
-long app_store_retained_bytes(const char *root, const char *name)
+bool app_store_retained_bytes(const char *root, const char *name, long *bytes)
 {
-    return data_bytes(root, name, "", false);
+    return data_bytes(root, name, "", false, bytes);
 }
 
 app_write_result_t app_store_write_file(const char *root, const char *name, const char *file,
@@ -544,6 +571,9 @@ app_write_result_t app_store_write_file(const char *root, const char *name, cons
         return package;
     }
     long size = app_store_file_size(root, name, file);
+    if (size == APP_FILE_FAILED) {
+        return APP_WRITE_FAILED;
+    }
     if (length == 0) {
         if (offset != 0) {
             return APP_WRITE_REFUSED;
@@ -556,7 +586,11 @@ app_write_result_t app_store_write_file(const char *root, const char *name, cons
     }
     long end = offset + (long)length;
     long size_after = end > size_before ? end : size_before;
-    if (data_bytes(root, name, file, true) + taken_by(size_after) > APP_FILES_WRITER_MAX_BYTES) {
+    long other_bytes;
+    if (!data_bytes(root, name, file, true, &other_bytes)) {
+        return APP_WRITE_FAILED;
+    }
+    if (other_bytes + taken_by(size_after) > APP_FILES_WRITER_MAX_BYTES) {
         return APP_WRITE_NO_SPACE;
     }
     FILE *opened = fopen(path, size < 0 ? "wb" : "r+b");

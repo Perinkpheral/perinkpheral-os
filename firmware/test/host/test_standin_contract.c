@@ -2,6 +2,11 @@
 #include "tinytest.h"
 #include "standin.h"
 #include "app_ui.h"
+#include "app_alloc.h"
+#include "app_state.h"
+
+APP_ALLOC_ARENA(64);
+static const char *const hosts[] = { "example.test" };
 
 #ifndef STANDIN_FULLSCREEN
 #define STANDIN_FULLSCREEN 0
@@ -17,6 +22,7 @@ const standin_subject_t standin_subject = {
     .polls = polls,
     .poll_count = 2,
     .is_fullscreen = STANDIN_FULLSCREEN,
+    .hosts = hosts, .host_count = 1,
     .certificates = certificates,
     .certificate_count = 1,
 };
@@ -501,6 +507,135 @@ static void test_geometry_and_chart_validation(void)
     CHECK(strstr(standin()->draw_text, "Invisible") == NULL);
 }
 
+static void test_storage_failures(void)
+{
+    standin_reset();
+    struct { int32_t version, value; } state = { 1, 42 };
+    CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_ERR_NOT_FOUND);
+    CHECK(app_state_save("state", &state, sizeof state));
+    CHECK(app_state_load("state", &state, sizeof state, 2) == HOST_ERR_NOT_FOUND);
+    CHECK(app_state_load("state", &state, sizeof state - 1, 1) == HOST_ERR_NOT_FOUND);
+    CHECK(app_state_load("state", &state, 1, 1) == HOST_ERR_ARGUMENT);
+    CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_OK);
+    standin()->refuse_reads = HOST_ERR_FAILED;
+    CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_ERR_FAILED);
+    CHECK(kv_get("absent", 6, &state, sizeof state) == HOST_ERR_FAILED);
+    CHECK(file_size("absent", 6) == HOST_ERR_FAILED);
+    CHECK(kv_set("other", 5, "x", 1) == HOST_ERR_FAILED);
+    CHECK(file_write("new.dat", 7, 0, "x", 1) == HOST_ERR_FAILED);
+    standin()->refuse_reads = HOST_OK;
+    CHECK(file_write("cache", 5, 0, "abcdef", 6) == HOST_OK);
+    standin()->refuse_reads = HOST_ERR_FAILED;
+    standin()->failed_read_bytes = 2;
+    char read[6] = {0};
+    CHECK(file_read("cache", 5, 0, read, sizeof read) == HOST_ERR_FAILED);
+    CHECK(memcmp(read, "ab", 2) == 0 && read[2] == 0);
+    standin()->is_drawing = true;
+    CHECK(gfx_draw_bitmap_file(0, 0, 8, 1, "cache", 5, 0) == HOST_ERR_NOT_FOUND);
+    standin()->is_drawing = false;
+    standin()->refuse_reads = HOST_OK;
+    standin()->refuse_writes = HOST_ERR_FAILED;
+    standin()->write_failure_mode = STANDIN_WRITE_COMMIT;
+    state.value = 77;
+    CHECK(!app_state_save("state", &state, sizeof state));
+    state.value = 0;
+    CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_OK && state.value == 77);
+    CHECK(file_write("cache", 5, 0, "123456", 6) == HOST_ERR_FAILED);
+    CHECK(memcmp(standin_file("cache", NULL), "123456", 6) == 0);
+    standin()->write_failure_mode = STANDIN_WRITE_PARTIAL;
+    CHECK(file_write("cache", 5, 0, "ABCDEF", 6) == HOST_ERR_FAILED);
+    CHECK(memcmp(standin_file("cache", NULL), "ABC456", 6) == 0);
+    CHECK(file_write("more", 4, 0, "ABCDEF", 6) == HOST_ERR_FAILED);
+    CHECK(file_size("more", 4) == 3);
+    CHECK(poll_set_interval(1, 60) == HOST_OK);
+    standin()->refuse_intervals = HOST_ERR_FAILED;
+    CHECK(poll_set_interval(1, 120) == HOST_ERR_FAILED);
+    CHECK(standin()->poll_interval[1] == 60 && standin()->refused_intervals == 1);
+    standin()->refuse_intervals = HOST_OK;
+    CHECK(poll_set_interval(1, 120) == HOST_OK);
+    standin()->refuse_requests = HOST_ERR_NO_SPACE;
+    const char url[] = "https://example.test/value";
+    CHECK(http_send(16, HOST_HTTP_GET, url, sizeof url - 1, NULL, 0, NULL, 0) == HOST_ERR_NO_SPACE);
+    CHECK(standin()->request_count == 0 && standin()->refused_requests == 1);
+    standin()->refuse_requests = HOST_OK;
+    CHECK(http_send(16, HOST_HTTP_GET, url, sizeof url - 1, NULL, 0, NULL, 0) == HOST_OK);
+    CHECK(standin()->request_count == 1);
+}
+
+static void test_shared_alarms(void)
+{
+    standin_reset();
+    standin()->external_repeating_alarms = HOST_ALARM_REPEATING_MAX;
+    CHECK(alarm_set(0, 60) == HOST_OK);
+    CHECK(alarm_set_at(1, HOST_CLOCK_MIN) == HOST_OK);
+    CHECK(alarm_set_every(2, 60, 0) == HOST_ERR_NO_SPACE);
+    standin()->external_repeating_alarms--;
+    CHECK(alarm_set_every(2, 60, 0) == HOST_OK);
+    CHECK(alarm_set_every(2, 120, 0) == HOST_OK); /* no new reservation */
+    CHECK(alarm_set_every(3, 60, 0) == HOST_ERR_NO_SPACE);
+    CHECK(alarm_set(2, 0) == HOST_OK);
+    CHECK(alarm_set_every(3, 60, 0) == HOST_OK);
+}
+
+static int installed_calls, updated_calls;
+static void installed(void) { installed_calls++; }
+static void replacement_load(void)
+{
+    CHECK(standin()->request_count == 0 && standin_alarms() == 0);
+    CHECK(!standin()->poll_pending[0] && !standin()->poll_network_failed[0]);
+    CHECK(standin()->poll_cooldown_until_ms == 0);
+    CHECK(standin()->status_text[0][0] == 0 && standin()->session_length == 0);
+    CHECK(alarm_set_every(0, 60, 0) == HOST_OK);
+}
+static void updated(void) { updated_calls++; CHECK(standin_alarms() == 1); }
+
+static void test_replacement_and_markers(void)
+{
+    standin_reset();
+    memset(&standin_handlers, 0, sizeof standin_handlers);
+    standin_handlers.on_installed = installed;
+    installed_calls = updated_calls = 0;
+    standin()->refuse_lifecycle_reads = HOST_ERR_FAILED;
+    standin_load(); CHECK(installed_calls == 0 && standin()->is_new);
+    standin_terminate();
+    standin()->refuse_lifecycle_reads = HOST_OK;
+    standin()->refuse_lifecycle_writes = HOST_ERR_FAILED;
+    standin_load(); CHECK(installed_calls == 0 && standin()->is_new);
+    standin_terminate();
+    standin()->refuse_lifecycle_writes = HOST_OK;
+    standin_load(); CHECK(installed_calls == 1 && !standin()->is_new);
+    standin_terminate();
+    standin_load(); CHECK(installed_calls == 1);
+    CHECK(kv_set("saved", 5, "value", 5) == HOST_OK);
+    CHECK(file_write("saved", 5, 0, "value", 5) == HOST_OK);
+    standin()->request_count = 1;
+    standin()->poll_pending[0] = standin()->poll_network_failed[0] = true;
+    standin()->poll_cooldown_until_ms = standin()->uptime_ms + 10000;
+    standin()->session_length = 1;
+    strcpy(standin()->status_text[0], "old");
+    standin()->alarms[2].kind = STANDIN_ALARM_EVERY;
+    CHECK(poll_set_interval(1, 120) == HOST_OK);
+    standin_handlers.on_load = replacement_load;
+    standin_handlers.on_updated = updated;
+    standin_prepare_update();
+    standin_load();
+    CHECK(updated_calls == 1 && standin_alarms() == 1);
+    CHECK(standin_value("saved", NULL) != NULL && standin_file("saved", NULL) != NULL);
+    CHECK(standin()->poll_interval[1] == 120);
+    memset(&standin_handlers, 0, sizeof standin_handlers);
+}
+
+static void test_declared_arena(void)
+{
+    standin_reset(); standin_load();
+    CHECK(app_alloc(64) == app_alloc_arena);
+    CHECK(app_alloc(1) == NULL);
+    app_alloc_arena[63] = 17;
+    standin_terminate(); standin_load();
+    CHECK(app_alloc_left() == 64 && app_alloc_arena[63] == 0);
+    CHECK(app_alloc(64) == app_alloc_arena);
+}
+
 int main(void)
 {
     test_manual_poll_queue_and_cooldown();
@@ -510,6 +645,10 @@ int main(void)
     test_notification_retention();
     test_effective_header();
     test_geometry_and_chart_validation();
+    test_storage_failures();
+    test_shared_alarms();
+    test_replacement_and_markers();
+    test_declared_arena();
     test_package_files();
     test_time_text_zero_capacity();
     test_long_back();
