@@ -51,6 +51,10 @@ static const struct {
 
 static volatile uint32_t s_refusals;
 static volatile uint32_t s_failed_allocations;
+/* The last allocation that found no room: what was asked, of which call. */
+static volatile size_t      s_failed_size;
+static volatile uint32_t    s_failed_caps;
+static const char *volatile s_failed_function;
 static uint32_t          s_failures_seen; /* by the last look */
 static uint32_t          s_sheds;
 static int               s_critical_looks;
@@ -69,9 +73,9 @@ static uint32_t uptime_s(void)
  * and nothing else. */
 static void on_failed_allocation(size_t size, uint32_t caps, const char *function)
 {
-    (void)size;
-    (void)caps;
-    (void)function;
+    s_failed_size = size;
+    s_failed_caps = caps;
+    s_failed_function = function; /* a literal of the heap's */
     s_failed_allocations++;
 }
 
@@ -169,6 +173,11 @@ void memory_look(void)
         s_critical_looks++;
         ESP_LOGW(TAG, "short of memory: %u free, %u in one block, %u allocations failed",
                  (unsigned)free_bytes, (unsigned)block_bytes, (unsigned)failures);
+        if (failures != 0) {
+            const char *function = s_failed_function;
+            ESP_LOGW(TAG, "the last one: %u bytes, caps 0x%lx, %s", (unsigned)s_failed_size,
+                     (unsigned long)s_failed_caps, function != NULL ? function : "?");
+        }
         if (s_critical_looks == 1) {
             s_sheds++;
             for (int i = 0; i < s_shedder_count; i++) {
