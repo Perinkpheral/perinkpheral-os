@@ -3,8 +3,13 @@
 The owner's test scope of 2026-11-17: operation for days, bounded memory, recovery after
 an interrupted write and a loss of power. This file distinguishes existing checks from
 manual tests. `tools/perinkpheral soak` collects read-only endurance observations;
-it does not exercise buttons, change power modes or inject faults. No fuzz suite,
-random-button runner or power-switch runner is implemented in `tools/cli`.
+it does not exercise buttons, change power modes or inject faults.
+`tools/perinkpheral stress-run` generates the bounded A-G ramps described in
+[load testing](load.md): HTTP and memory pressure, hostile poll responses,
+misbehaving bench applications, navigation, storage and clock/restart checks.
+It is a manually invoked bench tool, not an endurance qualification or CI device job.
+The feature freeze covers firmware features, not test tools. No parser fuzz suite
+or power-switch runner is implemented in `tools/cli`.
 
 Read [CLAUDE.md](../../CLAUDE.md) for the specification and [AGENTS.md](../../AGENTS.md)
 for build and device recipes. The HTTP surface is [openapi.yaml](../api/openapi.yaml).
@@ -237,10 +242,20 @@ See [SECURITY.md](../../SECURITY.md) for network access and physical confirmatio
 
 ## Coverage not implemented
 
-Automated workload generation, parser fuzzing, random navigation, network fault
-injection and controlled power cuts need runners and, for the hardware cases, a
-dedicated bench. The read-only soak collector does not perform these operations.
-They are not CI jobs and have no CLI commands. Battery life also needs measured current.
+The `stress-run` command generates workloads, seeded navigation and malformed HTTP
+poll responses. It records status before and after each step, console fault lines
+when `--serial` is supplied, HTTP outcomes and the first failure of each axis.
+Its page-recovery deadline is three minutes. Expected memory/busy refusals are
+recorded; allocation failures, new panic records, console faults (panic, abort,
+reset lines) and unrequested restarts fail the axis. Task watchdog messages only
+print in both builds and are recorded as warnings. Explicitly requested software
+restarts are distinguished from watchdog resets and panics. Cleanup runs after failures and Ctrl-C.
+
+Parser fuzzing, controlled network outages, two-root TLS qualification and controlled
+power cuts still need separate runners or fixtures. The stress ramps do not establish
+quiet-state memory retention, application-data correctness, physical button behavior,
+panel timing or days of stability. The read-only soak collector does not generate
+these workloads. Device runs are not CI jobs. Battery life needs measured current.
 Firmware/SDK tool logic belongs in `tools/core`, commands and generators in
 `tools/cli`, and device or simulator code in C. The separate Python CAD exporter
 in `tools/case` is not a platform for device-test runners.

@@ -123,7 +123,8 @@ class DeviceClient(val host: String) {
     class Answer(val status: Int, val body: ByteArray, val headers: Map<String, String>)
 
     /** Asks once and gives back whatever the device answered, a refusal included. */
-    fun raw(path: String, method: String = "GET", timeoutMs: Int = 10_000): Answer {
+    fun raw(path: String, method: String = "GET", timeoutMs: Int = 10_000,
+            body: ByteArray? = null, contentType: String = "application/json"): Answer {
         require(timeoutMs > 0) { "timeout must be positive" }
         val connection = URI.create(base + path).toURL().openConnection() as HttpURLConnection
         try {
@@ -133,8 +134,10 @@ class DeviceClient(val host: String) {
             connection.setRequestProperty("Connection", "close")
             if (method != "GET") {
                 connection.doOutput = true
-                connection.setFixedLengthStreamingMode(0)
-                connection.outputStream.close()
+                connection.setRequestProperty("Content-Type", contentType)
+                val bytes = body ?: ByteArray(0)
+                connection.setFixedLengthStreamingMode(bytes.size)
+                connection.outputStream.use { it.write(bytes) }
             }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream

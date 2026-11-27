@@ -137,3 +137,15 @@ val contractSnapshotTest by tasks.registering(JavaExec::class) {
     mainClass.set("dev.perinkpheral.core.ContractSnapshotTest")
 }
 tasks.check { dependsOn(contractSnapshotTest) }
+
+val stressServerTest = tasks.register<JavaExec>("stressServerTest") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.device.StressServerTest")
+}
+val stressRunTest = tasks.register<JavaExec>("stressRunTest") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.device.StressRunTest")
+}
+tasks.check { dependsOn(stressServerTest, stressRunTest) }
