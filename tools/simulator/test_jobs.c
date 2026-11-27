@@ -1,6 +1,24 @@
 /* SPDX-License-Identifier: MIT */
+#include <stdbool.h>
+#include <time.h>
+
+static bool fixed_wall_clock;
+static time_t wall_clock;
+
+/* Range boundaries must stay exact even if the test is descheduled for a second. */
+static time_t test_wall_time(time_t *out)
+{
+    time_t now = fixed_wall_clock ? wall_clock : time(NULL);
+    if (out != NULL) {
+        *out = now;
+    }
+    return now;
+}
+
 #define main simulator_main
+#define time test_wall_time
 #include "sim.c"
+#undef time
 #undef main
 #include <assert.h>
 
@@ -117,6 +135,75 @@ static void test_mocks(const char *state)
     assert(load_mocks());
 }
 
+static void test_time_and_recurrence(void)
+{
+    fixed_wall_clock = true;
+    wall_clock = (time_t)1800000000;
+    const int64_t moments[] = { HOST_TIME_MIN, -1, HOST_CLOCK_MIN - 1, HOST_CLOCK_MIN,
+                                HOST_CLOCK_MAX, HOST_CLOCK_MAX + 1 };
+    setenv("TZ", "FIX-1", 1);
+    tzset();
+    uint8_t pixels[SCREEN_WIDTH * WM_HEADER_HEIGHT / 8];
+    gfx_t surface;
+    gfx_init(&surface, pixels, SCREEN_WIDTH, WM_HEADER_HEIGHT);
+    scene_t scene = { 0 };
+    for (size_t index = 0; index < sizeof moments / sizeof moments[0]; index++) {
+        s_options.at = moments[index];
+        s_at_started = wall_clock;
+        s_forward_ms = 0;
+        bool known = moments[index] >= HOST_CLOCK_MIN && moments[index] <= HOST_CLOCK_MAX;
+        assert(services_unix_time() == (known ? moments[index] : 0));
+        assert(services_offset() == (known ? 3600 : 0));
+        gfx_clear(&surface, false);
+        draw_header(&surface, &scene, NULL);
+        int date_ink = 0;
+        for (int y = 0; y < WM_HEADER_HEIGHT - 1; y++) {
+            for (int x = SCREEN_WIDTH / 2; x < SCREEN_WIDTH; x++) {
+                date_ink += gfx_get(&surface, x, y);
+            }
+        }
+        assert((date_ink > 0) == known);
+    }
+    assert(offset_at(HOST_TIME_MIN) == 3600);
+    assert(offset_at(0) == 3600);
+    assert(offset_at(HOST_TIME_MAX) == 3600);
+    assert(offset_at(HOST_TIME_MIN - 1) == 0);
+    assert(offset_at(HOST_TIME_MAX + 1) == 0);
+    s_settings.time_auto = 0;
+    assert(services_time_set(HOST_CLOCK_MIN - 1) == HOST_ERR_ARGUMENT);
+    assert(services_time_set(HOST_CLOCK_MAX + 1) == HOST_ERR_ARGUMENT);
+    assert(services_time_set(HOST_CLOCK_MIN) == HOST_OK);
+    assert(services_time_set(HOST_CLOCK_MAX) == HOST_OK);
+    const int64_t corrections[] = { 30, -30, 86400, -86400 };
+    for (size_t index = 0; index < sizeof corrections / sizeof corrections[0]; index++) {
+        deadline_table_init(&s_deadlines);
+        s_forward_ms = 0;
+        assert(services_time_set(1800000000) == HOST_OK);
+        assert(services_alarm_every("test", 0, 60, 15));
+        int64_t first_due = s_alarm_due_uptime_ms[0];
+        assert(services_time_set(1800000000 + corrections[index]) == HOST_OK);
+        assert(s_alarm_due_uptime_ms[0] == first_due);
+        s_forward_ms += 20000;
+        deadline_id_t alarm = { .kind = DUE_ALARM, .number = 0 };
+        answer_due(&alarm);
+        assert(s_alarm_due_uptime_ms[0] == first_due + 60000);
+        s_forward_ms += 55000;
+        answer_due(&alarm);
+        assert(s_alarm_due_uptime_ms[0] == first_due + 120000);
+        s_forward_ms += 180000;
+        int64_t before = services_uptime();
+        answer_due(&alarm);
+        assert(s_alarm_due_uptime_ms[0] >= before + 60000);
+        assert(s_alarm_due_uptime_ms[0] <= services_uptime() + 60000);
+        assert(services_alarm("test", 0, 0, false));
+        assert(s_alarm_every_s[0] == 0);
+    }
+    deadline_table_init(&s_deadlines);
+    s_options.at = 0;
+    s_forward_ms = 0;
+    fixed_wall_clock = false;
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -125,6 +212,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_time_and_recurrence();
     test_network_icon();
     test_mocks(state);
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["

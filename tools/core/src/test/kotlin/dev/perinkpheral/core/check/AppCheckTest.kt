@@ -330,6 +330,11 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("network", "historical conversion probes accept pre-1970 dates and the Unix epoch",
+            emptyList(), "", checkPatch = mapOf("clock_probes" to listOf(
+                mapOf("now" to 1795262400L, "event" to -2208988800L),
+                mapOf("now" to 1795262400L, "event" to -1L),
+                mapOf("now" to 1795262400L, "event" to 0L)))),
         Break("sessions", "a session reserved on focus needs no allocation on blur",
             listOf("    session_get(&page, sizeof page);" to
                 "    session_get(&page, sizeof page);\n    session_set(&page, sizeof page);",
@@ -547,7 +552,9 @@ object AppCheckTest {
                 "{\"valid_responses\":{\"unknown\":[]}}",
                 "{\"valid_responses\":{\"https://example.test/now*\":[\"invalid\"]}}",
                 "{\"failure_text\":[\"\"]}",
-                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}",
+                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-2208988801}]}",
+                "{\"clock_probes\":[{\"now\":1767225599,\"event\":0}]}",
+                "{\"clock_probes\":[{\"now\":4102444801,\"event\":0}]}",
                 "{\"clock_probes\":[{\"now\":1795262400,\"local\":\"bad date\"}]}",
                 "{\"clock_probes\":[{\"now\":1795262400,\"event\":1806321600,\"local\":\"2027-03-29T12:00:00\"}]}"
             )
@@ -556,6 +563,31 @@ object AppCheckTest {
                 specimen.copyRecursively(copy)
                 File(copy, "test/check.json").writeText(declaration)
                 check(checker.run(copy, only = "network").failed.isNotEmpty()) { "accepted invalid declaration: $declaration" }
+            }
+            val historical = File(scratch, "historical/specimen")
+            specimen.copyRecursively(historical)
+            File(historical, "test").listFiles().orEmpty().filter { it.extension == "c" }.forEach { it.delete() }
+            File(historical, "test/check.json").writeText(Json.write(mapOf("tz" to "Europe/Berlin")))
+            File(historical, "test/time.c").writeText("""
+                /* SPDX-License-Identifier: MIT */
+                #include <assert.h>
+                #include "../specimen.c"
+                #include "standin.h"
+                int main(void)
+                {
+                    standin_reset();
+                    host_local_time_t parts;
+                    int64_t moment;
+                    assert(time_local_at(962452800LL, &parts) == HOST_OK);
+                    assert(parts.year == 2000 && parts.month == 7 && parts.day == 1 && parts.hour == 14);
+                    assert(time_from_local(&parts, &moment) == HOST_OK && moment == 962452800LL);
+                    assert(time_local_at(-2208988800LL, &parts) == HOST_OK && parts.year == 1900);
+                    return 0;
+                }
+            """.trimIndent())
+            val historicalReport = checker.run(historical, only = "logic")
+            check(historicalReport.failed.isEmpty()) {
+                historicalReport.failed.flatMap { it.details }.joinToString("\n")
             }
             val system = File(scratch, "system/specimen")
             specimen.copyRecursively(system)

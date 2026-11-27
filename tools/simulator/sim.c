@@ -182,6 +182,7 @@ static uint32_t             s_poll_every_s[APP_POLLS_MAX];
 static uint32_t             s_poll_override_s[APP_POLLS_MAX];
 static int32_t              s_alarm_every_s[HOST_ALARM_COUNT];
 static int64_t              s_alarm_at[HOST_ALARM_COUNT];
+static int64_t              s_alarm_due_uptime_ms[HOST_ALARM_COUNT];
 static bool                 s_time_changed;
 static uint8_t              s_bits[FRAME_BYTES];
 static gfx_t                s_screen;
@@ -1057,7 +1058,7 @@ static void start_poll(int number)
 static int64_t services_unix_time(void)
 {
     int64_t now = unix_now();
-    return now >= HOST_TIME_MIN && now <= HOST_TIME_MAX ? now : 0;
+    return now >= HOST_CLOCK_MIN && now <= HOST_CLOCK_MAX ? now : 0;
 }
 
 static int32_t offset_at(int64_t unix_time)
@@ -1073,7 +1074,11 @@ static int32_t offset_at(int64_t unix_time)
     return (int32_t)local.tm_gmtoff;
 }
 
-static int32_t services_offset(void) { return offset_at(unix_now()); }
+static int32_t services_offset(void)
+{
+    int64_t now = services_unix_time();
+    return now != 0 ? offset_at(now) : 0;
+}
 static int64_t services_uptime(void) { return monotonic_ms() - s_started_ms; }
 static uint32_t services_boot_id(void) { return s_boot_id; }
 
@@ -1208,6 +1213,7 @@ static bool services_alarm_every(const char *app_name, int alarm, int32_t every_
     (void)app_name;
     s_alarm_every_s[alarm] = every_s;
     s_alarm_at[alarm] = 0;
+    s_alarm_due_uptime_ms[alarm] = services_uptime() + (int64_t)first_in_s * MS_PER_SECOND;
     set_due(DUE_ALARM, alarm, (int64_t)first_in_s * MS_PER_SECOND);
     return true;
 }
@@ -1385,7 +1391,7 @@ static int32_t services_setting_set(const char *key, const char *value)
 
 static int32_t services_time_set(int64_t unix_seconds)
 {
-    if (unix_seconds < HOST_TIME_MIN || unix_seconds > HOST_TIME_MAX) {
+    if (unix_seconds < HOST_CLOCK_MIN || unix_seconds > HOST_CLOCK_MAX) {
         return HOST_ERR_ARGUMENT;
     }
     if (s_settings.time_auto != 0) {
@@ -1443,15 +1449,17 @@ static scene_t     *s_menu;
 static void draw_header(gfx_t *surface, const scene_t *scene, void *context)
 {
     (void)context;
-    time_t       now = (time_t)unix_now();
+    time_t       now = (time_t)services_unix_time();
     header_now_t header_now = {
         .network_ok = s_network_connected,
-        .time_known = true,
+        .time_known = now != 0,
         .shows_clock = s_options.clock,
         .scene_left = scene->header_left,
         .scene_right = scene->header_right,
     };
-    localtime_r(&now, &header_now.local);
+    if (now != 0) {
+        header_now.time_known = localtime_r(&now, &header_now.local) != NULL;
+    }
     char             when[HEADER_WHEN_MAX + 1];
     screens_header_t header = header_compose(&s_header_kept, &header_now, when, sizeof when);
     screens_header(surface, &header);
@@ -1574,6 +1582,7 @@ static bool load_app(void)
     deadline_table_init(&s_deadlines);
     memset(s_alarm_every_s, 0, sizeof s_alarm_every_s);
     memset(s_alarm_at, 0, sizeof s_alarm_at);
+    memset(s_alarm_due_uptime_ms, 0, sizeof s_alarm_due_uptime_ms);
     s_time_changed = false;
     memset(&s_header_kept, 0, sizeof s_header_kept);
     for (int poll = 0; poll < s_manifest.poll_count; poll++) {
@@ -1615,7 +1624,14 @@ static void answer_due(const deadline_id_t *id)
     case DUE_ALARM: {
         s_alarm_at[id->number] = 0;
         if (s_alarm_every_s[id->number] > 0) {
-            set_due(DUE_ALARM, id->number, (int64_t)s_alarm_every_s[id->number] * MS_PER_SECOND);
+            int64_t every_ms = (int64_t)s_alarm_every_s[id->number] * MS_PER_SECOND;
+            int64_t now_ms = services_uptime();
+            int64_t next_ms = s_alarm_due_uptime_ms[id->number] + every_ms;
+            if (next_ms <= now_ms || next_ms > now_ms + every_ms) {
+                next_ms = now_ms + every_ms;
+            }
+            s_alarm_due_uptime_ms[id->number] = next_ms;
+            set_due(DUE_ALARM, id->number, next_ms - now_ms);
         }
         app_delivery_t delivery = { .kind = APP_DELIVERY_ALARM, .request = id->number };
         deliver(&delivery);

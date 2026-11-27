@@ -691,8 +691,8 @@ State is loaded in <code>app_on_load()</code> and saved in <code>app_on_terminat
 Use session memory for temporary UI state: the current page, selected row, unfinished edit or a packed game board. Up to 1024 bytes (<code>HOST_SESSION_MAX</code>) survive unloads while the application remains in the navigation stack; Perinkpheral OS allocates them on demand, and <code>session_set()</code> returns <code>HOST_ERR_NO_SPACE</code>, keeping the previous value, if it cannot. It is saved in <code>app_on_blur()</code> and read in <code>app_on_focus()</code>, with <code>app_session_save()</code> and <code>app_session_load()</code>. It is cleared when the application leaves the stack, when it is opened again from the menu, and by a restart. An instance loaded for a background call can read it and cannot change it.
 Используйте память сессии для временного состояния интерфейса: текущей страницы, выбранной строки, незавершённого ввода или упакованного игрового поля. До 1024 байт (<code>HOST_SESSION_MAX</code>) сохраняются при выгрузке, пока приложение остаётся в стеке навигации; Perinkpheral OS выделяет их по запросу, а если не может, <code>session_set()</code> возвращает <code>HOST_ERR_NO_SPACE</code> и сохраняет прежнее значение. Сохраняйте их в <code>app_on_blur()</code>, восстанавливайте в <code>app_on_focus()</code> через <code>app_session_save()</code> и <code>app_session_load()</code>. Сессия очищается при выходе приложения из стека, повторном открытии из меню и перезапуске. Фоновый экземпляр может читать её, но не менять.
 
-Use <code>time_now()</code> for timestamps that must span restarts. Store <code>time_boot_id()</code> beside an uptime value to detect an earlier boot and discard that value. The boot id is a random nonzero 32-bit value; equality does not guarantee that no restart occurred.
-Для меток времени, сохраняемых между перезапусками, используйте <code>time_now()</code>. Вместе со временем работы сохраняйте <code>time_boot_id()</code>, чтобы обнаружить предыдущий запуск и отбросить старое значение. Идентификатор запуска - случайное ненулевое 32-битное число; совпадение не гарантирует отсутствия перезапуска.
+Measure elapsed time and countdowns with <code>time_uptime_ms()</code>, which includes sleep and is unaffected by clock corrections. Keep the reference and <code>time_boot_id()</code> in the store across application unloads. After a restart, discard the uptime reference and apply an explicit policy: reset, pause, or use a stored <code>time_now()</code> reference when the clock is known, accepting clock corrections. The boot id is a random nonzero 32-bit value; equality does not guarantee that no restart occurred.
+Измеряйте прошедшее время и обратный отсчёт через <code>time_uptime_ms()</code>: оно включает сон и не зависит от коррекций часов. Для сохранения между выгрузками приложения храните исходное значение и <code>time_boot_id()</code> в хранилище. После перезапуска отбросьте исходное значение uptime и примените явную политику: сбросить, приостановить либо использовать сохранённое значение <code>time_now()</code>, когда часы известны, с учётом возможных коррекций. Идентификатор загрузки - случайное ненулевое 32-битное значение; равенство не гарантирует отсутствия перезапуска.
 
 The session is attached after app_on_load() returns. Read it in app_on_focus() or a background delivery handler; session_set() in app_on_load() returns HOST_ERR_ARGUMENT.
 Сессия подключается после возврата из app_on_load(). Читайте её в app_on_focus() или обработчике фоновой доставки; session_set() в app_on_load() возвращает HOST_ERR_ARGUMENT.
@@ -2068,8 +2068,8 @@ Each press produces two kinds of events. The raw events are <code>KEYDOWN</code>
 Most applications handle only <code>PRESSED</code> and <code>LONG_PRESSED</code>.
 Большинство приложений обрабатывает только <code>PRESSED</code> и <code>LONG_PRESSED</code>.
 
-The event value combines the button and the action. Each combination has a constant:
-Значение события объединяет кнопку и действие. У каждой комбинации есть константа:
+The event value is <code>(button &lt;&lt; 4) | action</code>: buttons 1 - 4 occupy the high bits; the low four bits hold the action. <code>BTN_OF(event)</code> shifts right by 4; <code>BTN_ACTION_OF(event)</code> masks with 15. Current actions are KEYDOWN = 0, KEYUP = 1, PRESSED = 2 and LONG_PRESSED = 3. Ignore unrecognized actions. Each combination has a constant:
+Значение события - <code>(button &lt;&lt; 4) | action</code>: кнопки 1 - 4 занимают старшие биты, действие - младшие четыре. <code>BTN_OF(event)</code> сдвигает вправо на 4; <code>BTN_ACTION_OF(event)</code> применяет маску 15. Текущие действия: KEYDOWN = 0, KEYUP = 1, PRESSED = 2 и LONG_PRESSED = 3. Неизвестные действия игнорируются. У каждой комбинации есть константа:
 
 BACK
 =
@@ -2569,20 +2569,20 @@ Repeating, every 60 s to 1 day. Delivered to the existing foreground instance, o
 HOST_ALARM_REPEATING_MAX is the device pool of 24 repeating alarms, shared by all applications. One application may take several slots; none are reserved per application. HOST_ALARM_COUNT limits each application to four alarm ids.
 HOST_ALARM_REPEATING_MAX - общий для всех приложений пул из 24 повторяющихся будильников. Одно приложение может занять несколько мест; места для отдельного приложения не резервируются. HOST_ALARM_COUNT ограничивает каждое приложение четырьмя идентификаторами будильников.
 
-first_in is 0 - 86400 independently of the repeating period. A late alarm does not replay every missed period: if the following occurrence is overdue, the next is scheduled one period from processing time.
-first_in равен 0 - 86400 независимо от периода повторения. Пропущенные периоды не воспроизводятся: если следующее срабатывание уже просрочено, оно назначается через один период от момента обработки.
+first_in is 0 - 86400 independently of the repeating period. The repeating phase is measured in uptime and is unaffected by clock corrections. A late alarm does not replay every missed period: if the following occurrence is overdue, the next is scheduled one period from processing time.
+first_in равен 0 - 86400 независимо от периода повторения. Фаза повторения измеряется по uptime и не зависит от коррекций часов. Пропущенные периоды не воспроизводятся: если следующее срабатывание уже просрочено, оно назначается через один период от момента обработки.
 
 11. Time
 11. Время
 
-<code>time_now()</code> returns Unix time in seconds. It returns 0 until the device has obtained the time. The application must handle this case.
-<code>time_now()</code> возвращает время Unix в секундах. Возвращает 0, пока устройство не получило время. Приложение обязано обрабатывать этот случай.
+<code>time_now()</code> returns Unix time in seconds within <code>HOST_CLOCK_MIN</code> - <code>HOST_CLOCK_MAX</code> (2026-01-01 through 2100-01-01 UTC, inclusive). Outside that range the current clock is unknown: <code>time_now()</code> and <code>time_zone_offset()</code> return 0, and <code>time_local()</code> returns <code>HOST_ERR_NOT_FOUND</code> without changing its destination.
+<code>time_now()</code> возвращает секунды Unix в диапазоне <code>HOST_CLOCK_MIN</code> - <code>HOST_CLOCK_MAX</code> (с 2026-01-01 до 2100-01-01 UTC включительно). За его пределами текущие часы неизвестны: <code>time_now()</code> и <code>time_zone_offset()</code> возвращают 0, а <code>time_local()</code> - <code>HOST_ERR_NOT_FOUND</code>, не изменяя выходные данные.
 
-Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time, <code>time_local_at()</code> converts any moment, and <code>time_from_local()</code> converts a local date and time back to Unix time, for example for <code>alarm_set_at()</code>.
-Отображайте местное время. Часовым поясом управляет Perinkpheral OS. <code>time_local()</code> возвращает текущие местные дату и время, <code>time_local_at()</code> преобразует любой момент, <code>time_from_local()</code> преобразует местные дату и время обратно во время Unix, например для <code>alarm_set_at()</code>.
+Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time. <code>time_local_at()</code> and <code>time_from_local()</code> convert moments from 1900-01-01 through 2100-01-01 UTC, inclusive, using the configured POSIX time-zone rules at that moment. This conversion range is available even while the current clock is unknown; zero denotes 1970-01-01 UTC.
+Показывайте местное время. Часовым поясом управляет Perinkpheral OS. <code>time_local()</code> возвращает текущую местную дату и время. <code>time_local_at()</code> и <code>time_from_local()</code> преобразуют моменты с 1900-01-01 до 2100-01-01 UTC включительно по настроенным правилам часового пояса POSIX для этого момента. Диапазон преобразования доступен и при неизвестных текущих часах; ноль обозначает 1970-01-01 UTC.
 
-<code>time_text()</code> formats a moment as text in the device's language. Applications do not need their own names of days and months. Formats: "15:04", "Fri 13 Nov", "Friday", "Fri", "13 November", and a relative form: "15:04", "Tmrw 15:04", "Sat 15:04", "21 Nov".
-<code>time_text()</code> форматирует момент времени как текст на языке устройства. Собственные названия дней и месяцев приложениям не нужны. Форматы: "15:04", "Пт 13 ноя", "Пятница", "Пт", "13 ноября" и относительная форма: "15:04", "Завтра 15:04", "Сб 15:04", "21 ноя".
+<code>time_text()</code> formats a moment from the conversion range in the device's language. Applications do not need their own names of days and months. Formats: "15:04", "Fri 13 Nov", "Friday", "Fri", "13 November", and a relative form: "15:04", "Tmrw 15:04", "Sat 15:04", "21 Nov". Relative styles show a date such as "21 Nov" while the current clock is unknown.
+<code>time_text()</code> форматирует момент из диапазона преобразования на языке устройства. Приложениям не нужны собственные названия дней и месяцев. Форматы: "15:04", "Пт 13 ноя", "Пятница", "Пт", "13 ноября" и относительный: "15:04", "Завтра 15:04", "Сб 15:04", "21 ноя". При неизвестных текущих часах относительные форматы показывают дату, например "21 ноя".
 
 To be called for time-zone changes and clock corrections of at least two seconds, declare the <code>time_changed</code> intent. Smaller corrections are not reported.
 Для получения изменений часового пояса и коррекции часов не менее чем на две секунды объявите событие <code>time_changed</code>. Меньшие коррекции не сообщаются.
@@ -3796,8 +3796,8 @@ void log_write(level, text, length)
 Writes one log line of up to 200 bytes. Levels: <code>HOST_LOG_ERROR</code>, <code>HOST_LOG_WARN</code>, <code>HOST_LOG_INFO</code>, <code>HOST_LOG_DEBUG</code>
 Пишет одну строку журнала до 200 байт. Уровни: <code>HOST_LOG_ERROR</code>, <code>HOST_LOG_WARN</code>, <code>HOST_LOG_INFO</code>, <code>HOST_LOG_DEBUG</code>
 
-Time arguments to <code>time_local_at()</code>, <code>time_text()</code> and <code>alarm_set_at()</code> accept Unix seconds 1767225600 through 4102444800: 2026-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). Outside this range they return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged. <code>time_from_local()</code> applies the same range to the Unix moment after normalizing the local fields; an out-of-range result leaves its destination unchanged.
-Аргументы времени в <code>time_local_at()</code>, <code>time_text()</code> и <code>alarm_set_at()</code> принимают секунды Unix от 1767225600 до 4102444800: с 2026-01-01 до 2100-01-01 UTC включительно (от <code>HOST_TIME_MIN</code> до <code>HOST_TIME_MAX</code>). За пределами этого диапазона вызовы возвращают <code>HOST_ERR_ARGUMENT</code> и не изменяют выходные данные. <code>time_from_local()</code> проверяет тот же диапазон для момента Unix после нормализации полей местного времени; результат за пределами диапазона не изменяет выходное значение.
+<code>time_local_at()</code> and <code>time_text()</code> accept Unix seconds -2208988800 through 4102444800: 1900-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). <code>time_from_local()</code> checks the same range after normalizing local fields. Negative seconds and zero are valid conversion arguments. <code>alarm_set_at()</code> and <code>sys_time_set()</code> accept the current-clock range instead: 1767225600 through 4102444800 (<code>HOST_CLOCK_MIN</code> through <code>HOST_CLOCK_MAX</code>). Out-of-range arguments return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged.
+<code>time_local_at()</code> и <code>time_text()</code> принимают секунды Unix от -2208988800 до 4102444800: с 1900-01-01 до 2100-01-01 UTC включительно (от <code>HOST_TIME_MIN</code> до <code>HOST_TIME_MAX</code>). <code>time_from_local()</code> проверяет тот же диапазон после нормализации местных полей. Отрицательные секунды и ноль допустимы для преобразования. <code>alarm_set_at()</code> и <code>sys_time_set()</code> принимают диапазон текущих часов: от 1767225600 до 4102444800 (от <code>HOST_CLOCK_MIN</code> до <code>HOST_CLOCK_MAX</code>). Аргументы вне диапазона возвращают <code>HOST_ERR_ARGUMENT</code> и не изменяют выходные данные.
 
 21. Time
 21. Время
@@ -3853,8 +3853,8 @@ One-shot alarm, id 0 - 3. 0 s cancels
 alarm_set_at(id, int64_t unix_time)
 =
 
-One-shot alarm at Unix seconds HOST_TIME_MIN - HOST_TIME_MAX
-Однократный будильник на момент в секундах Unix от HOST_TIME_MIN до HOST_TIME_MAX
+One-shot alarm at Unix seconds HOST_CLOCK_MIN - HOST_CLOCK_MAX
+Однократный будильник на момент в секундах Unix от HOST_CLOCK_MIN до HOST_CLOCK_MAX
 
 Repeating alarm, period 60 - 86400 s. First call after <code>first_in</code> seconds, 0 - 86400 (0: one period). HOST_ALARM_REPEATING_MAX: 24 shared slots; one application may take several
 Повторяющийся будильник с периодом 60 - 86400 с. Первый вызов через <code>first_in</code> секунд, 0 - 86400 (0: один период). HOST_ALARM_REPEATING_MAX: 24 общих места; одно приложение может занять несколько

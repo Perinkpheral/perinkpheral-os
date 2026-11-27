@@ -37,7 +37,9 @@ defect of the checks:
 - Text is measured as Departure Mono only; the fonts' scales per size are not pinned here (the
   simulator's pictures hold them).
 - The header is taken to show the clock, so a frame is drawn again every minute.
-- Time-zone rules cover two years before to three years after the checked time.
+- Time-zone rules cover the full 1900-2100 conversion range. Current-clock queries
+  report unknown outside the separate 2026-2100 clock range; the raw test clock
+  remains available to the harness.
 - Mock headers describe the final response: no automatic headers, transfer decoding or
   Content-Length/body consistency check is performed.
 - The network has no redirects, TLS or timeouts; the request queue holds only the checked
@@ -67,6 +69,8 @@ The stand-in observes early requests instead of refusing them, so an ignored dea
 Host-scheduled polling and real HTTP pacing remain simulator concerns.
 
 `clock_probes` is an array of `{ "now": <epoch>, "event": <epoch>, "presses": "O" }`.
+`now` is zero or in `HOST_CLOCK_MIN..HOST_CLOCK_MAX`; `event` is in
+`HOST_TIME_MIN..HOST_TIME_MAX`, including negative seconds and zero.
 Exactly one of `event` or `local` is required. For floating calendar times, use
 `{ "now": <epoch>, "local": "2027-03-29T12:00:00", "presses": "O" }`: its date
 is converted with `time_from_local()` independently in each zone before checking the

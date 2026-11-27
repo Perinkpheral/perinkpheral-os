@@ -351,11 +351,10 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 appendLine("};")
             }
             val at = kept["at"] as? Long ?: 0L
-            // The zone's rules as its changes, for the years around the time it is checked at:
-            // what an application converts lies there. Before the first, the offset of the start.
+            // Explicit conversions cover the whole contract range, independently of the test clock.
             val rules = (kept["tz"] as? String)?.let { ZoneId.of(it).rules }
-            val from = Instant.ofEpochSecond((if (at != 0L) at else DEFAULT_AT) - ZONE_YEARS_BEFORE * SECONDS_A_YEAR)
-            val until = from.plusSeconds((ZONE_YEARS_BEFORE + ZONE_YEARS_AFTER) * SECONDS_A_YEAR)
+            val from = Instant.ofEpochSecond(sdk.contract.number("HOST_TIME_MIN"))
+            val until = Instant.ofEpochSecond(sdk.contract.number("HOST_TIME_MAX") + 1)
             val zone = rules?.getOffset(from)?.totalSeconds ?: 0
             val changes = generateSequence(rules?.nextTransition(from)) { rules?.nextTransition(it.instant) }
                 .takeWhile { it.instant < until }.toList()
@@ -375,7 +374,9 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 if ((local != null) == (fields["event"] != null)) throw BuildError("clock probe needs exactly one of event or local")
                 val event = local?.toEpochSecond(ZoneOffset.UTC) ?: (fields["event"] as? Long ?: throw BuildError("clock probe needs event"))
                 val range = sdk.contract.number("HOST_TIME_MIN")..sdk.contract.number("HOST_TIME_MAX")
-                if ((now != 0L && now !in range) || event !in range) throw BuildError("clock probe time outside HOST_TIME_MIN..HOST_TIME_MAX")
+                val clockRange = sdk.contract.number("HOST_CLOCK_MIN")..sdk.contract.number("HOST_CLOCK_MAX")
+                if (now != 0L && now !in clockRange) throw BuildError("clock probe now outside HOST_CLOCK_MIN..HOST_CLOCK_MAX")
+                if (event !in range) throw BuildError("clock probe event outside HOST_TIME_MIN..HOST_TIME_MAX")
                 val presses = fields["presses"] as? String ?: ""
                 if (presses.any { it !in "UODBuodb" }) throw BuildError("clock probe presses use UODBuodb")
                 ClockProbe(now, event, presses, local)
@@ -498,11 +499,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
 
         private const val MANIFEST = "manifest.json"
         private const val MODULE = "app.wasm"
-        private const val ZONE_YEARS_BEFORE = 2L
-        private const val ZONE_YEARS_AFTER = 3L
         private const val SECONDS_A_YEAR = 366L * 24 * 3600
-        /** The stand-in host's clock when check.json names no time (standin.c, DEFAULT_TIME). */
-        private const val DEFAULT_AT = 1795262400L
         private const val CHECK_FILE = "check.json"
         private const val FILLER = "item"
         private const val COMPILE_SECONDS = 300L

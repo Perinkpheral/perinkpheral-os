@@ -84,6 +84,15 @@ TESTS   += test_app_install test_system_settings
 TESTS   += test_wifi_events test_web_connections test_question_press test_launcher
 TESTS   += test_poller_net
 TESTS   += test_status
+TESTS   += test_app_host_time
+TESTS   += test_net_time
+
+test_net_time: test_net_time.c tinytest.h $(NET)/net_time.c $(SDK)/host/time.h $(wildcard time_stubs/*.h)
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -Itime_stubs -I$(NET)/include -I$(DEADLINES)/include -I$(SDK) -o $@ test_net_time.c $(HOST_TEST_LDFLAGS)
+
+# UBSan covers the alarm arithmetic; ASan would retain the unused hardware service table on GCC.
+test_app_host_time: test_app_host_time.c tinytest.h $(MAIN)/app_host.c $(DEADLINES)/deadline_table.c $(wildcard time_stubs/*.h)
+	$(CC) $(CFLAGS) -fno-sanitize=address -ffunction-sections -fdata-sections -Itime_stubs -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs $(MANIFEST_FLAGS) -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -I$(UI)/include -I$(GFX)/include -o $@ test_app_host_time.c $(DEADLINES)/deadline_table.c $(HOST_TEST_LDFLAGS)
 
 test_status: test_status.c tinytest.h $(MAIN)/status.c $(MAIN)/status.h $(NET)/wifi_status.c $(NET)/include/wifi_status.h $(NET)/wifi_plan.c $(wildcard event_stubs/freertos/*.h)
 	$(CC) $(CFLAGS) -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -o $@ test_status.c $(MAIN)/status.c $(NET)/wifi_status.c $(NET)/wifi_plan.c

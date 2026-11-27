@@ -177,6 +177,7 @@ void app_on_blur(void)
 void app_on_button(int32_t event)
 {
     int32_t button = BTN_OF(event);
+    if (event != button * 16 + BTN_ACTION_OF(event)) { __builtin_trap(); }
     if (button == BUTTON_KEEP_SCENE) {
         keep_scene = true;
         return;
@@ -749,7 +750,7 @@ void app_on_draw(void)
         mark(18, ROW_LOCAL_TIME);
     }
     static const int64_t invalid_moments[] = {
-        INT64_MIN, INT64_MAX, 0, HOST_TIME_MIN - 1, HOST_TIME_MAX + 1,
+        INT64_MIN, INT64_MAX, HOST_TIME_MIN - 1, HOST_TIME_MAX + 1,
     };
     bool range_checked = true;
     for (unsigned i = 0; i < sizeof invalid_moments / sizeof invalid_moments[0]; i++) {
@@ -764,14 +765,16 @@ void app_on_draw(void)
             text[0] == 'x' && text[1] == 'y' &&
             alarm_set_at(0, invalid_moments[i]) == HOST_ERR_ARGUMENT;
     }
+    range_checked = range_checked && alarm_set_at(0, HOST_CLOCK_MIN - 1) == HOST_ERR_ARGUMENT &&
+        alarm_set_at(0, HOST_CLOCK_MAX + 1) == HOST_ERR_ARGUMENT;
     if (range_checked) {
         mark(22, ROW_LOCAL_TIME);
     }
     static const host_local_time_t invalid_fields[] = {
         { .year = INT32_MAX, .month = INT32_MIN, .day = INT32_MAX,
           .hour = INT32_MAX, .minute = INT32_MIN, .second = INT32_MAX },
-        { .year = INT32_MIN }, { .year = 2025 }, { .year = 2101 },
-        { .year = 2026, .month = 1, .day = 1 }, /* before the UTC lower bound in this zone */
+        { .year = INT32_MIN }, { .year = 1899 }, { .year = 2101 },
+        { .year = 1900, .month = 1, .day = 1 }, /* before the UTC lower bound in this zone */
     };
     bool fields_checked = true;
     for (unsigned i = 0; i < sizeof invalid_fields / sizeof invalid_fields[0]; i++) {
@@ -783,13 +786,13 @@ void app_on_draw(void)
         mark(24, ROW_LOCAL_TIME);
     }
     bool boundaries_checked = true;
-    static const int64_t boundaries[] = { HOST_TIME_MIN, HOST_TIME_MAX };
+    static const int64_t boundaries[] = { HOST_TIME_MIN, -1, 0, 946684800, HOST_CLOCK_MIN - 1, HOST_TIME_MAX };
     for (unsigned i = 0; i < sizeof boundaries / sizeof boundaries[0]; i++) {
         host_local_time_t parts;
         boundaries_checked = boundaries_checked && time_local_at(boundaries[i], &parts) == HOST_OK &&
             time_from_local(&parts, &moment) == HOST_OK && moment == boundaries[i];
     }
-    const host_local_time_t carried_year = { .year = 2025, .month = 13, .day = 1, .hour = 1 };
+    const host_local_time_t carried_year = { .year = 1899, .month = 13, .day = 1, .hour = 1 };
     if (boundaries_checked && time_from_local(&carried_year, &moment) == HOST_OK && moment == HOST_TIME_MIN) {
         mark(26, ROW_LOCAL_TIME);
     }
@@ -803,7 +806,17 @@ void app_on_draw(void)
         time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, (char *)(memory_end() + 1), 0) == HOST_ERR_ARGUMENT &&
         time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, empty_text, -1) == HOST_ERR_ARGUMENT;
     if (zero_capacity_checked && empty_text[0] == 'x' && empty_text[1] == 'y') {
+        mark(32, ROW_LOCAL_TIME);
+    }
+    char epoch_text[5];
+    if (time_text(0, HOST_TIME_CLOCK, epoch_text, sizeof epoch_text) == 5 &&
+        epoch_text[0] == '0' && epoch_text[1] == '1' && epoch_text[2] == ':' &&
+        epoch_text[3] == '0' && epoch_text[4] == '0') {
         mark(28, ROW_LOCAL_TIME);
+    }
+    if (time_local_at(0, &then) == HOST_OK && then.year == 1970 && then.month == 1 &&
+        then.day == 1 && then.hour == 1 && then.weekday == 4) {
+        mark(30, ROW_LOCAL_TIME);
     }
     host_answer_info_t outside;
     if (answer_info(&outside, sizeof outside) == HOST_ERR_NOT_FOUND &&

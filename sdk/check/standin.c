@@ -737,9 +737,8 @@ static int64_t days_of(int64_t year, int64_t month, int64_t day)
     return era * 146097 + year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year - 719468;
 }
 
-/* The zone's offset at a moment: the change of the zone's rules that came last before it,
- * as the tools wrote them for the years around the subject's time; before the first,
- * zone_offset. */
+/* The zone's offset at a moment: the last change before it, from the table the tools
+ * write for the conversion range; before the first change, zone_offset. */
 static int32_t offset_at(int64_t unix_time)
 {
     int32_t offset = world->zone_offset;
@@ -772,12 +771,14 @@ static void local_parts(int64_t unix_time, host_local_time_t *parts)
 
 int64_t time_now(void)
 {
-    return standin()->now;
+    int64_t now = standin()->now;
+    return now >= HOST_CLOCK_MIN && now <= HOST_CLOCK_MAX ? now : 0;
 }
 
 int32_t time_zone_offset(void)
 {
-    return standin()->now != 0 ? offset_at(world->now) : 0;
+    int64_t now = time_now();
+    return now != 0 ? offset_at(now) : 0;
 }
 
 int32_t time_local(host_local_time_t *now)
@@ -785,10 +786,11 @@ int32_t time_local(host_local_time_t *now)
     if (now == NULL) {
         return HOST_ERR_ARGUMENT;
     }
-    if (standin()->now == 0) {
+    int64_t moment = time_now();
+    if (moment == 0) {
         return HOST_ERR_NOT_FOUND;
     }
-    local_parts(world->now, now);
+    local_parts(moment, now);
     return HOST_OK;
 }
 
@@ -819,7 +821,13 @@ int32_t time_from_local(const host_local_time_t *parts, int64_t *unix_time)
     int64_t moment = 0, forward = INT64_MAX;
     bool is_found = false;
     for (int day = -2; day <= 2; day++) {
-        int64_t candidate = as_utc - offset_at(as_utc + day * (int64_t)SECONDS_PER_DAY);
+        int64_t sample = as_utc + day * (int64_t)SECONDS_PER_DAY;
+        if (sample < HOST_TIME_MIN) {
+            sample = HOST_TIME_MIN;
+        } else if (sample > HOST_TIME_MAX) {
+            sample = HOST_TIME_MAX;
+        }
+        int64_t candidate = as_utc - offset_at(sample);
         if (!is_moment(candidate)) {
             continue;
         }
@@ -853,12 +861,15 @@ int32_t time_text(int64_t unix_time, int32_t style, char *text, int32_t capacity
     }
     host_local_time_t when, today;
     local_parts(unix_time, &when);
-    local_parts(world->now, &today);
+    int64_t now = time_now();
+    local_parts(now != 0 ? now : unix_time, &today);
     int64_t days_ahead = days_of(when.year, when.month, when.day) - days_of(today.year, today.month, today.day);
     const char *day = DAYS[when.weekday], *month = MONTHS[when.month - 1];
     char clock[8], near_day[16], written[48];
     snprintf(clock, sizeof clock, "%02d:%02d", when.hour, when.minute);
-    if (days_ahead == 0) {
+    if (now == 0 || days_ahead < 0 || days_ahead >= 7) {
+        snprintf(near_day, sizeof near_day, "%d %.3s", when.day, month);
+    } else if (days_ahead == 0) {
         snprintf(near_day, sizeof near_day, "Today");
     } else if (days_ahead == 1) {
         snprintf(near_day, sizeof near_day, "Tmrw");
@@ -873,9 +884,9 @@ int32_t time_text(int64_t unix_time, int32_t style, char *text, int32_t capacity
     case HOST_TIME_WEEKDAY: snprintf(written, sizeof written, "%s", day); break;
     case HOST_TIME_LONG_DATE: snprintf(written, sizeof written, "%d %s", when.day, month); break;
     case HOST_TIME_NEAR:
-        if (days_ahead == 0) {
+        if (now != 0 && days_ahead == 0) {
             snprintf(written, sizeof written, "%s", clock);
-        } else if (days_ahead >= 1 && days_ahead < 7) {
+        } else if (now != 0 && days_ahead >= 1 && days_ahead < 7) {
             snprintf(written, sizeof written, "%s %s", near_day, clock);
         } else {
             snprintf(written, sizeof written, "%s", near_day);
@@ -930,7 +941,7 @@ int32_t alarm_set(int32_t id, int32_t seconds)
 int32_t alarm_set_at(int32_t id, int64_t unix_time)
 {
     standin_t *host = standin();
-    if (id < 0 || id >= HOST_ALARM_COUNT || !is_moment(unix_time)) {
+    if (id < 0 || id >= HOST_ALARM_COUNT || unix_time < HOST_CLOCK_MIN || unix_time > HOST_CLOCK_MAX) {
         return refused_timer("alarm_set_at", id);
     }
     host->alarm_attempts++;
@@ -2857,8 +2868,8 @@ void standin_alarm(int32_t id)
 {
     standin_alarm_t *alarm = &standin()->alarms[id];
     if (alarm->kind == STANDIN_ALARM_EVERY) {
-        /* As app_host.c keeps it: a period after the time it was due, or a period from now when
-         * that is past already or the clock was set meanwhile. */
+        /* As app_host.c keeps it: a period after the uptime it was due, or a period from now
+         * when the following occurrence is overdue or the test fires the alarm early. */
         int64_t every_ms = (int64_t)alarm->every * MS_PER_SECOND;
         int64_t next_ms = alarm->due_uptime_ms + every_ms;
         if (next_ms <= world->uptime_ms || next_ms > world->uptime_ms + every_ms) {

@@ -23,6 +23,7 @@
 #include "poller.h"
 #include "settings.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include "timers.h"
 #include "units.h"
@@ -164,13 +165,13 @@ void app_host_tell_started(void)
 
 
 /* The alarms that come again and again: how often each, and when it is
- * due next on the deadlines' own clock - so that a late call does not
+ * due next in uptime - so that a late call does not
  * make every one after it late. A restart forgets them with the alarms. */
 typedef struct {
     uint32_t app_id; /* 0: free */
     int      alarm;
     int32_t  every_s;
-    int64_t  due_ms;
+    int64_t  due_uptime_ms;
 } recurring_t;
 static recurring_t s_recurring[HOST_ALARM_REPEATING_MAX];
 
@@ -216,7 +217,7 @@ static bool alarm_set_every(const char *app_name, int alarm, int32_t every_s, in
     if (recurring == NULL || !deadlines_set_in(DEADLINE_ALARM, app_id, alarm, first_ms)) {
         return false;
     }
-    *recurring = (recurring_t){ app_id, alarm, every_s, deadlines_now_ms() + first_ms };
+    *recurring = (recurring_t){ app_id, alarm, every_s, uptime_ms() + first_ms };
     return true;
 }
 
@@ -227,15 +228,14 @@ void app_host_alarm_rang(uint32_t app_id, int alarm)
         return;
     }
     int64_t every_ms = (int64_t)recurring->every_s * MS_PER_SECOND;
-    int64_t now_ms = deadlines_now_ms();
-    int64_t next_ms = recurring->due_ms + every_ms;
-    /* The clock was set meanwhile, or the device was away for longer than
-     * a turn: the count starts from now. */
+    int64_t now_ms = uptime_ms();
+    int64_t next_ms = recurring->due_uptime_ms + every_ms;
+    /* Skip missed periods when even the following occurrence is overdue. */
     if (next_ms <= now_ms || next_ms > now_ms + every_ms) {
         next_ms = now_ms + every_ms;
     }
     if (deadlines_set_in(DEADLINE_ALARM, app_id, alarm, next_ms - now_ms)) {
-        recurring->due_ms = next_ms;
+        recurring->due_uptime_ms = next_ms;
     } else {
         recurring->app_id = 0;
     }

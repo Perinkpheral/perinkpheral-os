@@ -880,7 +880,7 @@ static void test_notification_consumption(void)
     start_on(probe);
     app_t *app = app_scene_app(probe);
     CHECK(app != NULL);
-    app_button(app, 4, BTN_PRESSED);
+    app_updated(app); /* the frozen probe traps here without depending on prerelease button values */
     CHECK(app_has_stopped(app));
     notification.kind = APP_DELIVERY_INSTALLED;
     app_deliver(&state, &wm, probe, &notification, 0);
