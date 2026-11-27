@@ -492,9 +492,9 @@ int32_t kv_get(const char *key, int32_t key_length, void *bytes, int32_t capacit
     if (!is_key(key, key_length) || bytes == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
     }
-    if (world->refuse_reads != HOST_OK) {
+    if (world->refuse_restore_reads != HOST_OK || world->refuse_reads != HOST_OK) {
         world->refused_reads++;
-        return world->refuse_reads;
+        return world->refuse_restore_reads != HOST_OK ? world->refuse_restore_reads : world->refuse_reads;
     }
     const uint8_t *found = NULL;
     int32_t length = 0;
@@ -638,9 +638,9 @@ int32_t file_size(const char *name, int32_t name_length)
     if (!is_file_name(name, name_length)) {
         return HOST_ERR_ARGUMENT;
     }
-    if (world->refuse_reads != HOST_OK) {
+    if (world->refuse_restore_reads != HOST_OK || world->refuse_reads != HOST_OK) {
         world->refused_reads++;
-        return world->refuse_reads;
+        return world->refuse_restore_reads != HOST_OK ? world->refuse_restore_reads : world->refuse_reads;
     }
     standin_stored_file_t *file = file_of(name, name_length);
     return file != NULL ? file->size : HOST_ERR_NOT_FOUND;
@@ -656,7 +656,7 @@ int32_t file_read(const char *name, int32_t name_length, int32_t offset, void *b
         return HOST_ERR_ARGUMENT;
     }
     standin_stored_file_t *file = file_of(name, name_length);
-    if (world->refuse_reads != HOST_OK) {
+    if (world->refuse_restore_reads != HOST_OK || world->refuse_reads != HOST_OK) {
         world->refused_reads++;
         int32_t prefix = world->failed_read_bytes;
         if (file != NULL && offset < file->size && prefix > 0) {
@@ -664,7 +664,7 @@ int32_t file_read(const char *name, int32_t name_length, int32_t offset, void *b
             if (prefix > file->size - offset) prefix = file->size - offset;
             copy(bytes, file->bytes + offset, (size_t)prefix);
         }
-        return world->refuse_reads;
+        return world->refuse_restore_reads != HOST_OK ? world->refuse_restore_reads : world->refuse_reads;
     }
     if (file == NULL) {
         return HOST_ERR_NOT_FOUND;
@@ -1121,7 +1121,11 @@ void screen_redraw(int32_t flags)
 /* As app_api_ui.c keeps it: in the instance, and in the session while it may write it. */
 int32_t screen_set_inverted(int32_t inverted)
 {
-    standin()->is_inverted = inverted != 0;
+    standin();
+    if (world->is_inverted != (inverted != 0)) {
+        screen_redraw(HOST_REDRAW_NORMAL);
+    }
+    world->is_inverted = inverted != 0;
     world->inversion_was_set = true;
     if (world->is_session_writable && !world->session_is_closed) {
         world->session_inverted = world->is_inverted;
@@ -1135,6 +1139,7 @@ int32_t header_set_text(int32_t side, const char *text, int32_t length)
     if ((side != HOST_HEADER_LEFT && side != HOST_HEADER_RIGHT) || length < 0 || (text == NULL && length > 0)) {
         return HOST_ERR_ARGUMENT;
     }
+    if (text != NULL) length = (int32_t)strnlen(text, (size_t)length);
     if (length > HOST_HEADER_TEXT_MAX) {
         return HOST_ERR_ARGUMENT;
     }
@@ -1150,6 +1155,7 @@ int32_t header_set_status(int32_t side, int32_t icon, const char *text, int32_t 
         icon < HOST_ICON_NONE || icon >= HOST_ICON_COUNT) {
         return HOST_ERR_ARGUMENT;
     }
+    if (text != NULL) length = (int32_t)strnlen(text, (size_t)length);
     if (length > HOST_STATUS_TEXT_MAX) {
         return HOST_ERR_ARGUMENT;
     }
@@ -2530,6 +2536,7 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
         while (text[end] != '\0' && text[end] != ' ' && end < KIT_TEXT_BUFFER - 1) {
             end++;
         }
+        bool buffer_full = end >= KIT_TEXT_BUFFER - 1;
         while (end > 0 && is_utf8_tail(text[end])) {
             end--;
         }
@@ -2565,7 +2572,8 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
         while (text[after] == ' ') {
             after++;
         }
-        if (text[after] == '\0' || end >= KIT_TEXT_BUFFER - 1 || text_width(font, text, end) > width) {
+        if (text[after] == '\0' || buffer_full || after >= KIT_TEXT_BUFFER - 1 ||
+            text_width(font, text, end) > width) {
             break;
         }
         end = after;
@@ -2993,10 +3001,11 @@ static void take_question(bool restoring)
 
 static void close_scene(void)
 {
-    standin_forget_session();
-    standin()->is_session_writable = false;
+    standin()->is_closing_scene = true;
     world->is_leaving = true;
     standin_leave();
+    standin_forget_session();
+    world->is_closing_scene = false;
 }
 
 static void end(void)
@@ -3008,7 +3017,7 @@ static void end(void)
     bool is_lifecycle = is_handler("app_on_focus") || is_handler("app_on_blur") ||
                         is_handler("app_on_terminate");
     world->handler = NULL;
-    if (world->is_leaving && world->is_on_screen && !world->session_is_closed) {
+    if (world->is_leaving && world->is_on_screen && !world->session_is_closed && !world->is_closing_scene) {
         close_scene();
     } else if (world->is_on_screen && !world->session_is_closed && !world->is_drawing && !is_lifecycle) {
         take_question(false);
@@ -3028,6 +3037,7 @@ void standin_load(void)
 {
     standin_t *host = standin();
     host->is_loaded = host->is_loading = true;
+    host->is_closing_scene = false;
     host->is_on_screen = host->is_session_writable = host->is_leaving = host->wants_screen = false;
     host->redraw_flags = host->question_flags = 0;
     host->question_dirty = host->inversion_was_set = false;

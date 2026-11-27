@@ -62,9 +62,22 @@ The `network_up` endpoint retries requested manifest polls that failed in transp
 then delivers subscribed news. Healthy and never requested manual polls stay idle.
 The simulator uses the firmware poll scheduler for pending coalescing, the accepted-call
 window and list rounds. Manual polls have no automatic deadline or settings trigger.
+Empty `each` lists use ordinary template preparation; nonempty items are limited to
+63 bytes before prefix selection. A transport failure ends the list round. A broken
+body after an HTTP refusal does not qualify for a reconnect retry.
 Normalized Retry-After and the bare-429 fallback defer every manifest-poll trigger on
 uptime; raw-request responses do not create poll cooldowns. The firmware host tests
 cover power-profile reconnect classification and transport failures.
+
+Live exchanges capture simulated wall time and uptime when the fetcher reports
+headers, before waiting for the body. Forwarding or correcting the clock during a
+response cannot restart its cooldown or change its Retry-After date normalization.
+Mocks take Content-Length from the complete header, or report -1 when absent or
+outside 0..INT32_MAX, including HEAD responses; fixture body size is independent.
+
+`sim-test` resolves named `tz` values through the Settings city table to the device's
+recurring POSIX rules. Historical IANA changes are not used. Explicit POSIX month
+rules and fixed-offset zones are also accepted.
 
 Not simulated: the menu of several applications, the system API except
 `sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,

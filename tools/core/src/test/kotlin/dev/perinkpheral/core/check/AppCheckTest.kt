@@ -49,6 +49,21 @@ object AppCheckTest {
             "    if (row_length <= 0 || is_same(row, \"null\")) {\n        row[0] = '-';\n        row[1] = '\\0';\n    }")
 
     private val BREAKS = listOf(
+        Break("store", "a failed restore can delete state during app_on_load",
+            listOf("    kv_get(\"count\", 5, &count, sizeof count);" to
+                "    if (kv_get(\"count\", 5, &count, sizeof count) == HOST_ERR_FAILED) kv_set(\"count\", 5, NULL, 0);"),
+            "restore-read:"),
+        Break("network", "a manual-only answer handler is exercised through its declared UP trigger",
+            listOf("    ask_note();" to "    (void)ask_note;",
+                "void app_on_button(int32_t event)\n{" to
+                    "void app_on_button(int32_t event)\n{\n    if (event == BTN_UP_PRESSED) poll_run(0);",
+                "void app_on_picked(int32_t request, int32_t http_status)\n{" to
+                    "void app_on_picked(int32_t request, int32_t http_status)\n{\n    __builtin_trap();"),
+            "app_on_picked", manifestEdits = listOf("\"every\": 60" to "\"manual\": true"),
+            checkPatch = mapOf("request_presses" to "U")),
+        Break("network", "manual-only response comparisons require positive deliveries",
+            listOf("    ask_note();" to "    (void)ask_note;"), "manual-poll coverage:",
+            manifestEdits = listOf("\"every\": 60" to "\"manual\": true")),
         Break("sessions", "native allocations retain the declared arena boundary",
             listOf("#include \"app_text.h\"" to
                 "#include \"app_alloc.h\"\nAPP_ALLOC_ARENA(64);\n#include \"app_text.h\"",
@@ -343,10 +358,21 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
-        Break("network", "historical conversion probes accept dates since the Unix epoch",
+        Break("timers", "replacement cancels a request watchdog without recreating it",
+            listOf("    ask_note();\n}" to "    ask_note();\n    alarm_set(2, 60);\n}"), ""),
+        Break("timers", "replacement can restore the recurring alarm at its background interval",
+            listOf("void app_on_updated(void)\n{\n    schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S, 0) != HOST_OK;" to
+                "void app_on_updated(void)\n{\n    schedule_failed = alarm_set_every(ASK_ALARM, ASK_EVERY_S * 2, 0) != HOST_OK;"), ""),
+        Break("network", "manual polling through UP receives whole, partial and failed answers",
+            listOf("    ask_note();" to "    (void)ask_note;",
+                "void app_on_button(int32_t event)\n{" to
+                    "void app_on_button(int32_t event)\n{\n    if (event == BTN_UP_PRESSED) poll_run(0);"), "",
+            manifestEdits = listOf("\"every\": 60" to "\"manual\": true"),
+            checkPatch = mapOf("request_presses" to "U")),
+        Break("network", "historical conversion probes accept the Unix epoch and subsequent dates",
             emptyList(), "", checkPatch = mapOf("clock_probes" to listOf(
-                mapOf("now" to 1795262400L, "event" to 15681600L),
-                mapOf("now" to 1795262400L, "event" to 946684800L),
+                mapOf("now" to 1795262400L, "event" to 86400L),
+                mapOf("now" to 1795262400L, "event" to 1L),
                 mapOf("now" to 1795262400L, "event" to 0L)))),
 
         Break("network", "poll_run during Retry-After queues deferred work",
@@ -569,7 +595,7 @@ object AppCheckTest {
                 "{\"valid_responses\":{\"unknown\":[]}}",
                 "{\"valid_responses\":{\"https://example.test/now*\":[\"invalid\"]}}",
                 "{\"failure_text\":[\"\"]}",
-                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-2208988801}]}",
+                "{\"clock_probes\":[{\"now\":1795262400,\"event\":-1}]}",
                 "{\"clock_probes\":[{\"now\":1767225599,\"event\":0}]}",
                 "{\"clock_probes\":[{\"now\":4102444801,\"event\":0}]}",
                 "{\"clock_probes\":[{\"now\":1795262400,\"local\":\"bad date\"}]}",
@@ -584,7 +610,7 @@ object AppCheckTest {
             val historical = File(scratch, "historical/specimen")
             specimen.copyRecursively(historical)
             File(historical, "test").listFiles().orEmpty().filter { it.extension == "c" }.forEach { it.delete() }
-            File(historical, "test/check.json").writeText(Json.write(mapOf("tz" to "Europe/Berlin")))
+            File(historical, "test/check.json").writeText(Json.write(mapOf("tz" to "America/New_York")))
             File(historical, "test/time.c").writeText("""
                 /* SPDX-License-Identifier: MIT */
                 #include <assert.h>
@@ -595,11 +621,11 @@ object AppCheckTest {
                     standin_reset();
                     host_local_time_t parts;
                     int64_t moment;
-                    assert(time_local_at(962452800LL, &parts) == HOST_OK);
-                    assert(parts.year == 2000 && parts.month == 7 && parts.day == 1 && parts.hour == 14);
-                    assert(time_from_local(&parts, &moment) == HOST_OK && moment == 962452800LL);
+                    assert(time_local_at(953553600LL, &parts) == HOST_OK);
+                    assert(parts.year == 2000 && parts.month == 3 && parts.day == 20 && parts.hour == 8);
+                    assert(time_from_local(&parts, &moment) == HOST_OK && moment == 953553600LL);
                     assert(time_local_at(-1, &parts) == HOST_ERR_ARGUMENT);
-                    assert(time_local_at(0, &parts) == HOST_OK && parts.year == 1970);
+                    assert(time_local_at(0, &parts) == HOST_OK);
                     return 0;
                 }
             """.trimIndent())

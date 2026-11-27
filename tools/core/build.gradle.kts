@@ -62,6 +62,13 @@ val simulatorHeadersTest by tasks.registering(JavaExec::class) {
 }
 tasks.check { dependsOn(simulatorHeadersTest) }
 
+val deviceTimeZonesTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.core.DeviceTimeZonesTest")
+}
+tasks.check { dependsOn(deviceTimeZonesTest) }
+
 val simulatorPortTest by tasks.registering(JavaExec::class) {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath

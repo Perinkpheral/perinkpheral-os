@@ -65,8 +65,17 @@ object SimulatorHeadersTest {
                         "headers" to emptyMap<String, String>(), "body" to "", "max" to 1024, "timeout" to 3)
                     writer.write(Json.write(request + policy) + "\n")
                     writer.flush()
+                    if (policy["headerEvents"] == true) {
+                        val event = Json.parse(reader.readLine()) as Map<*, *>
+                        check(event["event"] == "headers") { event }
+                        val received = System.nanoTime()
+                        val answer = Json.parse(reader.readLine()) as Map<*, *>
+                        check((System.nanoTime() - received) / 1_000_000 >= 1000) { "headers arrived after the slow body" }
+                        return answer
+                    }
                     return Json.parse(reader.readLine()) as Map<*, *>
                 }
+                check(get("/slow-throttle", mapOf("headerEvents" to true))["httpStatus"] == 429L)
                 val delayed = get("/slow-throttle")
                 check(delayed["httpStatus"] == 429L && (delayed["bodyElapsedMs"] as Long) >= 1000L) { delayed }
                 val limits = mapOf("max" to 8, "rawMax" to 64, "values" to true, "formatPolicy" to 0)

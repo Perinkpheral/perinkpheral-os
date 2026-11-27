@@ -333,12 +333,12 @@ static int32_t kv_store(const char *app_name, const char *key, const void *value
 {
     char path[PATH_BYTES], folder[PATH_BYTES];
     store_path(path, app_name, key);
-    if (length == 0 && !is_users) {
-        return remove(path) == 0 || errno == ENOENT ? HOST_OK : HOST_ERR_FAILED;
-    }
     if (!is_users && s_manifest_json != NULL && app_manifest_is_server_setting(s_manifest_json, key)) {
         say('W', "sim", "%s: \"%s\" is the user's to set", app_name, key);
         return HOST_ERR_ARGUMENT;
+    }
+    if (length == 0 && !is_users) {
+        return remove(path) == 0 || errno == ENOENT ? HOST_OK : HOST_ERR_FAILED;
     }
     snprintf(folder, sizeof folder, "%s/store/%s", s_options.state, app_name);
     make_folders(folder);
@@ -476,6 +476,22 @@ static void keep_answer_headers(answer_headers_t *kept, const json_t *headers)
     }
 }
 
+static int32_t content_length_of(const json_t *headers)
+{
+    for (const json_t *field = headers != NULL ? headers->child : NULL; field != NULL; field = field->next) {
+        if (field->name == NULL || strcasecmp(field->name, "Content-Length") != 0) continue;
+        const json_t *value = json_is_array(field) ? json_at(field, 0) : field;
+        if (!json_is_string(value) || value->text[0] == '\0') return -1;
+        int32_t length = 0;
+        for (const char *digit = value->text; *digit != '\0'; digit++) {
+            if (*digit < '0' || *digit > '9' || length > (INT32_MAX - (*digit - '0')) / 10) return -1;
+            length = length * 10 + (*digit - '0');
+        }
+        return length;
+    }
+    return -1;
+}
+
 static void answer_from_mock(job_t *job, const json_t *mock)
 {
     const json_t *status = json_get(mock, "status");
@@ -529,8 +545,8 @@ static void answer_from_mock(job_t *job, const json_t *mock)
         }
         memcpy(job->answer, body->text, job->answer_length);
     }
-    job->response.length = job->answer_length <= INT32_MAX ? (int32_t)job->answer_length : -1;
     const json_t *headers = json_get(mock, "headers");
+    job->response.length = content_length_of(headers);
     keep_answer_headers(&job->response_headers, headers);
     int64_t response_time = unix_now();
     job->response_at_ms = monotonic_ms();
@@ -689,6 +705,7 @@ static void exchange(job_t *job, char *next, size_t next_size)
     json_add_number(asked, "max", job->wants_values ? HOST_ANSWER_MAX : HOST_ANSWER_PIECES_MAX);
     /* Values are picked: a refusal keeps its status however its page arrives, as on the device. */
     json_add_bool(asked, "values", job->wants_values);
+    json_add_bool(asked, "headerEvents", true);
     json_add_number(asked, "formatPolicy", job->format_policy);
     json_add_number(asked, "rawMax", HOST_ANSWER_PIECES_MAX);
     /* The application's own certificate authorities, as files: trusted for its requests beside
@@ -714,8 +731,24 @@ static void exchange(job_t *job, char *next, size_t next_size)
     free(line);
     char   *answer_line = NULL;
     size_t  capacity = 0;
-    ssize_t got = is_sent ? getline(&answer_line, &capacity, s_fetcher_out) : -1;
-    json_t *answer = got > 0 ? json_parse(answer_line) : NULL;
+    int64_t response_time = unix_now();
+    job->response_at_ms = monotonic_ms();
+    bool headers_received = false;
+    json_t *answer = NULL;
+    while (is_sent && getline(&answer_line, &capacity, s_fetcher_out) > 0) {
+        int64_t received_time = unix_now();
+        int64_t received_ms = monotonic_ms();
+        answer = json_parse(answer_line);
+        const json_t *event = json_get(answer, "event");
+        if (!headers_received) {
+            response_time = received_time;
+            job->response_at_ms = received_ms;
+        }
+        if (!json_is_string(event) || strcmp(event->text, "headers") != 0) break;
+        headers_received = true;
+        json_free(answer);
+        answer = NULL;
+    }
     free(answer_line);
     if (answer == NULL) {
         /* The network is gone: it is asked again for the next request. */
@@ -744,18 +777,7 @@ static void exchange(job_t *job, char *next, size_t next_size)
                        sizeof response->last_modified);
     copy_answer_header(metadata_headers, "location", response->location, sizeof response->location);
     copy_answer_header(metadata_headers, "link", response->link, sizeof response->link);
-    char number[24] = "";
-    copy_answer_header(metadata_headers, "content-length", number, sizeof number);
-    if (number[0] != '\0') {
-        char *end;
-        long long length = strtoll(number, &end, 10);
-        response->length = *end == '\0' && length >= 0 && length <= INT32_MAX
-                               ? (int32_t)length : -1;
-    }
-    const json_t *elapsed = json_get(answer, "bodyElapsedMs");
-    int64_t body_ms = json_is_number(elapsed) && elapsed->number > 0 ? elapsed->number : 0;
-    int64_t response_time = unix_now() - body_ms / MS_PER_SECOND;
-    job->response_at_ms = monotonic_ms() - body_ms;
+    response->length = content_length_of(metadata_headers);
     for (const json_t *field = metadata_headers != NULL ? metadata_headers->child : NULL;
          field != NULL; field = field->next) {
         const json_t *value = json_is_array(field) ? json_at(field, 0) : field;
@@ -1164,9 +1186,7 @@ static job_t *start_poll(int number, int item, int *items)
     }
     char list[APP_SETTING_VALUE_MAX + 1];
     if (poll.each_key[0] == '\0' || !setting_of(NULL, poll.each_key, list, sizeof list) || list[0] == '\0') {
-        job_t *job = start_poll_request(&poll, number, NULL, -1);
-        if (poll.each_key[0] != '\0') { job->status = HOST_FAILED_NOT_READY; }
-        return job;
+        return start_poll_request(&poll, number, NULL, -1);
     }
     *items = 1;
     for (const char *at = list; *at != '\0'; at++) {
@@ -1177,8 +1197,10 @@ static job_t *start_poll(int number, int item, int *items)
         char *end = strchr(at, '\n');
         if (end != NULL) { *end = '\0'; }
         if (index == item) {
+            char list_item[APP_LIST_ITEM_MAX + 1];
+            snprintf(list_item, sizeof list_item, "%s", at);
             const char *value;
-            if (!app_manifest_poll_takes(&poll, at, &value)) { return NULL; }
+            if (!app_manifest_poll_takes(&poll, list_item, &value)) { return NULL; }
             list_item_t each = { .key = poll.each_key, .item = value };
             return start_poll_request(&poll, number, &each, item);
         }
@@ -1189,8 +1211,10 @@ static job_t *start_poll(int number, int item, int *items)
 
 static void finish_poll(job_t *job)
 {
-    bool transport_failed = job->status == HOST_FAILED_NO_NETWORK ||
-                            job->status == HOST_FAILED_NO_ANSWER || job->status == HOST_FAILED_TIMEOUT;
+    bool transport_failed = (job->response.status <= 0 ||
+                             (job->response.status >= 200 && job->response.status < 300)) &&
+                            (job->status == HOST_FAILED_NO_NETWORK ||
+                             job->status == HOST_FAILED_NO_ANSWER || job->status == HOST_FAILED_TIMEOUT);
     int poll = job->number;
     if (!poll_rounds_answered(&s_poll_rounds, &job->poll_turn, transport_failed ? 0 : job->poll_items)) {
         return;

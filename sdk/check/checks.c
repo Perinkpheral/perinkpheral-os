@@ -274,6 +274,7 @@ enum {
     MARK_DIAGNOSTICS,
     MARK_ONESHOT_COVERAGE,
     MARK_RESPONSE_REFUSALS,
+    MARK_MANUAL_DELIVERIES,
     MARK_ALARM_PERIOD, /* one mark per alarm ID, zero for a schedule that does not repeat */
     MARK_POLL_INTERVAL = MARK_ALARM_PERIOD + HOST_ALARM_COUNT,
     MARK_COUNT = MARK_POLL_INTERVAL + MANIFEST_POLLS_MAX
@@ -426,6 +427,9 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     }
     standin_answer_headers(answer.headers, answer.header_count);
     standin_answer_method(is_head ? HOST_HTTP_HEAD : HOST_HTTP_GET);
+    if (request < standin_subject.poll_count && standin_subject.polls[request].manual) {
+        host->marks[MARK_MANUAL_DELIVERIES]++;
+    }
     int32_t previous_refusal = host->refuse_writes;
     int32_t refused_before = host->refused_writes;
     if (response_refusal != HOST_OK) {
@@ -558,15 +562,30 @@ static void answer_manifest_polls(const round_t *round, int32_t response_refusal
             answer.is_ready = standin_poll_url(poll, answer.item, answer.url, sizeof answer.url) &&
                               standin_poll_ready(poll, answer.item);
             hand(&answer);
+            if (host->poll_network_failed[poll]) {
+                break;
+            }
         }
     }
 }
 
-/* Send the app's queued requests to their original addresses, with fresh
- * authorization and filled headers. */
+static void press(char key);
+
+static void trigger_requests(void)
+{
+    standin_t *host = standin();
+    if (!is_away) {
+        for (const char *key = standin_subject.request_presses; key != NULL && *key != '\0' && !host->is_leaving; key++) {
+            press(*key);
+        }
+    }
+}
+
+/* Send queued requests to their original addresses, with current authorization and headers. */
 static void answer_round_with_refusal(const round_t *round, int32_t response_refusal)
 {
     standin_t *host = standin();
+    trigger_requests();
     answer_manifest_polls(round, response_refusal);
     for (int32_t answered = 0; host->request_count > 0 && answered < REQUESTS_A_ROUND && !has_away_failed;
          answered++) {
@@ -645,10 +664,10 @@ static void scene_run(void *context)
     }
     host->write_failure_mode = scene->write_failure_mode;
     if (!is_away) {
-        int32_t previous = host->refuse_reads;
-        host->refuse_reads = scene->load_read_refusal;
+        int32_t previous = host->refuse_restore_reads;
+        host->refuse_restore_reads = scene->load_read_refusal;
         standin_load();
-        host->refuse_reads = previous;
+        host->refuse_restore_reads = previous;
     } else if (scene->is_updated) {
         hand(&(delivery_t){ .alarm = -1, .is_updated = true });
     }
@@ -659,6 +678,7 @@ static void scene_run(void *context)
         standin_focus();
         shown.is_shown = false;
         host->marks[MARK_FIRST_PICTURE] = show();
+        if (!scene->has_data && scene->rounds[0].kind == ROUND_NONE) trigger_requests();
     }
     if (scene->has_settings) {
         standin_settings();
@@ -1333,7 +1353,10 @@ static void check_alarms(const char *way)
     if (!play(&before) || mark(MARK_ALARMS) == 0) {
         return;
     }
-    uint64_t alarms = mark(MARK_ALARMS);
+    uint64_t repeating = 0;
+    for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+        if (mark(MARK_ALARM_PERIOD + id) > 0) repeating |= 1u << id;
+    }
     /* Off the screen the application is loaded for the alarm and unloaded after it. */
     static const int64_t LATENESS[] = { 0, 6 * MS_PER_HOUR };
     for (size_t index = 0; index < sizeof LATENESS / sizeof LATENESS[0]; index++) {
@@ -1356,9 +1379,13 @@ static void check_alarms(const char *way)
     }
     scene_t updated = { .is_off_screen = true, .is_updated = true };
     if (play(&updated)) {
-        expect(TIMERS, mark(MARK_ALARMS) == alarms,
-               "%s, then updated: alarms %#x wait, %#x did before - a new version does not inherit them, "
-               "app_on_updated() sets them again", told(&before), (unsigned)mark(MARK_ALARMS), (unsigned)alarms);
+        uint64_t updated_repeating = 0;
+        for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
+            if (mark(MARK_ALARM_PERIOD + id) > 0) updated_repeating |= 1u << id;
+        }
+        expect(TIMERS, updated_repeating == repeating,
+               "%s, then updated: repeating alarms %#x wait, %#x did before - a new version does not inherit them, "
+               "app_on_updated() sets them again", told(&before), (unsigned)updated_repeating, (unsigned)repeating);
     }
 }
 
@@ -1410,6 +1437,14 @@ static void check_network(void)
     standin_reset();
     scene_t whole = { .rounds = { { ROUND_WHOLE, 0, 0 } } };
     if (!play(&whole)) {
+        return;
+    }
+    bool has_manual = false;
+    for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+        has_manual = has_manual || standin_subject.polls[poll].manual;
+    }
+    if (has_manual && mark(MARK_MANUAL_DELIVERIES) == 0) {
+        problem(NETWORK, "manual-poll coverage: no response delivered; declare request_presses in test/check.json");
         return;
     }
     uint64_t answered = mark(MARK_ROUND_PICTURE);
@@ -1530,7 +1565,9 @@ static void check_network(void)
          * On return, answer a fresh request if focus or its timer asks for one. */
         scene_t reopened = { .retry_round = 1, .rounds = { { ROUND_WHOLE, 0, 0 } } };
         const scene_t *returned = standin_subject.poll_count == 0 ? &reopened : &ON_SCREEN;
-        if (play(&ON_SCREEN) && play(&away) && play(&then) && play(returned)) {
+        /* A manual poll needs another foreground trigger before the next background answer. */
+        if (play(&ON_SCREEN) && play(&away) && (!has_manual || play(&ON_SCREEN)) &&
+            play(&then) && play(returned)) {
             expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive || deferred_recovery,
                    "%s, then a whole answer off the screen, then on the screen: it shows another picture than "
                    "after the whole answer alone", told(&away));

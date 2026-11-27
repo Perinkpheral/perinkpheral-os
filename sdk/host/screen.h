@@ -84,7 +84,9 @@ HOST_IMPORT(screen_redraw, void screen_redraw(int32_t flags));
 
 /* Inverts the completed screen, including the Perinkpheral OS header and bottom
  * margin. Draw normally; zero disables inversion, any other value enables it.
- * Returns HOST_OK. A change requests a redraw. The preference belongs to this
+ * Returns HOST_OK. A change requests a NORMAL redraw: it ends a shown QUESTION
+ * unless QUESTION remains pending in the combined redraw flags. An unchanged
+ * value does not request a redraw. The preference belongs to this
  * scene, survives temporary unloads, and resets when the scene is closed.
  * Background handlers cannot change the retained foreground preference. */
 HOST_IMPORT(screen_set_inverted, int32_t screen_set_inverted(int32_t inverted));
@@ -105,7 +107,8 @@ HOST_IMPORT(screen_set_inverted, int32_t screen_set_inverted(int32_t inverted));
 #define HOST_HEADER_LEFT     0
 #define HOST_HEADER_RIGHT    1
 #define HOST_HEADER_TEXT_MAX 63
-/* Text set during app_on_draw() belongs to that frame, before inversion. */
+/* Text set during app_on_draw() belongs to that frame, before inversion.
+ * The text limit applies after the first NUL in the validated counted range. */
 HOST_IMPORT(header_set_text, int32_t header_set_text(int32_t side, const char *text, int32_t length));
 
 /* Sets a status in Perinkpheral OS header: an icon and a short text shown above
@@ -124,7 +127,8 @@ HOST_IMPORT(header_set_text, int32_t header_set_text(int32_t side, const char *t
  * device restarts, or an update changes the application's id.
  * Callable from any handler, on and off the screen. A setter during
  * app_on_draw() affects the header of that frame, before inversion.
- * A change is shown as a data-driven redraw. */
+ * A change is shown as a data-driven redraw. The text limit applies after the
+ * first NUL in the validated counted range. */
 #define HOST_STATUS_TEXT_MAX 31
 HOST_IMPORT(header_set_status, int32_t header_set_status(int32_t side, int32_t icon, const char *text,
                                                  int32_t length));
