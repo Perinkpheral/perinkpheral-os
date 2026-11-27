@@ -280,8 +280,8 @@ HOST_LAYOUT(host_map_point_t, 12);
 /* Draws the map: every pixel of its rectangle, clipped to the surface, land or sea. The colour
  * stays as it was. Device drawing times estimated from host benchmarks: up to about a quarter
  * of a second, about a second for a large map near a pole; not measured on the device.
- * While it draws it takes 8 KB of the application's 80 KB working area; HOST_ERR_NO_SPACE
- * when that much is not free. Requires app_on_draw(). */
+ * While it draws it takes 8,128 bytes from the shared 112 KB application area;
+ * HOST_ERR_NO_SPACE when that much is not free. Requires app_on_draw(). */
 #define HOST_SINCE_gfx_draw_map "0.1.94"
 HOST_IMPORT(gfx_draw_map, int32_t gfx_draw_map(const host_map_t *map));
 

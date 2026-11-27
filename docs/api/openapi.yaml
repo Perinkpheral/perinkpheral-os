@@ -587,6 +587,11 @@ paths:
       description: |
         The body must contain 1..2048 bytes. A newly installed application opens
         after commit; updating an installed application does not automatically open it.
+        On arrival, admission requires a page's worth of memory (24 KB free and
+        an 8 KB contiguous block). The download waits behind an active poll;
+        session admission (60 KB free and a 17 KB contiguous block) occurs when
+        the download starts. The request holds the sole waiting-handler slot
+        meanwhile; another waiting request receives 503 with "Device busy."
         200 JSON ok: Installed.
         400 JSON error: Invalid request.
         403 JSON error: Not confirmed.
@@ -728,6 +733,11 @@ paths:
       description: |
         source is a zero-based index in GET /api/sources; 0 is the fixed official
         source. An unavailable index is refused.
+        On arrival, admission requires a page's worth of memory (24 KB free and
+        an 8 KB contiguous block). The download waits behind an active poll;
+        session admission (60 KB free and a 17 KB contiguous block) occurs when
+        the download starts. The request holds the sole waiting-handler slot
+        meanwhile; another waiting request receives 503 with "Device busy."
         404 JSON error: Source not found.
         502 JSON error: Source unavailable (HTTP <status>).
         503 JSON error: Not enough memory. or Device busy.

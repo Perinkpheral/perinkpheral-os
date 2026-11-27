@@ -11,7 +11,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.101
 
-- An application's memory is now what its stack and data take, at most 64 KB, instead of a fixed 64 KB page, and the application area is 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back, and what an application does not use for data is room for its code. Applications built earlier still load when they fit; rebuilding with this SDK makes them smaller. An application that calls `app_alloc()` declares its arena with `APP_ALLOC_ARENA(bytes)`.
+- An application's memory is now what its stack and data take, at most 64 KB, instead of a fixed 64 KB page, and the application area is 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back, and what an application does not use for data is room for its code. A module built earlier with a 64 KB memory leaves only 48 KB for the interpreter, so a large application built before 0.1.101 may no longer fit. Update catalog applications before or with the firmware; automatic application updates install the rebuilt packages. Rebuilding with this SDK reduces their memory requirement. An application that calls `app_alloc()` declares its arena with `APP_ALLOC_ARENA(bytes)`.
 - A first flash carries the catalog applications rebuilt this way, with Calendar 0.6.0.
 - The catalog and application installs no longer answer "Device busy" while an application's poll is in progress: they wait their turn behind it. Memory refusals are counted once per refused request, not once per look.
 
