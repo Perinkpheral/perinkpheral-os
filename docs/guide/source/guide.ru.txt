@@ -568,8 +568,8 @@ ASCII transliteration
 "Moskva", "Strasse", "Athina"; otherwise <code>?</code>
 "Moskva", "Strasse", "Athina"; иначе <code>?</code>
 
-Text per drawing call
-Текст на один вызов отрисовки
+Text per drawing call except ui_draw_text_lines
+Текст вызова рисования, кроме ui_draw_text_lines
 
 127 bytes
 127 байт
@@ -2641,8 +2641,8 @@ Tmrw
 12. Languages
 12. Языки
 
-Application string keys match <code>[a-z][a-z0-9_]*</code>. Generated constants use <code>STR_</code> followed by the uppercase key.
-Ключи строк приложения соответствуют <code>[a-z][a-z0-9_]*</code>. Сгенерированные константы начинаются с <code>STR_</code>, затем идёт ключ в верхнем регистре.
+Application string keys match <code>[a-z][a-z0-9_]*</code>. Generated constants use <code>STR_</code> followed by the uppercase key. <code>APP_STRING_COUNT</code> is the number of strings. The key <code>count</code> produces the ordinary ID <code>STR_COUNT</code>.
+Ключи строк приложения соответствуют <code>[a-z][a-z0-9_]*</code>. Сгенерированные константы состоят из <code>STR_</code> и ключа в верхнем регистре. <code>APP_STRING_COUNT</code> содержит число строк. Ключ <code>count</code> создаёт обычный идентификатор <code>STR_COUNT</code>.
 
 An application displays its text in the language of the device. The developer provides the translations. Perinkpheral OS loads the translation for the current language.
 Приложение отображает свой текст на языке устройства. Переводы предоставляет разработчик. Perinkpheral OS загружает перевод для текущего языка.
@@ -3145,8 +3145,8 @@ Binary representation and buffers
 The contract uses wasm32 little-endian C layouts and two's complement signed integers. Pointers are unsigned 32-bit memory offsets; zero is NULL. 32-bit integers and pointers have size/alignment 4, 64-bit integers 8, bytes 1. Structs keep C field order and natural alignment with trailing padding. sdk/abi/3.txt records every size, alignment, field type and offset. String-table size, count and offsets are little-endian 16-bit words. Picture dimensions are bytes; bitmap rows are high-bit first and padded to whole bytes.
 Контракт использует раскладку C для wasm32 little-endian и дополнительный код для знаковых целых. Указатель - беззнаковое 32-битное смещение в памяти; ноль означает NULL. Размер и выравнивание 32-битных целых и указателей равны 4, 64-битных целых - 8, байтов - 1. Структуры сохраняют порядок полей C и естественное выравнивание; в конце добавляются байты заполнения до размера, кратного выравниванию структуры. sdk/abi/3.txt записывает каждый размер, выравнивание, тип и смещение поля. Размер, число строк и смещения таблицы строк - 16-битные слова little-endian. Размеры картинок задаются байтами; строки битовой карты идут старшим битом вперёд и дополняются до целого числа байтов.
 
-Ordinary input buffers are consumed or copied before an import returns. The exported app_data_buffer and app_strings_buffer storage must remain valid until unload. A registered document buffer must remain valid until replaced by a successful registration or the instance unloads. Handler data is valid until the handler returns. Lengths and capacities count bytes. Text outputs have no appended NUL except xml_attr(), string fields produced by xml_attrs(), and the fixed string fields of host_answer_info_t. XML output capacities include the terminator. Unless documented otherwise, status-returning calls reject negative lengths/capacities or invalid memory ranges with HOST_ERR_ARGUMENT. XML queries use their documented result codes.
-Обычные входные буферы используются или копируются до возврата импорта. Хранилища экспортов app_data_buffer и app_strings_buffer должны оставаться доступны до выгрузки. Зарегистрированный буфер документа должен оставаться доступен до замены успешной регистрацией или выгрузки экземпляра. Данные обработчика действительны до его возврата. Длины и ёмкости считаются в байтах. К текстовым результатам не добавляется NUL, кроме xml_attr(), строковых полей результата xml_attrs() и фиксированных строковых полей host_answer_info_t. Ёмкости выходных буферов XML включают завершающий нуль. Если не указано иное, вызовы со статусом результата отклоняют отрицательные длины и ёмкости и недопустимые диапазоны памяти с HOST_ERR_ARGUMENT. Запросы XML используют собственные документированные коды результата.
+Ordinary input buffers are consumed or copied before an import returns. The exported app_data_buffer and app_strings_buffer storage must remain valid until unload. A registered document buffer must remain valid until successful replacement or unload. Handler data is valid until the handler returns. Lengths and capacities count bytes. The first NUL within a textual argument's supplied range ends its content; the entire supplied range must still be valid application memory. Input truncation preserves UTF-8 boundaries. KV values, sessions, file bytes, HTTP bodies, bitmaps and document buffers remain byte-exact. log_write sanitizes every supplied byte, including NUL. Text outputs have no appended NUL except fields produced by xml_attrs() and the fixed string fields of host_answer_info_t. Only xml_attrs field capacities include their terminators. Unless documented otherwise, status-returning calls reject negative lengths/capacities or invalid memory ranges with HOST_ERR_ARGUMENT.
+Обычные входные буферы используются или копируются до возврата импорта. Хранилища app_data_buffer и app_strings_buffer должны оставаться доступны до выгрузки. Зарегистрированный буфер документа остаётся доступен до успешной замены или выгрузки. Данные обработчика действительны до его возврата. Длины и ёмкости считаются в байтах. Первый NUL в заданном диапазоне текстового аргумента завершает его содержимое; весь диапазон должен оставаться допустимой памятью приложения. Входной текст обрезается по границе UTF-8. Значения KV, сессии, байты файлов, тела HTTP, растровые изображения и буферы документов сохраняют все байты. log_write заменяет недопустимые байты во всём диапазоне, включая NUL. К текстовым результатам NUL не добавляется, кроме полей xml_attrs() и фиксированных строковых полей host_answer_info_t. Только ёмкости полей xml_attrs включают завершающий нуль. Если не указано иное, вызовы со статусом результата отклоняют отрицательные длины и ёмкости и недопустимые диапазоны памяти с HOST_ERR_ARGUMENT.
 
 kv_get, answer_value, answer_element, session_get, sys_info, sys_app_title and sys_setting_get fail with HOST_ERR_NO_SPACE without copying when the value does not fit. Capacity zero is valid for an empty value. gfx_fit_text also requires room for its whole fitted result and copies nothing on error. text_fill and time_text instead truncate between UTF-8 characters and return bytes copied; text_fill accepts zero capacity, time_text rejects it. Read/format/measurement errors leave outputs untouched; file_read may have copied a prefix before a storage error. answer_info copies min(capacity, Perinkpheral OS's struct size), accepts zero and leaves later bytes untouched. sys_app_list writes up to capacity ids but returns the total count; capacity zero is allowed.
 kv_get, answer_value, answer_element, session_get, sys_info, sys_app_title и sys_setting_get возвращают HOST_ERR_NO_SPACE, ничего не копируя, если значение не помещается. Нулевая ёмкость допустима для пустого значения. gfx_fit_text также требует места для всего подогнанного результата и ничего не копирует при ошибке. text_fill и time_text вместо этого обрезают между символами UTF-8 и возвращают число скопированных байтов; text_fill принимает нулевую ёмкость, time_text отказывает. Ошибки чтения, форматирования и измерения оставляют выходы неизменными; file_read может скопировать начало до ошибки хранилища. answer_info копирует min(capacity, размер структуры Perinkpheral OS), принимает ноль и не трогает последующие байты. sys_app_list записывает не более capacity идентификаторов, но возвращает общее число; нулевая ёмкость допустима.
@@ -3463,8 +3463,8 @@ Text in a style: <code>HOST_UI_TEXT</code>, <code>HOST_UI_TITLE</code>, <code>HO
 ui_draw_text_lines(x, y, style, text, length, width, max_lines)
 =
 
-Text wrapped to <code>width</code>, preferring spaces and splitting overlong words at UTF-8 character boundaries, up to <code>max_lines</code> (1 - 8); the last line is shortened with "..." if text remains. Returns the number of lines
-Текст с переносом до <code>width</code>, предпочтительно по пробелам; слишком длинные слова разделяются по границам символов UTF-8. Не более <code>max_lines</code> строк (1 - 8); последняя строка сокращается с "...", если текст остался. Возвращает число строк
+Text input is cut to <code>HOST_UI_TEXT_LINES_MAX</code> (512) bytes at a UTF-8 boundary, then wrapped to <code>width</code>, preferring spaces and splitting overlong words between characters, up to <code>max_lines</code> (1 - 8). The last line is shortened with "..." if text remains. Returns the number of lines
+Входной текст ограничивается <code>HOST_UI_TEXT_LINES_MAX</code> (512) байтами по границе UTF-8, затем переносится на ширину <code>width</code> преимущественно по пробелам, а длинные слова делятся между символами; не более <code>max_lines</code> (1 - 8) строк. Последняя строка сокращается с "...", если текст остался. Возвращает число строк
 
 ui_text_width(style, text, length), ui_text_height(style)
 =
@@ -3736,20 +3736,20 @@ Queues a request; up to 16 of the application's wait. Methods: <code>HOST_HTTP_G
 xml_child(doc, length, parent, name, name_length, from)
 =
 
-Find a direct child in the current document, starting at preorder ordinal <code>from</code>. Parent -1 selects the root. A zero-length name matches any child. Returns an ordinal, -1 for absence or -2 on error.
-Ищет прямого потомка в текущем документе начиная с номера <code>from</code> в порядке прямого обхода. Родитель -1 выбирает корень. Имя нулевой длины соответствует любому потомку. Возвращает номер элемента, -1 при отсутствии или -2 при ошибке.
+Find a direct child in the current document, starting at preorder ordinal <code>from</code>. Parent -1 selects the root. An empty name matches any child. Returns an ordinal, <code>HOST_ERR_NOT_FOUND</code> for absence or <code>HOST_ERR_ARGUMENT</code> for invalid input.
+Ищет прямого потомка в текущем документе начиная с номера <code>from</code> в порядке прямого обхода. Родитель -1 выбирает корень. Пустое имя соответствует любому потомку. Возвращает номер элемента, <code>HOST_ERR_NOT_FOUND</code> при отсутствии или <code>HOST_ERR_ARGUMENT</code> при недопустимом входе.
 
 xml_attrs(doc, length, node, fields, count, out, capacity)
 =
 
-Project up to 16 attributes of one element in one scan. Each constant descriptor names a field and its output offset, capacity and flags. Returns a presence bit mask or -1 on failure. The whole output stays unchanged on failure. Optional missing fields produce empty strings.
-Извлекает до 16 атрибутов одного элемента за один проход. Каждый константный дескриптор задаёт имя поля, его смещение в выходном буфере, ёмкость и флаги. Возвращает битовую маску присутствия или -1 при ошибке. При ошибке весь выходной буфер сохраняет своё содержимое. Отсутствующие необязательные поля дают пустые строки.
+Project 1..16 attributes of one element in one scan. Each descriptor names a field and its output offset, capacity including NUL, and flags. Returns a presence bit mask or <code>HOST_ERR_ARGUMENT</code> for invalid input, a nonexistent node, a missing or empty REQUIRED field, or an exact field that does not fit. The whole output stays unchanged on failure. Optional missing fields produce empty strings. Document, table and output must be mutually disjoint; the table must be aligned to 2 bytes. Field names and output ranges must be distinct, reserved bytes zero and flags limited to <code>HOST_XML_LABEL | HOST_XML_REQUIRED</code>.
+Извлекает 1..16 атрибутов одного элемента за проход. Каждый дескриптор задаёт имя поля, его смещение, ёмкость с учётом NUL и флаги. Возвращает маску присутствия или <code>HOST_ERR_ARGUMENT</code> при недопустимом входе, несуществующем узле, отсутствующем или пустом поле REQUIRED либо нехватке места для точного значения. При ошибке весь выходной буфер сохраняется. Отсутствующие необязательные поля дают пустые строки. Документ, таблица и выходной буфер не должны пересекаться; таблица выровнена на 2 байта. Имена полей и диапазоны вывода различны, зарезервированные байты нулевые, допустимые флаги: <code>HOST_XML_LABEL | HOST_XML_REQUIRED</code>.
 
-xml_attr(doc, length, node, name, name_length, out, capacity, label)
+xml_attr(doc, length, node, name, name_length, flags, out, capacity)
 =
 
-Read a named attribute into a NUL-terminated buffer. Returns 1 when found, 0 when absent and -1 on error. A repeated attribute name is ambiguous. Use label 0 for exact identifiers and 1 for UTF-8 labels that may be shortened. These XML calls require firmware 0.1.100 and validate a complete attribute-only document of up to 12288 bytes, 256 elements and 16 levels on each call.
-Читает именованный атрибут в буфер со строкой с нулевым окончанием. Возвращает 1, если атрибут найден, 0 при отсутствии и -1 при ошибке. Повтор имени атрибута неоднозначен. Для точных идентификаторов укажите label 0, для сокращаемых подписей UTF-8 - 1. Эти вызовы XML требуют прошивку 0.1.100 и при каждом обращении проверяют целый документ без текстовых узлов размером до 12288 байт, с максимум 256 элементами и 16 уровнями.
+Read an attribute into a buffer disjoint from the document and name. Returns bytes copied without NUL, including 0 for a present empty value; absence returns <code>HOST_ERR_NOT_FOUND</code>. Flags 0 requires an exact value or returns <code>HOST_ERR_NO_SPACE</code>. <code>HOST_XML_LABEL</code> permits a UTF-8 prefix with three dots when capacity is at least 4. Capacity zero is valid. Invalid documents, nonexistent nodes, arguments or unknown flags return <code>HOST_ERR_ARGUMENT</code>. Errors and absence leave output untouched. Reserve a byte and append NUL when using the result as a C string.
+Читает атрибут в буфер, не пересекающийся с документом и именем. Возвращает число скопированных байт без NUL, включая 0 для присутствующего пустого значения; отсутствие даёт <code>HOST_ERR_NOT_FOUND</code>. При flags 0 требуется точное значение, иначе возвращается <code>HOST_ERR_NO_SPACE</code>. Флаг <code>HOST_XML_LABEL</code> допускает префикс UTF-8 с тремя точками при ёмкости от 4 байт. Нулевая ёмкость допустима. Недопустимый документ, несуществующий узел, аргументы или неизвестные флаги дают <code>HOST_ERR_ARGUMENT</code>. При ошибке или отсутствии выходной буфер сохраняется. Для строки C оставьте байт и добавьте NUL самостоятельно.
 
 answer_value(index, text, capacity)
 =
@@ -3787,8 +3787,8 @@ Text and logging
 text_fill(pattern, pattern_length, arguments, count, text, capacity)
 =
 
-Replaces <code>{0}</code> .. <code>{3}</code> with <code>host_text_argument_t</code> values. Pattern, text arguments and filled result are each limited to HOST_TEXT_MAX bytes. The result is cut to capacity without a terminator; returns its byte length
-Заменяет <code>{0}</code> .. <code>{3}</code> значениями <code>host_text_argument_t</code>. Шаблон, текстовые аргументы и результат ограничены каждый HOST_TEXT_MAX байтами. Результат обрезается до capacity без завершающего нуля; возвращается длина в байтах
+Replaces <code>{0}</code> .. <code>{3}</code> with <code>host_text_argument_t</code> values. The first NUL within a supplied text range ends its content. Pattern and text arguments are each cut to HOST_TEXT_MAX bytes between UTF-8 characters. The output is a prefix of that expansion limited to HOST_TEXT_MAX and capacity, without a terminator. The first character that cannot fit an argument or output limit ends expansion; later suffixes are not appended. Returns bytes copied
+Заменяет <code>{0}</code> .. <code>{3}</code> значениями <code>host_text_argument_t</code>. Первый NUL в заданном диапазоне текста завершает содержимое. Шаблон и текстовые аргументы ограничиваются HOST_TEXT_MAX байтами между символами UTF-8. Результат является префиксом подстановки, ограниченным HOST_TEXT_MAX и ёмкостью, без завершающего нуля. Первый символ, который не помещается в предел аргумента или результата, завершает подстановку; последующие суффиксы не добавляются. Возвращает число скопированных байт
 
 void log_write(level, text, length)
 =
@@ -4237,8 +4237,8 @@ Setting value
 HOST_TEXT_MAX
 =
 
-Text per drawing or measuring call
-Текст на один вызов отрисовки или измерения
+Text per drawing or measuring call except ui_draw_text_lines
+Текст вызова рисования или измерения, кроме ui_draw_text_lines
 
 HOST_HEADER_TEXT_MAX
 =
@@ -4640,8 +4640,8 @@ Query a complete XML response
 Firmware 0.1.100 adds <code>xml_child()</code>, <code>xml_attr()</code> and <code>xml_attrs()</code> to ABI 3. They read a complete document in the app's linear memory. Accumulate a bounded response, use the APIs after <code>HOST_DATA_LAST</code>, and discard partial responses on <code>HOST_DATA_FAILED</code>.
 Прошивка 0.1.100 добавляет в ABI 3 вызовы <code>xml_child()</code>, <code>xml_attr()</code> и <code>xml_attrs()</code>. Они читают целый документ из линейной памяти приложения. Ограничьте объём буфера, вызывайте функции после <code>HOST_DATA_LAST</code> и отбрасывайте неполный ответ при <code>HOST_DATA_FAILED</code>.
 
-The XML subset is UTF-8 with attributes and a single root element, up to 12288 bytes, 256 elements and 16 levels. An XML 1.0 declaration is optional. DTDs, comments and element text are outside the subset. Find a direct child by name with <code>xml_child()</code>, then read one attribute with <code>xml_attr()</code>. Use <code>xml_attrs()</code> to read several attributes of that element in one pass.
-Поддерживается подмножество XML в UTF-8 с атрибутами и одним корневым элементом, до 12288 байт, 256 элементов и 16 уровней. Декларация XML 1.0 необязательна. DTD, комментарии и текст внутри элементов не поддерживаются. Найдите прямой дочерний элемент по имени через <code>xml_child()</code>, затем прочитайте атрибут через <code>xml_attr()</code>. Функция <code>xml_attrs()</code> читает несколько атрибутов одного элемента за проход.
+The XML subset is UTF-8 with attributes and one root, up to 12288 bytes, 256 elements, 16 levels and 64 attributes per element. An XML 1.0 declaration is optional. BOMs, DTDs, comments, element text and numeric character references are unsupported. Only <code>amp</code>, <code>lt</code>, <code>gt</code>, <code>apos</code> and <code>quot</code> entities are accepted. Literal tabs, line feeds and carriage returns in attributes are rejected. Duplicate attribute names or invalid entities anywhere invalidate the entire document. Find a direct child with <code>xml_child()</code>, read a counted attribute with <code>xml_attr()</code>, or read terminated projection fields with <code>xml_attrs()</code>. Each call validates all document bytes; a NUL does not end the document.
+Подмножество XML содержит атрибуты и один корень в UTF-8, до 12288 байт, 256 элементов, 16 уровней и 64 атрибутов на элемент. Декларация XML 1.0 необязательна. BOM, DTD, комментарии, текст элементов и числовые ссылки на символы не поддерживаются. Допустимы только сущности <code>amp</code>, <code>lt</code>, <code>gt</code>, <code>apos</code> и <code>quot</code>. Литеральные табуляции и переводы строк в атрибутах отклоняются. Повтор имени атрибута или недопустимая сущность в любом месте делают весь документ недопустимым. Ищите прямого потомка через <code>xml_child()</code>, читайте атрибут с явной длиной через <code>xml_attr()</code> или строковые поля проекции с нулевым окончанием через <code>xml_attrs()</code>. Каждый вызов проверяет все байты документа; NUL не завершает документ.
 
 Element numbers refer to the same document bytes and start at zero. The first root search uses parent <code>-1</code>. Consume only attributes reported as present. A failed query leaves the application responsible for keeping its previous displayed data.
 Номера элементов относятся к тем же байтам документа и начинаются с нуля. При первом поиске корня передайте родителя <code>-1</code>. Используйте только атрибуты, которые найдены. При ошибке запроса приложение должно сохранить предыдущие данные на экране.
@@ -4693,3 +4693,15 @@ The document result normally follows the final raw piece. If no <code>app_on_dat
 
 Complete JSON documents must be valid UTF-8 and have at most 64 nesting levels. Complete XML documents use the attribute-only subset below and allow at most 64 attributes per element. Duplicate attribute names within an element, or unknown entities anywhere, cause validation to fail, even in fields the application does not query.
 Целый документ JSON должен быть корректным UTF-8 и иметь не более 64 уровней вложенности. Для целых документов XML действует описанное ниже подмножество с атрибутами и не более 64 атрибутов на элемент. Повтор имён атрибутов в одном элементе или неизвестные сущности в любом месте приводят к ошибке проверки, даже если приложение не читает эти поля.
+
+<code>app_text_fill</code> accepts a NUL-terminated pattern and total output size. It reserves one byte for NUL and returns the copied length or the negative error from <code>text_fill</code>. On error a positive-size buffer becomes an empty string. Size 0 ignores the other arguments and returns 0 without calling the import. Negative size is invalid. With positive size, a NULL pattern or NULL output is invalid.
+<code>app_text_fill</code> принимает шаблон с нулевым окончанием и полную ёмкость выходного буфера. Он оставляет байт для NUL и возвращает число скопированных байт или отрицательную ошибку <code>text_fill</code>. При ошибке буфер положительной ёмкости становится пустой строкой. При размере 0 остальные аргументы не проверяются, возвращается 0 без вызова импорта. Отрицательный размер недопустим. При положительном размере NULL вместо шаблона или выходного буфера недопустим.
+
+HOST_UI_TEXT_LINES_MAX
+=
+
+512 bytes
+512 байт
+
+Input text of <code>ui_draw_text_lines()</code>
+Входной текст <code>ui_draw_text_lines()</code>

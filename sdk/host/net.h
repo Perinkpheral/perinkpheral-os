@@ -327,7 +327,7 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
 #define HOST_SINCE_HOST_DOCUMENT_MAX "0.1.100"
 #define HOST_SINCE_RESPONSE_FORMAT "0.1.100"
 
-/* Register a guest buffer for structured raw responses, normally in
+/* Register an application buffer for structured raw responses, normally in
  * app_on_load. Its lifetime is the current instance. The buffer must be
  * disjoint from app_data_buffer; capacity is 1..HOST_DOCUMENT_MAX.
  * While receiving, leave this buffer untouched until app_on_document.

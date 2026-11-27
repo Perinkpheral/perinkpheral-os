@@ -65,13 +65,20 @@
  * only until that handler returns. String-table words are little-endian
  * uint16_t; picture dimensions and bitmap rows are bytes (host/gfx.h).
  *
- * Buffers use byte lengths, without an implicit terminator. Imports that
+ * Buffers use byte lengths, without an implicit terminator. For textual
+ * arguments the first NUL within the supplied range ends the content; the
+ * whole supplied range must still be valid application memory. Text cut to
+ * an input limit ends between UTF-8 characters. Binary data (KV values,
+ * session and file bytes, HTTP bodies, bitmaps and document buffers) remains
+ * byte-exact, including NUL. log_write sanitizes every supplied byte under
+ * its separate rule below.
+ * Imports that
  * return error codes reject negative lengths, negative capacities and ranges
  * outside module memory with HOST_ERR_ARGUMENT unless they document their own result codes. log_write() returns no
  * status and ignores an invalid input range.
- * Zero capacity is accepted for buffer reads except time_text(), xml_attr() and xml_attrs(); the
+ * Zero capacity is accepted for buffer reads except time_text() and xml_attrs(); the
  * destination must still be a valid memory offset. Successful text reads
- * never append NUL, except xml_attr(), xml_attrs() and the fixed string fields of host_answer_info_t.
+ * never append NUL, except fields produced by xml_attrs() and the fixed string fields of host_answer_info_t.
  * Unless a call says it truncates, insufficient capacity returns
  * HOST_ERR_NO_SPACE and copies nothing. Read/format/measurement errors
  * leave outputs untouched, except file_read(): a storage error can follow
@@ -105,6 +112,6 @@
 /* Submits one line to the device log, subject to the configured logging
  * level and compiled logging support. Disabling ordinary logs suppresses
  * these messages. Text beyond HOST_LOG_TEXT_MAX bytes is cut. Characters
- * other than printable ASCII, including line breaks, become "?". */
+ * other than printable ASCII, including NUL, line breaks and each UTF-8 byte, become "?". */
 #define HOST_LOG_TEXT_MAX 200
 HOST_IMPORT(log_write, void log_write(int32_t level, const char *text, int32_t length));

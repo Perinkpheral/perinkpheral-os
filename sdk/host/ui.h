@@ -107,7 +107,8 @@ HOST_IMPORT(ui_draw_text, int32_t ui_draw_text(int32_t x, int32_t y, int32_t sty
 
 /* ui_draw_text_lines: text wrapped to `width`, preferring spaces and splitting
  * overlong words at UTF-8 character boundaries, at most `max_lines` lines
- * (1..HOST_UI_LINES_MAX). The last line is cut with "..." if text
+ * (1..HOST_UI_LINES_MAX). Input is cut to HOST_UI_TEXT_LINES_MAX bytes
+ * between UTF-8 characters. The first NUL ends the text. The last line is cut with "..." if text
  * remains. Line height is ui_text_height() of the style. Returns the
  * number of lines drawn.
  *
@@ -116,6 +117,8 @@ HOST_IMPORT(ui_draw_text, int32_t ui_draw_text(int32_t x, int32_t y, int32_t sty
  * HOST_FONT_MEDIUM, HOST_UI_CAPTION = HOST_FONT_SMALL, HOST_UI_VALUE =
  * HOST_FONT_DISPLAY. The gfx_font_*() metrics of the font apply. */
 #define HOST_UI_LINES_MAX 8
+#define HOST_UI_TEXT_LINES_MAX 512
+#define HOST_SINCE_HOST_UI_TEXT_LINES_MAX "0.1.103"
 HOST_IMPORT(ui_draw_text_lines, int32_t ui_draw_text_lines(int32_t x, int32_t y, int32_t style,
                                                  const char *text, int32_t length, int32_t width,
                                                  int32_t max_lines));

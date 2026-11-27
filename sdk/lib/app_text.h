@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "host_api.h"
+
 /* The degree sign, which Perinkpheral OS draws in any font: "21" APP_TEXT_DEGREE. */
 #define APP_TEXT_DEGREE "\xC2\xB0"
 
@@ -44,6 +46,15 @@ bool app_text_equal(const char *a, const char *b);
 
 /* True if `text` begins with `start`. */
 bool app_text_starts(const char *text, const char *start);
+
+/* Fill a NUL-terminated pattern through text_fill(), reserving one byte of
+ * size for the terminator. Returns the byte length or the import's negative
+ * error; errors leave an empty string when size is positive. Size 0 permits
+ * NULL text and returns 0 without examining other arguments or calling the
+ * import. Negative size returns HOST_ERR_ARGUMENT. With positive size,
+ * NULL pattern or NULL text returns HOST_ERR_ARGUMENT. */
+int32_t app_text_fill(const char *pattern, const host_text_argument_t *arguments, int32_t count,
+                      char *text, int32_t size);
 
 /* A moment in words, as time_text() says it in the device's language,
  * null-terminated in `text`. Returns its length. */

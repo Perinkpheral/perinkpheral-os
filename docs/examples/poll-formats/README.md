@@ -22,7 +22,11 @@ if the server labels the body as JSON or XML. For example, a download-only app
 can set `"format": "raw"` in its manifest.
 
 The example registers a 1,024-byte buffer and receives complete documents in
-app_on_document(). Because the example also exports app_on_data(), it receives
+app_on_document(). XML node queries return ordinals or standard negative errors.
+xml_attr() returns a byte length without NUL, including zero for an empty
+attribute. The example passes HOST_XML_LABEL, reserves one byte in title and
+appends its own terminator. xml_attrs() projection fields remain terminated.
+Because the example also exports app_on_data(), it receives
 chunks before completion and ignores them except for the Untyped poll.
 Polls using JSON pick call only app_on_picked().
 Applications that do not register a document buffer can keep processing
@@ -60,7 +64,11 @@ Perinkpheral OS использует MIME-тип ответа. Явное зна
 помеченного как JSON или XML.
 
 Пример регистрирует буфер на 1 024 байта и получает целые документы через
-app_on_document(). Фрагменты также приходят в app_on_data() перед завершением
+app_on_document(). Запросы узлов XML возвращают номера или стандартные
+отрицательные ошибки. xml_attr() возвращает число байт без NUL, включая ноль
+для пустого атрибута. Пример передаёт HOST_XML_LABEL, оставляет байт в title
+и добавляет завершающий нуль. Поля проекции xml_attrs() сохраняют нулевое
+окончание. Фрагменты также приходят в app_on_data() перед завершением
 ответа. Пример обрабатывает их только для Untyped. Опрос JSON с pick вызывает
 только app_on_picked().
 Приложение без зарегистрированного буфера может обрабатывать распознанный

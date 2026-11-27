@@ -323,6 +323,7 @@ HOST_FUNCTION(gfx_draw_qr)
     m3ApiGetArg(int32_t, length);
     const uint8_t *text = app_memory_at(runtime, _mem, text_offset, length);
     app_t *app = APP_OF(runtime);
+    length = app_counted_text_length(text, length);
     if (text == NULL || length > HOST_QR_TEXT_MAX || cell < 0 || cell > QR_CELL_MAX ||
         !is_drawable(x) || !is_drawable(y)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);

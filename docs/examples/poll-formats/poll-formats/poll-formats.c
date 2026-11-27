@@ -29,9 +29,15 @@ void app_on_document(int32_t request, int32_t format, int32_t status, int32_t le
     if (format == HOST_FORMAT_XML) {
         int32_t root = xml_child(bytes, length, -1, "MediaContainer", 14, 0);
         int32_t track = root < 0 ? -1 : xml_child(bytes, length, root, "Track", 5, 0);
-        if (track < 0 || xml_attr(bytes, length, track, "title", 5, title, sizeof title, 1) != 1) {
+        if (track < 0) {
             return;
         }
+        int32_t copied = xml_attr(bytes, length, track, "title", 5, HOST_XML_LABEL,
+                                  title, sizeof title - 1);
+        if (copied < 0) {
+            return;
+        }
+        title[copied] = '\0';
     } else if (format == HOST_FORMAT_JSON && request == MIME_GET) {
         static const char *const paths[] = {"[0].NowPlayingItem.Name"};
         json_pick_init(&json, paths, 1);

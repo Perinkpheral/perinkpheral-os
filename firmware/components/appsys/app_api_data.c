@@ -117,6 +117,7 @@ HOST_FUNCTION(answer_header)
     app_t *app = APP_OF(runtime);
     const char *name = (const char *)app_memory_at(runtime, _mem, name_offset, name_length);
     char *value = (char *)app_memory_to_fill(runtime, _mem, value_offset, capacity);
+    name_length = app_counted_text_length(name, name_length);
     if (name == NULL || value == NULL || occurrence < 0 ||
         !answer_header_name_valid(name, (size_t)name_length)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
@@ -130,6 +131,7 @@ static bool copy_key(IM3Runtime runtime, void *memory, uint32_t offset, int32_t 
                      char key[HOST_KV_KEY_MAX + 1])
 {
     const uint8_t *bytes = app_memory_at(runtime, memory, offset, length);
+    length = app_counted_text_length(bytes, length);
     if (bytes == NULL || length < 1 || length > HOST_KV_KEY_MAX) {
         return false;
     }
@@ -312,6 +314,8 @@ HOST_FUNCTION(http_send)
     const uint8_t *url = app_memory_at(runtime, _mem, url_offset, url_length);
     const uint8_t *headers = app_memory_at(runtime, _mem, headers_offset, headers_length);
     const uint8_t *body = app_memory_at(runtime, _mem, body_offset, body_length);
+    url_length = app_counted_text_length(url, url_length);
+    headers_length = app_counted_text_length(headers, headers_length);
     bool is_sound = url != NULL && headers != NULL && body != NULL && url_length >= 1 &&
                     url_length <= APP_URL_MAX && headers_length <= HOST_HTTP_HEADERS_MAX &&
                     body_length <= HOST_HTTP_BODY_MAX && method >= HOST_HTTP_GET &&
@@ -426,7 +430,7 @@ HOST_FUNCTION(xml_child)
     const char *text = (const char *)app_memory_at(runtime, _mem, document, length);
     const char *name = (const char *)app_memory_at(runtime, _mem, key, key_length);
     if (!text || (key_length && !name)) {
-        m3ApiReturn(-2);
+        m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     m3ApiReturn(xml_query_child(text, length, parent, name, key_length, from));
 }
@@ -439,16 +443,16 @@ HOST_FUNCTION(xml_attr)
     m3ApiGetArg(int32_t, node);
     m3ApiGetArg(uint32_t, key);
     m3ApiGetArg(int32_t, key_length);
+    m3ApiGetArg(int32_t, flags);
     m3ApiGetArg(uint32_t, output);
     m3ApiGetArg(int32_t, capacity);
-    m3ApiGetArg(int32_t, label);
     const char *text = (const char *)app_memory_at(runtime, _mem, document, length);
     const char *name = (const char *)app_memory_at(runtime, _mem, key, key_length);
     char *out = (char *)app_memory_to_fill(runtime, _mem, output, capacity);
     if (!text || !name || !out) {
-        m3ApiReturn(-1);
+        m3ApiReturn(HOST_ERR_ARGUMENT);
     }
-    m3ApiReturn(xml_query_attr(text, length, node, name, key_length, out, capacity, label));
+    m3ApiReturn(xml_query_attr(text, length, node, name, key_length, flags, out, capacity));
 }
 
 HOST_FUNCTION(xml_attrs)
@@ -462,7 +466,7 @@ HOST_FUNCTION(xml_attrs)
     m3ApiGetArg(uint32_t, output);
     m3ApiGetArg(int32_t, capacity);
     if (count < 1 || count > 16 || table % _Alignof(host_xml_field_t)) {
-        m3ApiReturn(-1);
+        m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     const char *doc = (const char *)app_memory_at(runtime, _mem, document, length);
     const host_xml_field_t *fields = (const host_xml_field_t *)app_memory_at(

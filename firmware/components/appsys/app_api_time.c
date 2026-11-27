@@ -49,11 +49,17 @@ HOST_FUNCTION(text_fill)
             m3ApiReturn(HOST_ERR_ARGUMENT);
         }
         size_t length = strlen(piece);
+        bool argument_was_cut = words[1] != 0 &&
+            app_counted_text_length(app_memory_at(runtime, _mem, words[1], (int32_t)words[2]),
+                                    (int32_t)words[2]) > (int32_t)length;
         if (length > HOST_TEXT_MAX - used) {
             length = gfx_text_cut(piece, HOST_TEXT_MAX - used);
         }
         memcpy(filled + used, piece, length);
         used += length;
+        if (argument_was_cut || length < strlen(piece)) {
+            break;
+        }
     }
     /* Full to the brim: the last character may be only half there - its first byte and
      * fewer of the others than it says it has. Only such a one goes. */

@@ -12,6 +12,7 @@ APP_ALLOC_ARENA(4093);
 #include "app_values.h"
 #include "host_api.h"
 #include "json_pick.h"
+#include "../../text_cases.h"
 
 #define ROW_UI             1  /* one pixel: the host's list and notice answer as they should */
 #define ROW_PRESSES        0  /* as many pixels as the buttons pressed add up to */
@@ -485,21 +486,22 @@ void app_on_timer(int32_t id)
 
 void app_on_draw(void)
 {
+    if (text_contract_cases()) { mark(14, ROW_SCENE_STATE); }
     if (document_registration == 1)
         mark(10, ROW_SCENE_STATE);
     if (document_registration == -1)
         mark(12, ROW_SCENE_STATE);
     static const char xml[] = "<r><item a='ok'/></r>";
-    char value[3];
+    char value[3] = {0};
     static const host_xml_field_t fields[] = {{"a", 0, 3, HOST_XML_REQUIRED, {0}}};
     if (xml_attrs(xml, sizeof xml - 1, 1, fields, 1, value, sizeof value) == 1 &&
         value[0] == 'o' && value[1] == 'k' &&
-        xml_attrs(xml, sizeof xml - 1, 1, (const host_xml_field_t *)0xfffffff0u, 1, value, sizeof value) == -1 &&
+        xml_attrs(xml, sizeof xml - 1, 1, (const host_xml_field_t *)0xfffffff0u, 1, value, sizeof value) == HOST_ERR_ARGUMENT &&
         xml_child(xml, sizeof xml - 1, 0, "item", 4, 0) == 1 &&
-        xml_attr(xml, sizeof xml - 1, 1, "a", 1, value, sizeof value, 0) == 1 &&
+        xml_attr(xml, sizeof xml - 1, 1, "a", 1, 0, value, sizeof value) == 2 &&
         value[0] == 'o' && value[1] == 'k' && value[2] == 0 &&
-        xml_child((const char *)0xfffffff0u, 32, -1, 0, 0, 0) == -2 &&
-        xml_attr(xml, sizeof xml - 1, 1, "a", 1, (char *)0xfffffff0u, 32, 0) == -1) {
+        xml_child((const char *)0xfffffff0u, 32, -1, 0, 0, 0) == HOST_ERR_ARGUMENT &&
+        xml_attr(xml, sizeof xml - 1, 1, "a", 1, 0, (char *)0xfffffff0u, 32) == HOST_ERR_ARGUMENT) {
         mark(8, ROW_SCENE_STATE);
     }
     if (reads_empty) { mark(0, ROW_SCENE_STATE); }

@@ -2,11 +2,31 @@
 #include "tinytest.h"
 #include "standin.h"
 
+#include "text_cases.h"
+
 const standin_subject_t standin_subject = { 0 };
 
 int main(void)
 {
     standin_reset();
+    standin()->is_drawing = true;
+    CHECK(text_contract_cases());
+    standin_reset();
+    const char log_bytes[] = {'A', '\n', 0, (char)0xc3, (char)0xa9, 'Z'};
+    log_write(HOST_LOG_INFO, log_bytes, sizeof log_bytes);
+    CHECK_STR(standin()->last_log, "A????Z");
+    uint64_t sanitized_hash = standin()->diagnostics;
+    standin_reset();
+    log_write(HOST_LOG_INFO, "A????Z", 6);
+    CHECK(standin()->diagnostics == sanitized_hash);
+    char long_log[HOST_LOG_TEXT_MAX + 1];
+    memset(long_log, 'x', sizeof long_log);
+    log_write(HOST_LOG_INFO, long_log, sizeof long_log);
+    CHECK(strlen(standin()->last_log) == HOST_LOG_TEXT_MAX);
+    CHECK(standin()->last_log[HOST_LOG_TEXT_MAX - 1] == 'x');
+    log_write(HOST_LOG_INFO, NULL, 1);
+    log_write(HOST_LOG_INFO, "bad", -1);
+    CHECK(standin()->logs == 2);
     standin()->is_drawing = true;
     const int32_t width = ui_text_width(HOST_UI_TEXT, "word", 4);
     const struct {

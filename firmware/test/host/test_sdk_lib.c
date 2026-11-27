@@ -78,6 +78,22 @@ int32_t time_text(int64_t unix_time, int32_t style, char *text, int32_t capacity
     return length;
 }
 
+static int32_t fill_result = HOST_OK;
+static int32_t fill_calls;
+int32_t text_fill(const char *pattern, int32_t pattern_length, const host_text_argument_t *arguments,
+                  int32_t count, char *text, int32_t capacity)
+{
+    (void)arguments;
+    (void)count;
+    fill_calls++;
+    if (fill_result < 0) {
+        return fill_result;
+    }
+    int32_t length = pattern_length < capacity ? pattern_length : capacity;
+    memcpy(text, pattern, (size_t)length);
+    return length;
+}
+
 /* A typeface whose ink stands two pixels in from the left and ends four before the room's end. */
 static int ink_answers = 1;
 int32_t gfx_text_width(int32_t font, const char *text, int32_t length) { (void)font; (void)text; return 10 * length; }
@@ -475,6 +491,20 @@ int main(void)
 {
     test_screens();
     test_screen_title();
+    char filled[8] = "before";
+    CHECK(app_text_fill("value", NULL, 0, filled, sizeof filled) == 5);
+    CHECK_STR(filled, "value");
+    CHECK(app_text_fill("value", NULL, 0, filled, 3) == 2);
+    CHECK_STR(filled, "va");
+    CHECK(app_text_fill("value", NULL, 0, filled, 1) == 0 && filled[0] == 0);
+    int32_t previous_calls = fill_calls;
+    CHECK(app_text_fill(NULL, NULL, -1, NULL, 0) == 0 && fill_calls == previous_calls);
+    CHECK(app_text_fill("value", NULL, 0, NULL, 1) == HOST_ERR_ARGUMENT);
+    CHECK(app_text_fill("value", NULL, 0, filled, -1) == HOST_ERR_ARGUMENT);
+    CHECK(app_text_fill(NULL, NULL, 0, filled, sizeof filled) == HOST_ERR_ARGUMENT && filled[0] == 0);
+    fill_result = HOST_ERR_FAILED;
+    CHECK(app_text_fill("value", NULL, 0, filled, sizeof filled) == HOST_ERR_FAILED && filled[0] == 0);
+    fill_result = HOST_OK;
     test_text();
     test_paces();
     test_fixed_numbers_at_the_edges();

@@ -835,16 +835,26 @@ uint8_t *app_memory_to_fill(IM3Runtime runtime, void *memory, uint32_t offset,
                                                                     : NULL;
 }
 
-bool app_text_copy(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
-                      char terminated[HOST_TEXT_MAX + 1])
+int32_t app_counted_text_length(const void *text, int32_t length)
+{
+    const char *end = text != NULL && length > 0 ? memchr(text, 0, (size_t)length) : NULL;
+    return end != NULL ? (int32_t)(end - (const char *)text) : length;
+}
+
+bool app_text_copy_sized(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
+                         char *terminated, int32_t capacity)
 {
     const uint8_t *text = app_memory_at(runtime, memory, offset, length);
-    if (text == NULL) {
+    if (text == NULL || capacity < 1) {
         return false;
     }
-    if (length > HOST_TEXT_MAX) {
-        /* Cut between characters, not inside one of several bytes. */
-        length = HOST_TEXT_MAX;
+    int32_t limit = capacity - 1;
+    int32_t counted = length < limit ? length : limit;
+    const uint8_t *end = memchr(text, 0, (size_t)counted);
+    if (end != NULL) {
+        length = (int32_t)(end - text);
+    } else if (length > limit) {
+        length = limit;
         while (length > 0 && gfx_is_utf8_tail(text[length])) {
             length--;
         }
@@ -852,6 +862,12 @@ bool app_text_copy(IM3Runtime runtime, void *memory, uint32_t offset, int32_t le
     memcpy(terminated, text, (size_t)length);
     terminated[length] = '\0';
     return true;
+}
+
+bool app_text_copy(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
+                   char terminated[HOST_TEXT_MAX + 1])
+{
+    return app_text_copy_sized(runtime, memory, offset, length, terminated, HOST_TEXT_MAX + 1);
 }
 
 int32_t app_not_drawing(app_t *app)
@@ -868,10 +884,9 @@ int32_t app_not_drawing(app_t *app)
 bool app_file_name_copy(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
                            char name[HOST_FILE_NAME_MAX + 1])
 {
-    const uint8_t *text = length >= 1 && length <= HOST_FILE_NAME_MAX
-                              ? app_memory_at(runtime, memory, offset, length)
-                              : NULL;
-    if (text == NULL) {
+    const uint8_t *text = app_memory_at(runtime, memory, offset, length);
+    length = app_counted_text_length(text, length);
+    if (text == NULL || length < 1 || length > HOST_FILE_NAME_MAX) {
         return false;
     }
     for (int32_t i = 0; i < length; i++) {
