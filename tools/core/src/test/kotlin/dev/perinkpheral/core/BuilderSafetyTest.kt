@@ -238,7 +238,7 @@ object BuilderSafetyTest {
                     check(needsLargerArena == (codeNops > 100))
                     // The memory is the stack and the data, and counts against the area with the code.
                     val memory = built.memoryBytes!!
-                    check(memory in BuildFlags.APP_STACK..BuildFlags.APP_STACK + 1024L && built.memory!!.second == built.memory!!.first)
+                    check(memory == 9216L && built.memory!!.second == built.memory!!.first)
                     val overBudget = codeNops >= 24_000
                     check((memory + estimate > BuildFlags.APP_AREA) == overBudget)
                     if (codeNops == 24_000) check(estimate <= BuildFlags.APP_AREA)
@@ -251,6 +251,36 @@ object BuilderSafetyTest {
                     val packaged = Json.parse(File(arenaOutput, "manifest.json").readText()) as Map<*, *>
                     check(packaged["firmware"] == (firmware ?: "0.1.30")) // Advisory, never an automatic bump.
                     check(File(arenaOutput, "app.wasm").isFile)
+                }
+                val hostTests = File(root, "firmware/test/host")
+                fun runMemoryTest(vararg command: String): String {
+                    val process = ProcessBuilder(*command).directory(hostTests).redirectErrorStream(true).start()
+                    val output = process.inputStream.bufferedReader().use { it.readText() }
+                    check(process.waitFor() == 0) { "${command.joinToString(" ")} failed:\n$output" }
+                    return output
+                }
+                runMemoryTest("make", "test_app")
+                for ((dataBytes, expectedMemory) in listOf(1 to 9232L, 1025 to 10256L, 32768 to 41984L)) {
+                    File(arenaSource, "main.c").writeText("""
+                        /* SPDX-License-Identifier: MIT */
+                        #include "host_api.h"
+                        _Alignas(16) static volatile uint8_t retained[$dataBytes];
+                        void app_on_load(void) {
+                            char key = 'm';
+                            retained[sizeof retained - 1] = 17;
+                            int32_t layout[] = {(int32_t)retained, (int32_t)layout,
+                                                sizeof retained, retained[sizeof retained - 1]};
+                            kv_set(&key, 1, layout, sizeof layout);
+                        }
+                    """.trimIndent() + "\n")
+                    AppBuilder(Sdk(root), File(wasi)) {}.build(arenaSource, arenaOutput)
+                    val module = File(arenaOutput, "app.wasm")
+                    val memory = Wasm(module)
+                    // Includes the SDK's 1024-byte response buffer and 16-byte data alignment.
+                    check(memory.memoryBytes == expectedMemory) { "retained $dataBytes: ${memory.memoryBytes} != $expectedMemory" }
+                    check(memory.memory!!.first == memory.memory!!.second && memory.memoryPageSize == 1L)
+                    val output = runMemoryTest("./test_app", "--builder-memory", module.path, dataBytes.toString())
+                    check(Regex("(?m)^\\d+ checks, 0 failed$").containsMatchIn(output)) { output }
                 }
                 val realBuilder = AppBuilder(Sdk(root), File(wasi)) {}
                 val built = File(scratch, "built")
