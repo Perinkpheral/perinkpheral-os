@@ -437,10 +437,12 @@ object StressRunTest {
             check("uptime fell behind elapsed time" in out.resolve("report.md").readText())
         }
         // A console marker may be split between two observations.
-        exercise(setup = { fake, out -> fake.onCall = { call ->
-            if (call == "GET /api/apps" && fake.calls.count { it == "GET /api/apps" } == 2)
-                out.resolve("serial.log").appendText("partial rst:")
-        } }, say = { _, out, line -> if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("0x7 (TG0WDT_SYS_RESET)\n") }) { _, out ->
+        // The halves are written at the two steps' announcements: B's page workers also ask for
+        // /api/apps, so a count of those calls does not mark a step boundary.
+        exercise(say = { _, out, line ->
+            if (line.contains("=1/1/1/2")) out.resolve("serial.log").appendText("partial rst:")
+            if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("0x7 (TG0WDT_SYS_RESET)\n")
+        }) { _, out ->
             check("console: partial rst:0x7" in out.resolve("report.md").readText())
         }
         FakeDevice().use { fake ->
