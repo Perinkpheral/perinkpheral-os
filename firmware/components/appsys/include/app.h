@@ -187,6 +187,8 @@ bool app_data_headers(app_t *app, int request, int http_status);
  * when there are none. http_status < 0: the request failed, the value is
  * HOST_FAILED_*. The values are valid only during the call. */
 void app_values(app_t *app, int request, int http_status, json_pick_t *picked);
+/* A poll that could not allocate its request; uses the loaded manifest policy. */
+void app_poll_failed(app_t *app, int request, int status);
 
 /* Calls app_on_alarm(). */
 void app_alarm(app_t *app, int id);

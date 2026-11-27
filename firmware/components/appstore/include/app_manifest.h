@@ -82,6 +82,7 @@ typedef struct {
     uint32_t id;
     uint8_t poll_count;
     uint8_t response_format;
+    uint8_t poll_picks; /* one bit per poll selecting picked delivery */
     uint32_t poll_every_s[APP_POLLS_MAX];
     /* The setting a poll's pace is the user's choice in ("every": "{{key}}"),
      * or empty; poll_every_s is then what holds while nothing is chosen. */

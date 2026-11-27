@@ -384,6 +384,11 @@ static bool same_text(const char *left, const char *right)
 
 void app_on_picked(int32_t request, int32_t http_status)
 {
+    if (request == 0 && http_status == HOST_FAILED_NO_MEMORY) {
+        host_answer_info_t info = {0};
+        int32_t failure[] = { answer_info(&info, sizeof info), info.status, answer_item(), answer_count(0) };
+        kv_set("poll_failed", 11, failure, sizeof failure);
+    }
     if (request == 30) {
         app_on_data(request, NULL, 0, HOST_DATA_FIRST | HOST_DATA_LAST, http_status);
         return;
@@ -661,14 +666,16 @@ void app_on_draw(void)
     static const char HEADERS[] = "Accept: application/json\nX-Token: {{token}}\n";
     static const char BODY[] = "{\"a\":1}";
     static const char FIVE_HEADERS[] = "A: 1\nB: 2\nC: 3\nD: 4\nE: 5";
-    enum { REQUEST_ACTION = HOST_REQUEST_FIRST + 3 };
+    enum { REQUEST_ACTION = HOST_REQUEST_LAST };
     if (http_send(REQUEST_ACTION, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS,
                      sizeof HEADERS - 1, BODY, sizeof BODY - 1) == HOST_OK &&
-        /* a tag that could be taken for a poll, and one past the last */
+        /* A tag that could be taken for a poll, or a negative tag. */
         http_send(HOST_REQUEST_FIRST - 1, HOST_HTTP_GET, URL, sizeof URL - 1, "", 0, "", 0) ==
             HOST_ERR_ARGUMENT &&
-        http_send(HOST_REQUEST_LAST + 1, HOST_HTTP_GET, URL, sizeof URL - 1, "", 0, "", 0) ==
+        http_send(INT32_MIN, HOST_HTTP_GET, URL, sizeof URL - 1, "", 0, "", 0) ==
             HOST_ERR_ARGUMENT &&
+        http_send(REQUEST_ACTION, HOST_HTTP_GET, URL, sizeof URL - 1, "", 0, BODY, sizeof BODY - 1) == HOST_ERR_ARGUMENT &&
+        http_send(REQUEST_ACTION, HOST_HTTP_HEAD, URL, sizeof URL - 1, "", 0, BODY, sizeof BODY - 1) == HOST_ERR_ARGUMENT &&
         http_send(REQUEST_ACTION, HOST_HTTP_METHOD_LAST + 1, URL, sizeof URL - 1, "", 0, "", 0) == HOST_ERR_ARGUMENT &&
         http_send(REQUEST_ACTION, HOST_HTTP_GET, "http://a/\nHost: b", 17, "", 0, "", 0) ==
             HOST_ERR_ARGUMENT &&

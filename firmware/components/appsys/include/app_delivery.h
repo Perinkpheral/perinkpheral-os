@@ -34,6 +34,7 @@ struct host_answer_info; /* host_answer_info_t of host_api.h */
 
 typedef enum {
     APP_DELIVERY_PIECE,  /* a piece of an answer as it came: app_on_data() */
+    APP_DELIVERY_POLL_FAILED, /* a poll that could not start; policy comes from its loaded manifest */
     APP_DELIVERY_VALUES, /* the values picked out of an answer: app_on_picked() */
     APP_DELIVERY_INTENT,   /* news it asked for: app_on_intent(); `request` is which */
     APP_DELIVERY_ALARM,    /* the alarm it set has come: app_on_alarm() */

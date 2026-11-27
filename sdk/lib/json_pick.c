@@ -10,7 +10,10 @@
 #define ASCII_MAX     0x7F
 #define UNICODE_DIGITS 4
 #define DECIMAL_BASE   10
-#define INDEX_DIGITS_MAX 10 /* of an int */
+enum {
+    EXPECT_VALUE, EXPECT_VALUE_OR_END, EXPECT_KEY, EXPECT_KEY_OR_END,
+    EXPECT_COLON, EXPECT_COMMA_OR_END, EXPECT_END,
+};
 
 void json_pick_init(json_pick_t *pick, const char *const *paths, int path_count)
 {
@@ -49,29 +52,6 @@ bool json_pick_is_list(const json_pick_t *pick, int index)
 static bool is_digit(char character)
 {
     return character >= '0' && character <= '9';
-}
-
-/* Whether the path of a value is the one a pattern describes: the same,
- * but "[*]" stands for any index. */
-static bool path_matches(const char *pattern, const char *path)
-{
-    while (*pattern != '\0') {
-        if (pattern[0] == '[' && pattern[1] == '*' && pattern[2] == ']') {
-            if (*path++ != '[' || !is_digit(*path)) {
-                return false;
-            }
-            while (is_digit(*path)) {
-                path++;
-            }
-            if (*path++ != ']') {
-                return false;
-            }
-            pattern += 3;
-        } else if (*pattern++ != *path++) {
-            return false;
-        }
-    }
-    return *path == '\0';
 }
 
 bool json_pick_path_is_valid(const char *path)
@@ -146,63 +126,56 @@ static json_pick_level_t *innermost(json_pick_t *pick)
     return &pick->levels[pick->depth - 1];
 }
 
-/* Adds the text to the path. False when it does not fit. */
-static bool add_text(char path[JSON_PICK_PATH_MAX + 1], size_t *length, const char *text)
+/* Match each path segment against its container, never against joined key text. */
+static bool path_matches(const json_pick_t *pick, const char *pattern)
 {
-    for (; *text != '\0'; text++) {
-        if (*length >= JSON_PICK_PATH_MAX) {
+    for (size_t length = 0; pattern[length] != '\0'; length++) {
+        if (length == JSON_PICK_PATH_MAX) {
             return false;
         }
-        path[(*length)++] = *text;
     }
-    path[*length] = '\0';
-    return true;
-}
-
-static bool add_index(char path[JSON_PICK_PATH_MAX + 1], size_t *length, int index)
-{
-    char digits[INDEX_DIGITS_MAX + 1];
-    int at = INDEX_DIGITS_MAX;
-    digits[at] = '\0';
-    do {
-        digits[--at] = (char)('0' + index % DECIMAL_BASE);
-        index /= DECIMAL_BASE;
-    } while (index > 0 && at > 0);
-    return add_text(path, length, "[") && add_text(path, length, digits + at) &&
-           add_text(path, length, "]");
-}
-
-/* Where the value about to be read sits, written the way a manifest
- * writes it. False when it does not fit: such a path matches nothing. */
-static bool current_path(const json_pick_t *pick, char path[JSON_PICK_PATH_MAX + 1])
-{
-    size_t length = 0;
-    path[0] = '\0';
-    for (int level = 0; level < pick->depth; level++) {
-        const json_pick_level_t *at = &pick->levels[level];
-        bool fits;
-        if (at->is_array) {
-            fits = add_index(path, &length, at->index);
-        } else if (at->key[0] == '\0') {
-            return false;
+    for (int depth = 0; depth < pick->depth; depth++) {
+        const json_pick_level_t *level = &pick->levels[depth];
+        if (level->is_array) {
+            if (*pattern++ != '[') {
+                return false;
+            }
+            if (*pattern == '*') {
+                pattern++;
+            } else {
+                if (!is_digit(*pattern) || (*pattern == '0' && is_digit(pattern[1]))) {
+                    return false;
+                }
+                uint32_t index = 0;
+                do {
+                    uint32_t digit = (uint32_t)(*pattern++ - '0');
+                    if (index > ((uint32_t)INT32_MAX - digit) / DECIMAL_BASE) {
+                        return false;
+                    }
+                    index = index * DECIMAL_BASE + digit;
+                } while (is_digit(*pattern));
+                if (index != (uint32_t)level->index) {
+                    return false;
+                }
+            }
+            if (*pattern++ != ']') {
+                return false;
+            }
         } else {
-            fits = (length == 0 || add_text(path, &length, ".")) &&
-                   add_text(path, &length, at->key);
-        }
-        if (!fits) {
-            return false;
+            if (!level->key_valid || level->key[0] == '\0') {
+                return false;
+            }
+            if (depth > 0 && *pattern++ != '.') {
+                return false;
+            }
+            for (const char *key = level->key; *key != '\0'; key++) {
+                if (*pattern++ != *key) {
+                    return false;
+                }
+            }
         }
     }
-    return true;
-}
-
-static bool is_same_text(const char *one, const char *other)
-{
-    while (*one != '\0' && *one == *other) {
-        one++;
-        other++;
-    }
-    return *one == *other;
+    return *pattern == '\0';
 }
 
 /* A scalar starts here: is it one of the wanted ones? */
@@ -210,16 +183,14 @@ static void aim(json_pick_t *pick)
 {
     pick->target = NO_TARGET;
     pick->length = 0;
-    char path[JSON_PICK_PATH_MAX + 1];
-    if (!is_recorded(pick) || !current_path(pick, path)) {
+    if (!is_recorded(pick)) {
         return;
     }
     for (int i = 0; i < pick->path_count; i++) {
         /* The first occurrence wins: a document that repeats a key does
          * not get to overwrite what was read. A list takes every one. */
         bool is_list = has_any(pick->paths[i]);
-        if (is_list ? path_matches(pick->paths[i], path)
-                    : !pick->found[i] && is_same_text(pick->paths[i], path)) {
+        if ((is_list || !pick->found[i]) && path_matches(pick, pick->paths[i])) {
             pick->target = i;
             pick->values[i][0] = '\0';
             return;
@@ -231,11 +202,14 @@ static void collect(json_pick_t *pick, char character)
 {
     if (pick->state == JSON_PICK_IN_KEY) {
         json_pick_level_t *level = innermost(pick);
+        if (character < ' ' || character == '.' || character == '[' || character == ']') {
+            level->key_valid = false;
+        }
         if (pick->length < JSON_PICK_KEY_MAX) {
             level->key[pick->length] = character;
             level->key[pick->length + 1] = '\0';
         } else {
-            level->key[0] = '\0'; /* too long to be anybody's path */
+            level->key_valid = false;
         }
         pick->length++;
         return;
@@ -414,6 +388,24 @@ static int hex_digit(char character)
 static void in_string(json_pick_t *pick, char character)
 {
     bool collects = pick->state == JSON_PICK_IN_KEY ? is_recorded(pick) : true;
+    unsigned char byte = (unsigned char)character;
+    if (pick->utf8_left > 0) {
+        if ((byte & 0xC0) != 0x80) {
+            pick->broken = true;
+            return;
+        }
+        pick->utf8_value = pick->utf8_value << 6 | (byte & 0x3F);
+        if (--pick->utf8_left == 0) {
+            uint32_t value = pick->utf8_value;
+            if (value < pick->utf8_min || value > 0x10FFFF ||
+                (value >= 0xD800 && value <= 0xDFFF)) {
+                pick->broken = true;
+            } else if (collects) {
+                collect_character(pick, value);
+            }
+        }
+        return;
+    }
     if (pick->unicode_digits > 0) {
         int digit = hex_digit(character);
         if (digit < 0) {
@@ -446,10 +438,19 @@ static void in_string(json_pick_t *pick, char character)
             pick->unicode_value = 0;
         } else {
             pick->high_half = 0;
+            if (character != '"' && character != '\\' && character != '/' &&
+                character != 'b' && character != 'f' && character != 'n' &&
+                character != 'r' && character != 't') {
+                pick->broken = true;
+                return;
+            }
             if (!collects) {
                 return;
             }
             bool is_itself = character == '"' || character == '\\' || character == '/';
+            if (!is_itself && pick->state == JSON_PICK_IN_KEY) {
+                innermost(pick)->key_valid = false;
+            }
             collect(pick, is_itself ? character : ' '); /* \n \t and the like: a space */
         }
         return;
@@ -461,39 +462,33 @@ static void in_string(json_pick_t *pick, char character)
     pick->high_half = 0;
     if (character == '"') {
         if (pick->state == JSON_PICK_IN_KEY) {
+            pick->grammar[pick->depth - 1] = EXPECT_COLON;
             pick->state = JSON_PICK_BETWEEN;
         } else {
             value_ended(pick);
         }
         return;
     }
-    if (!collects) {
-        return;
-    }
-    /* The text is UTF-8: a character of several bytes is put together and
-     * taken whole. Bytes that are not UTF-8 are passed over. */
-    unsigned char byte = (unsigned char)character;
-    if (byte <= ASCII_MAX) {
-        pick->utf8_left = 0;
-        collect(pick, character);
-    } else if ((byte & 0xC0) == 0x80) {
-        if (pick->utf8_left > 0) {
-            pick->utf8_value = pick->utf8_value << 6 | (byte & 0x3F);
-            if (--pick->utf8_left == 0) {
-                collect_character(pick, pick->utf8_value);
-            }
+    if (byte < ' ') {
+        pick->broken = true;
+    } else if (byte <= ASCII_MAX) {
+        if (collects) {
+            collect(pick, character);
         }
-    } else if ((byte & 0xE0) == 0xC0) {
+    } else if (byte >= 0xC2 && byte <= 0xDF) {
         pick->utf8_left = 1;
         pick->utf8_value = byte & 0x1F;
-    } else if ((byte & 0xF0) == 0xE0) {
+        pick->utf8_min = 0x80;
+    } else if (byte >= 0xE0 && byte <= 0xEF) {
         pick->utf8_left = 2;
         pick->utf8_value = byte & 0x0F;
-    } else if ((byte & 0xF8) == 0xF0) {
+        pick->utf8_min = 0x800;
+    } else if (byte >= 0xF0 && byte <= 0xF4) {
         pick->utf8_left = 3;
         pick->utf8_value = byte & 0x07;
+        pick->utf8_min = 0x10000;
     } else {
-        pick->utf8_left = 0;
+        pick->broken = true;
     }
 }
 
@@ -505,79 +500,81 @@ static void open_level(json_pick_t *pick, bool is_array)
     }
     uint64_t bit = UINT64_C(1) << pick->depth;
     pick->arrays = is_array ? pick->arrays | bit : pick->arrays & ~bit;
+    pick->grammar[pick->depth] = is_array ? EXPECT_VALUE_OR_END : EXPECT_KEY_OR_END;
     pick->depth++;
     if (is_recorded(pick)) {
         json_pick_level_t *level = innermost(pick);
         level->is_array = is_array;
         level->index = 0;
-        level->expects_key = !is_array;
+        level->key_valid = true;
         level->key[0] = '\0';
     }
 }
 
 static void between(json_pick_t *pick, char character)
 {
-    switch (character) {
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\r':
-        break;
-    case '{':
-    case '[':
-        open_level(pick, character == '[');
-        break;
-    case '}':
-    case ']':
-        if (pick->depth == 0 ||
-            ((pick->arrays >> (pick->depth - 1)) & 1) != (character == ']')) {
-            pick->broken = true;
-            break;
-        }
-        pick->depth--;
-        break;
-    case ',':
-        if (is_recorded(pick)) {
-            json_pick_level_t *level = innermost(pick);
-            if (level->is_array) {
-                level->index++;
-            } else {
-                level->expects_key = true;
-            }
-        }
-        break;
-    case ':':
-        if (is_recorded(pick)) {
-            innermost(pick)->expects_key = false;
-        }
-        break;
-    case '"':
-        if (pick->depth >= 1 && is_recorded(pick) && innermost(pick)->expects_key) {
-            pick->state = JSON_PICK_IN_KEY;
-            pick->length = 0;
-            innermost(pick)->key[0] = '\0';
-        } else if (pick->depth > JSON_PICK_DEPTH_MAX) {
-            /* Too deep to tell keys from values, and nothing is picked
-             * there anyway: read it as a string and drop it. */
-            pick->state = JSON_PICK_IN_STRING;
-            pick->target = NO_TARGET;
-        } else {
-            aim(pick);
-            pick->state = JSON_PICK_IN_STRING;
-        }
-        break;
-    default:
-        aim(pick);
-        pick->state = JSON_PICK_IN_LITERAL;
-        pick->literal_kind = character == 't' ? 1 : character == 'f' ? 2 : character == 'n' ? 3 : 0;
-        pick->literal_at = pick->literal_kind != 0 ? 1 : 0;
-        pick->number_state = NUMBER_START;
-        if (pick->literal_kind == 0) {
-            literal_character(pick, character);
-        }
-        collect(pick, character);
-        break;
+    if (character == ' ' || character == '\t' || character == '\n' || character == '\r') {
+        return;
     }
+    int grammar = pick->depth > 0 ? pick->grammar[pick->depth - 1]
+                                  : pick->root_seen ? EXPECT_END : EXPECT_VALUE;
+    bool is_array = pick->depth > 0 && ((pick->arrays >> (pick->depth - 1)) & 1);
+    if (character == '}' || character == ']') {
+        bool can_close = grammar == EXPECT_COMMA_OR_END || grammar == EXPECT_KEY_OR_END ||
+                         grammar == EXPECT_VALUE_OR_END;
+        if (pick->depth == 0 || is_array != (character == ']') || !can_close) {
+            pick->broken = true;
+        } else {
+            pick->depth--;
+        }
+        return;
+    }
+    if (grammar == EXPECT_COMMA_OR_END && character == ',') {
+        pick->grammar[pick->depth - 1] = is_array ? EXPECT_VALUE : EXPECT_KEY;
+        if (is_recorded(pick) && is_array) {
+            innermost(pick)->index++;
+        }
+        return;
+    }
+    if (grammar == EXPECT_COLON && character == ':') {
+        pick->grammar[pick->depth - 1] = EXPECT_VALUE;
+        return;
+    }
+    if ((grammar == EXPECT_KEY || grammar == EXPECT_KEY_OR_END) && character == '"') {
+        pick->state = JSON_PICK_IN_KEY;
+        pick->length = 0;
+        if (is_recorded(pick)) {
+            innermost(pick)->key[0] = '\0';
+            innermost(pick)->key_valid = true;
+        }
+        return;
+    }
+    if (grammar != EXPECT_VALUE && grammar != EXPECT_VALUE_OR_END) {
+        pick->broken = true;
+        return;
+    }
+    if (pick->depth == 0) {
+        pick->root_seen = true;
+    } else {
+        pick->grammar[pick->depth - 1] = EXPECT_COMMA_OR_END;
+    }
+    if (character == '{' || character == '[') {
+        open_level(pick, character == '[');
+        return;
+    }
+    aim(pick);
+    if (character == '"') {
+        pick->state = JSON_PICK_IN_STRING;
+        return;
+    }
+    pick->state = JSON_PICK_IN_LITERAL;
+    pick->literal_kind = character == 't' ? 1 : character == 'f' ? 2 : character == 'n' ? 3 : 0;
+    pick->literal_at = pick->literal_kind != 0 ? 1 : 0;
+    pick->number_state = NUMBER_START;
+    if (pick->literal_kind == 0) {
+        literal_character(pick, character);
+    }
+    collect(pick, character);
 }
 
 static bool is_literal_end(char character)
@@ -620,7 +617,7 @@ bool json_pick_finish(json_pick_t *pick)
     /* A string cut off by the end of the document was never a value. */
     pick->target = NO_TARGET;
     bool is_inside = pick->state == JSON_PICK_IN_KEY || pick->state == JSON_PICK_IN_STRING;
-    return !pick->broken && !is_inside && pick->depth == 0;
+    return !pick->broken && !is_inside && pick->depth == 0 && pick->root_seen;
 }
 
 const char *json_pick_value(const json_pick_t *pick, int index)

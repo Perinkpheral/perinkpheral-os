@@ -220,9 +220,12 @@ static int32_t fake_http_request(const char *app_name, const app_request_t *requ
     (void)app_name;
     asked_tag = request->tag;
     snprintf(asked_request, sizeof asked_request, "%d %s|%d:%s=%s,%s=%s|%.*s", request->method,
-             request->url, request->header_count, request->headers[0].name,
-             request->headers[0].value, request->headers[1].name, request->headers[1].value,
-             (int)request->body_length, (const char *)request->body);
+             request->url, request->header_count,
+             request->header_count > 0 ? request->headers[0].name : "",
+             request->header_count > 0 ? request->headers[0].value : "",
+             request->header_count > 1 ? request->headers[1].name : "",
+             request->header_count > 1 ? request->headers[1].value : "",
+             (int)request->body_length, request->body_length > 0 ? (const char *)request->body : "");
     return HOST_OK;
 }
 
@@ -790,9 +793,16 @@ static void test_values(void)
     /* the network: online, a poll asked for by its number, a wrong number refused */
     CHECK(gfx_get(&surface, 12, ROW_VALUES) && polled_now == 1);
     /* a request of its own: the method, the URL, the headers taken apart, the body */
-    CHECK(gfx_get(&surface, 18, ROW_VALUES));
-    CHECK_STR(asked_request,
-              "1 https://api.example.com/do?x={{token}}|2:Accept=application/json,X-Token={{token}}|{\"a\":1}");
+    if (probe_bytes == probe_wasm) {
+        CHECK(gfx_get(&surface, 18, ROW_VALUES));
+        CHECK_STR(asked_request,
+                  "1 https://api.example.com/do?x={{token}}|2:Accept=application/json,X-Token={{token}}|{\"a\":1}");
+        CHECK(asked_tag == HOST_REQUEST_LAST);
+    } else {
+        /* The pre-release probe expected tag 256 to fail; it is now accepted. */
+        CHECK(!gfx_get(&surface, 18, ROW_VALUES));
+        CHECK(asked_tag == 256);
+    }
     /* a poll at another pace, an alarm, a file written, and the wrong ones refused */
     CHECK(gfx_get(&surface, 14, ROW_VALUES));
     CHECK(paced_seconds == 3600 && alarm_seconds == 0 && alarm_number == 2);
@@ -1177,14 +1187,43 @@ static app_t *load_document(bool dual, bool no_buffer)
     return app;
 }
 
+static void test_poll_allocation_delivery(void)
+{
+    memset(kv_slots, 0, sizeof kv_slots);
+    app_t *app = load_probe();
+    app_manifest_t manifest = { .poll_picks = 1 };
+    app_response_policy(app, &manifest);
+    app_answer_begins(app, NULL, NULL, HOST_FAILED_NO_MEMORY, -1);
+    app_poll_failed(app, 0, HOST_FAILED_NO_MEMORY);
+    app_answer_ends(app);
+    int32_t failure[4];
+    CHECK(fake_kv_get("probe", "poll_failed", failure, sizeof failure) == sizeof failure);
+    CHECK(failure[0] == sizeof(host_answer_info_t) && failure[1] == HOST_FAILED_NO_MEMORY &&
+          failure[2] == -1 && failure[3] == 0);
+    app_unload(app);
+}
+
 static void test_document_delivery(void)
 {
     const uint8_t body[] = "{\"value\":1234}";
     app_t *app = load_document(false, false);
+    app_answer_begins(app, NULL, NULL, 200, -1);
     CHECK(!app_data(app, 0, body, sizeof body - 1, HOST_DATA_FIRST, 200));
     check_document_result(1, HOST_FAILED_TOO_LARGE, 0);
     CHECK(!app_data(app, 0, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_NO_ANSWER));
     check_document_result(1, HOST_FAILED_TOO_LARGE, 0);
+    int32_t metadata[4];
+    CHECK(fake_kv_get("document", "metadata", metadata, sizeof metadata) == sizeof metadata);
+    CHECK(metadata[0] == sizeof(host_answer_info_t) && metadata[1] == 200 &&
+          metadata[2] == -1 && metadata[3] == HOST_ERR_ARGUMENT);
+    app_unload(app);
+
+    app = load_document(false, false);
+    app_answer_begins(app, NULL, NULL, 200, -1);
+    CHECK(!app_data(app, 0, (const uint8_t *)"{", 1, HOST_DATA_FIRST | HOST_DATA_LAST, 200));
+    check_document_result(1, HOST_FAILED_NO_ANSWER, 0);
+    CHECK(fake_kv_get("document", "metadata", metadata, sizeof metadata) == sizeof metadata);
+    CHECK(metadata[1] == 200 && metadata[2] == -1);
     app_unload(app);
 
     app = load_document(false, true);
@@ -1369,6 +1408,7 @@ int main(int argc, char **argv)
         REPORT();
     }
     CHECK(argc == 1);
+    test_poll_allocation_delivery();
     test_document_delivery();
     test_screen_inversion();
     test_probe_contract();

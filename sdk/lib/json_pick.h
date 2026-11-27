@@ -19,12 +19,10 @@ extern "C" {
  * uses it for a streamed answer: feed every piece from app_on_data(), then
  * read the values after the last piece.
  *
- * Checks balanced, matching containers, valid number/true/false/null
- * literals and completed strings with hexadecimal \u escapes. Other escape
- * letters and raw control bytes in strings are not rejected. This is a
- * tolerant extractor, not a full JSON validator: member/value separators
- * and a single root value are not enforced. Empty input and other malformed
- * documents may be accepted.
+ * Validates one complete JSON value: matching containers, separators,
+ * literals, escapes and UTF-8 string characters. Empty input, trailing
+ * commas, missing colons and extra roots are invalid. Applications must
+ * still validate their schema and the expected scalar types.
  *
  * Path syntax:
  *
@@ -34,11 +32,12 @@ extern "C" {
  * as written. Strings are returned without quotes. Escaped quotes,
  * backslashes and slashes are decoded. Unicode escapes become UTF-8;
  * surrogate escapes combine only when adjacent in the same string,
- * including across input chunks; unpaired surrogates are discarded. Other escaped characters
- * become spaces. Values are cut between characters when too long.
+ * including across input chunks; unpaired surrogates are discarded. Short control escapes become spaces. Values are cut between characters when too long.
  * Only ASCII JSON property names are supported reliably. Non-ASCII key
  * characters become "?" and can match a path containing "?". Extracted
  * strings are NUL-terminated text; an embedded NUL ends the exposed value.
+ * Keys containing path delimiters, NUL or control characters are
+ * unaddressable and cannot match a nested path or array index.
  * A path that points to an object, to an array or to nothing has no value.
  *
  * A path is at most 63 bytes, each key at most 31 ASCII bytes, and a
@@ -66,13 +65,13 @@ extern "C" {
 #define JSON_PICK_VALUE_MAX 63 /* longer values are cut */
 #define JSON_PICK_DEPTH_MAX 8  /* deeper levels are not extracted */
 #define JSON_PICK_KEY_MAX   31 /* longer keys never match */
-#define JSON_PICK_NESTING_MAX 64 /* validation uses one bit per container */
+#define JSON_PICK_NESTING_MAX 64 /* complete-document validation depth */
 #define JSON_PICK_ANY       "[*]" /* in a path: every element of the array */
 
 typedef struct {
     int  index;                      /* array: index of the current element */
     bool is_array;
-    bool expects_key;                /* object: the next string is a key */
+    bool key_valid;                  /* false for unaddressable or oversized keys */
     char key[JSON_PICK_KEY_MAX + 1]; /* key of the current member; empty if too long */
 } json_pick_level_t;
 
@@ -85,6 +84,8 @@ typedef struct {
     json_pick_level_t levels[JSON_PICK_DEPTH_MAX];
     int               depth; /* beyond DEPTH_MAX only container kinds are kept */
     uint64_t          arrays; /* one bit per open container, including unpicked levels */
+    uint8_t           grammar[JSON_PICK_NESTING_MAX];
+    bool              root_seen;
     uint8_t           literal_kind;
     uint8_t           literal_at;
     uint8_t           number_state;
@@ -100,6 +101,7 @@ typedef struct {
     uint32_t high_half;  /* pending high surrogate of a \u pair; 0: none */
     int      utf8_left;  /* remaining bytes of a multi-byte character */
     uint32_t utf8_value;
+    uint32_t utf8_min;
     int      target;         /* path index of the value being read, or -1 */
     size_t   length;         /* length of the key or value collected so far */
     bool     broken;
@@ -126,13 +128,13 @@ bool json_pick_path_is_valid(const char *path);
 void json_pick_init(json_pick_t *pick, const char *const *paths, int path_count);
 
 /* Feeds the next bytes of the document. Returns false once a check described
- * above fails; values extracted before that are kept. True does not guarantee
- * valid JSON. */
+ * above fails; values extracted before that are kept. Call finish to validate
+ * completion before accepting any extracted values. */
 bool json_pick_feed(json_pick_t *pick, const char *bytes, size_t length);
 
 /* Signals the end of the document. Required to complete a number at the
  * very end of the input. Returns true if all containers and strings closed
- * and the checks above passed. Other malformed documents may be accepted. */
+ * and exactly one valid JSON value was read. */
 bool json_pick_finish(json_pick_t *pick);
 
 /* Returns the value of path number `index`, or NULL if the document had

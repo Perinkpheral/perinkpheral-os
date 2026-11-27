@@ -146,24 +146,50 @@ static bool is_answered_by(const char *address, const char *url)
     return strcmp(address, url) == 0;
 }
 
+/* Fixtures are complete inputs. Delivery applies transport limits afterwards. */
+static uint8_t *read_fixture(const char *path, int32_t *length)
+{
+    FILE *file = fopen(path, "rb");
+    if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
+        fprintf(stderr, "checks: cannot read %s\n", path);
+        exit(2);
+    }
+    long size = ftell(file);
+    if (size < 0 || size > INT32_MAX || fseek(file, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "checks: invalid fixture size: %s\n", path);
+        exit(2);
+    }
+    uint8_t *bytes = malloc((size_t)size + 1);
+    if (bytes == NULL || fread(bytes, 1, (size_t)size, file) != (size_t)size ||
+        ferror(file) || fgetc(file) != EOF) {
+        fprintf(stderr, "checks: cannot read complete fixture: %s\n", path);
+        exit(2);
+    }
+    fclose(file);
+    bytes[size] = '\0';
+    *length = (int32_t)size;
+    return bytes;
+}
+
 static bool answer_for(const char *url, answer_t *answer)
 {
-    static uint8_t *bodies[64];
-    static int32_t lengths[64];
-    for (int32_t index = 0; index < standin_subject.answer_count && index < 64; index++) {
+    static uint8_t **bodies;
+    static int32_t *lengths;
+    if (bodies == NULL && standin_subject.answer_count > 0) {
+        bodies = calloc((size_t)standin_subject.answer_count, sizeof *bodies);
+        lengths = calloc((size_t)standin_subject.answer_count, sizeof *lengths);
+        if (bodies == NULL || lengths == NULL) {
+            fprintf(stderr, "checks: cannot allocate fixtures\n");
+            exit(2);
+        }
+    }
+    for (int32_t index = 0; index < standin_subject.answer_count; index++) {
         const standin_answer_t *kept = &standin_subject.answers[index];
         if (!is_answered_by(kept->address, url)) {
             continue;
         }
         if (kept->file != NULL && bodies[index] == NULL) {
-            FILE *file = fopen(kept->file, "rb");
-            if (file == NULL) {
-                fprintf(stderr, "checks: cannot read %s\n", kept->file);
-                exit(2);
-            }
-            bodies[index] = malloc(HOST_ANSWER_MAX);
-            lengths[index] = (int32_t)fread(bodies[index], 1, HOST_ANSWER_MAX, file);
-            fclose(file);
+            bodies[index] = read_fixture(kept->file, &lengths[index]);
         }
         answer->mock = kept;
         answer->headers = kept->headers;
@@ -332,6 +358,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
 {
     standin_t *host = standin();
     answer_t answer = { 0 };
+    uint8_t *mutation_body = NULL;
     int32_t status = 200;
     if (round->kind == ROUND_STATUS) {
         status = round->size;
@@ -375,27 +402,22 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
             status = HOST_FAILED_NO_ANSWER;
             answer = (answer_t){ 0 };
         } else {
-            static uint8_t bytes[HOST_ANSWER_MAX];
-            FILE *file = fopen(mutation->file, "rb");
-            if (file == NULL) {
-                fprintf(stderr, "checks: cannot read %s\n", mutation->file);
-                exit(2);
-            }
-            answer.length = (int32_t)fread(bytes, 1, sizeof bytes, file);
-            fclose(file);
-            answer.body = bytes;
+            mutation_body = read_fixture(mutation->file, &answer.length);
+            answer.body = mutation_body;
         }
     }
     /* An answer that stops is some pieces and then nothing: of a request that
      * failed there are no pieces, and Perinkpheral OS reads an answer it picks
      * values from to its end itself. Either way the application is told nothing. */
     if (round->kind == ROUND_CUT && (is_picked || status < 0)) {
+        free(mutation_body);
         return;
     }
     if (is_head) {
         answer.length = 0; /* poller_net.c: HEAD has no response body, with either delivery mode */
     }
     standin_answer_headers(answer.headers, answer.header_count);
+    standin_answer_method(is_head ? HOST_HTTP_HEAD : HOST_HTTP_GET);
     int32_t previous_refusal = host->refuse_writes;
     int32_t refused_before = host->refused_writes;
     if (response_refusal != HOST_OK) {
@@ -425,6 +447,7 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
         host->refuse_writes = previous_refusal;
         host->marks[MARK_RESPONSE_REFUSALS] += (uint64_t)(host->refused_writes - refused_before);
     }
+    free(mutation_body);
 }
 
 /* One thing the device gives an application. Off the screen each is given to an instance
@@ -505,7 +528,7 @@ static void answer_manifest_polls(const round_t *round, int32_t response_refusal
                                   .is_picked = standin_subject.polls[poll].picks != NULL, .is_permitted = true,
                                   .is_head = standin_subject.polls[poll].method == HOST_HTTP_HEAD, .round = round,
                                   .response_refusal = response_refusal };
-            answer.is_ready = !is_empty && standin_poll_url(poll, answer.item, answer.url, sizeof answer.url) &&
+            answer.is_ready = standin_poll_url(poll, answer.item, answer.url, sizeof answer.url) &&
                               standin_poll_ready(poll, answer.item);
             hand(&answer);
         }

@@ -73,7 +73,7 @@ static uint32_t next_boot_id(uint32_t previous)
     return previous + 0x9E3779B1u != 0 ? previous + 0x9E3779B1u : 1;
 }
 
-static bool requested_head[HOST_REQUEST_LAST + 1];
+static int32_t pending_method = -1;
 static document_reader_t doc_reader;
 static uint8_t *doc_buffer;
 static int doc_capacity;
@@ -99,7 +99,7 @@ void standin_reset(void)
 {
     standin_t *host = standin();
     reset_document();
-    memset(requested_head, 0, sizeof requested_head);
+    pending_method = -1;
     session_refusal = HOST_OK;
     session_refused = 0;
     uint32_t boot_id = next_boot_id(host->boot_id);
@@ -1293,7 +1293,8 @@ int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_leng
     if (tag < HOST_REQUEST_FIRST || tag > HOST_REQUEST_LAST || method < 0 || method > HOST_HTTP_METHOD_LAST ||
         url == NULL || url_length < 1 || url_length >= STANDIN_URL_BYTES || headers_length < 0 ||
         headers_length > HOST_HTTP_HEADERS_MAX || (headers == NULL && headers_length > 0) || body_length < 0 ||
-        body_length > HOST_HTTP_BODY_MAX || (body == NULL && body_length > 0)) {
+        body_length > HOST_HTTP_BODY_MAX || (body == NULL && body_length > 0) ||
+        (body_length > 0 && (method == HOST_HTTP_GET || method == HOST_HTTP_HEAD))) {
         return refused_request(HOST_ERR_ARGUMENT, "a tag, a method or a length the contract does not take");
     }
     /* As app_api_data.c and poller.c take it: printable text, at most four headers of
@@ -1361,7 +1362,6 @@ int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_leng
     }
     host->handler_requests++;
     host->handler_request_bytes += bytes;
-    requested_head[tag] = method == HOST_HTTP_HEAD;
     standin_request_t *request = &host->requests[host->request_count++];
     memset(request, 0, sizeof *request);
     request->tag = tag;
@@ -1386,21 +1386,25 @@ static int32_t setting_text(const char *key, int32_t key_length, char *text, int
     return length;
 }
 
-/* Item `index` of a list's text, as [start, end); false past its end. Empty lines are no items. */
+/* Item indices include empty lines, as poller_net.c counts them. */
 static bool list_item(const char *list, int32_t index, const char **start, int32_t *length)
 {
-    const char *at = list;
-    while (*at != '\0') {
+    if (*list == '\0') {
+        return false;
+    }
+    for (const char *at = list;;) {
         const char *end = strchr(at, '\n');
         int32_t item_length = end != NULL ? (int32_t)(end - at) : (int32_t)strlen(at);
-        if (item_length > 0 && index-- == 0) {
+        if (index-- == 0) {
             *start = at;
             *length = item_length;
             return true;
         }
-        at += item_length + (end != NULL);
+        if (end == NULL) {
+            return false;
+        }
+        at = end + 1;
     }
-    return false;
 }
 
 static bool has_prefix(const char *item, int32_t length, const char *prefix)
@@ -1415,7 +1419,7 @@ static bool claims(int32_t poll, const char *item, int32_t length)
 {
     const standin_poll_t *asked = &standin_subject.polls[poll];
     if (asked->prefix != NULL) {
-        return has_prefix(item, length, asked->prefix);
+        return length > (int32_t)strlen(asked->prefix) && has_prefix(item, length, asked->prefix);
     }
     for (int32_t other = 0; other < standin_subject.poll_count; other++) {
         const standin_poll_t *another = &standin_subject.polls[other];
@@ -1431,7 +1435,7 @@ int32_t standin_poll_item(int32_t poll, int32_t index)
 {
     standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
-    char list[HOST_KV_VALUE_MAX + 1];
+    char list[MANIFEST_SETTING_VALUE_MAX + 1];
     const char *item;
     int32_t length;
     if (asked->each == NULL) {
@@ -1439,6 +1443,9 @@ int32_t standin_poll_item(int32_t poll, int32_t index)
     }
     setting_text(asked->each, (int32_t)strlen(asked->each), list, sizeof list);
     for (int32_t number = 0; list_item(list, number, &item, &length); number++) {
+        if (length > MANIFEST_LIST_ITEM_MAX) {
+            length = MANIFEST_LIST_ITEM_MAX;
+        }
         if (claims(poll, item, length) && index-- == 0) {
             return number;
         }
@@ -1450,7 +1457,7 @@ bool standin_poll_list_is_empty(int32_t poll)
 {
     standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
-    char list[HOST_KV_VALUE_MAX + 1];
+    char list[MANIFEST_SETTING_VALUE_MAX + 1];
     const char *item;
     int32_t length;
     if (asked->each == NULL) {
@@ -1504,13 +1511,21 @@ static bool fill_text(const char *written, const standin_poll_t *asked, int32_t 
         }
         const char *key = at + 2;
         int32_t key_length = (int32_t)(close - key);
+        for (int32_t index = 0; index < key_length; index++) {
+            if (key[index] < '!' || key[index] > '~') {
+                return false;
+            }
+        }
         char value[HOST_KV_VALUE_MAX + 1];
         const char *filled = value;
         int32_t length;
         if (asked != NULL && asked->each != NULL && item >= 0 && is_named(key, key_length, asked->each)) {
-            setting_text(key, key_length, value, sizeof value);
+            setting_text(key, key_length, value, MANIFEST_SETTING_VALUE_MAX + 1);
             if (!list_item(value, item, &filled, &length)) {
                 return false;
+            }
+            if (length > MANIFEST_LIST_ITEM_MAX) {
+                length = MANIFEST_LIST_ITEM_MAX;
             }
             if (asked->prefix != NULL) {
                 filled += strlen(asked->prefix);
@@ -1522,7 +1537,17 @@ static bool fill_text(const char *written, const standin_poll_t *asked, int32_t 
                 return false;
             }
         }
+        if (length < 0 || length >= capacity - used) {
+            return false;
+        }
+        if (memchr(filled, '\0', (size_t)length) != NULL) {
+            length = (int32_t)((const char *)memchr(filled, '\0', (size_t)length) - filled);
+        }
         bool is_verbatim = !is_url || at == written;
+        if (is_url && !is_verbatim && memchr(filled, '\n', (size_t)length) != NULL &&
+            length > MANIFEST_SETTING_VALUE_MAX) {
+            return false;
+        }
         for (int32_t index = 0; index < length; index++) {
             bool is_join = !is_body && filled[index] == '\n'; /* between a list's items */
             char character = is_join ? ',' : filled[index];
@@ -1571,14 +1596,20 @@ static host_t host_of(const char *text, size_t length)
     host_t host = { text, length, 0 };
     const char *colon = memchr(text, ':', length);
     if (colon != NULL) {
+        if (colon + 1 == text + length) {
+            host.port = -1;
+            return host;
+        }
         host.name_length = (size_t)(colon - text);
-        /* Digits, and no more than a port has: anything else is no port and matches none. The
-         * firmware reads any characters as digits; no address it lets through differs. */
+        /* An explicit port cannot fall back to a scheme's default. */
         for (const char *digit = colon + 1; digit < text + length && host.port >= 0; digit++) {
             bool is_digit = *digit >= '0' && *digit <= '9';
             host.port = is_digit && host.port <= 6553 ? host.port * 10 + (*digit - '0') : -1;
             host.port = host.port > 65535 ? -1 : host.port;
         }
+    }
+    if (colon != NULL && host.port == 0) {
+        host.port = -1;
     }
     return host;
 }
@@ -2943,14 +2974,27 @@ static int selected_format(int request)
                      : standin_subject.format_policy;
     return answer_format(policy, &response_headers, &response_info);
 }
+void standin_answer_method(int32_t method)
+{
+    pending_method = method;
+}
+
+static bool prepare_method(int32_t request)
+{
+    int32_t method = pending_method;
+    pending_method = -1;
+    if (method < 0) {
+        method = request >= 0 && request < standin_subject.poll_count
+                     ? standin_subject.polls[request].method : HOST_HTTP_GET;
+    }
+    response_headers.head_response = method == HOST_HTTP_HEAD;
+    return response_headers.head_response;
+}
+
 static void deliver_piece(int request, const uint8_t *buffer, const uint8_t *source, int n,
-                          int flags, int status)
+                          int flags, int status, bool head)
 {
     CALL(on_data, request, buffer, n, flags, status);
-    bool head = request >= 0 && request < standin_subject.poll_count
-                    ? standin_subject.polls[request].method == HOST_HTTP_HEAD
-                    : request >= HOST_REQUEST_FIRST && request <= HOST_REQUEST_LAST &&
-                          requested_head[request];
     bool done = standin_handlers.on_document &&
                 document_reader_feed(&doc_reader, doc_buffer, doc_capacity, request,
                                      selected_format(request), status, source, n, flags, head);
@@ -2968,6 +3012,11 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
 {
     standin_t *host = standin();
     prepare_answer(status);
+    bool head = prepare_method(request);
+    if (head) {
+        length = 0;
+        ending = STANDIN_WHOLE;
+    }
     if (standin_handlers.on_data == NULL && standin_handlers.on_document == NULL) {
         return;
     }
@@ -2976,7 +3025,7 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
     response_info.status = status;
     has_picked = false;
     if (status < 0) {
-        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, status);
+        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, status, head);
         host->is_delivering = false;
         return;
     }
@@ -2992,20 +3041,25 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
     extern uint8_t *app_data_buffer(void);
     uint8_t *buffer = app_data_buffer();
     int32_t at = 0;
+    bool too_large = given > HOST_ANSWER_PIECES_MAX;
+    if (too_large) {
+        given = HOST_ANSWER_PIECES_MAX;
+    }
     do {
         int32_t taken = given - at < piece ? given - at : piece;
         int32_t flags = (at == 0 ? HOST_DATA_FIRST : 0) |
-                        (ending == STANDIN_WHOLE && at + taken == given ? HOST_DATA_LAST : 0);
+                        (ending == STANDIN_WHOLE && !too_large && at + taken == given ? HOST_DATA_LAST : 0);
         if (taken > 0) {
             copy(buffer, (const uint8_t *)body + at, (size_t)taken);
         }
         deliver_piece(request, buffer, taken ? (const uint8_t *)body + at : NULL, taken, flags,
-                      status);
+                      status, head);
         at += taken;
     } while (at < given);
-    if (ending == STANDIN_FAILED) {
+    if (ending == STANDIN_FAILED || too_large) {
+        failure = too_large ? HOST_FAILED_TOO_LARGE : failure;
         prepare_answer(failure);
-        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, failure);
+        deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, failure, head);
     }
     host->is_delivering = false;
 }
@@ -3014,16 +3068,8 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
 {
     standin_t *host = standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
-    /* prepare_answer consumes the fixture's headers. Preserve them for the
-     * complete raw delivery when the effective type does not select JSON. */
-    const standin_pair_t *fields=pending_headers;
-    int count=pending_header_count;
     prepare_answer(status);
-    if (status >= 0 && selected_format(poll) != HOST_FORMAT_JSON) {
-        standin_answer_headers(fields,count);
-        standin_data(poll, item, status, body, length, HOST_DATA_CHUNK_MAX, STANDIN_WHOLE, 0);
-        return;
-    }
+    bool head = prepare_method(poll);
     if (standin_handlers.on_picked == NULL) {
         return;
     }
@@ -3031,17 +3077,13 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
     if (status >= 0) {
         json_pick_init(&picked, asked->picks, asked->pick_count);
         json_pick_lists(&picked, picked_lists, sizeof picked_lists);
-        /* As poller_net.c reads it: a success the picker cannot read whole is no answer; a
-         * refusal (any other HTTP status) keeps its status, and a page that is not whole JSON gives
-         * no values;
-         * an empty answer is a whole document of no values, and keeps its status. What was picked
-         * before a success broke off is handed over all the same (app_values()), for the
-         * application to leave alone. */
-        bool is_whole = json_pick_feed(&picked, body != NULL ? body : "", (size_t)length);
-        is_whole = json_pick_finish(&picked) && is_whole;
+        bool too_large = !head && length > HOST_ANSWER_MAX;
+        bool is_whole = head || (!too_large &&
+            json_pick_feed(&picked, body != NULL ? body : "", (size_t)length) &&
+            json_pick_finish(&picked));
         has_picked = true;
         if (!is_whole && status >= 200 && status <= 299) {
-            status = HOST_FAILED_NO_ANSWER;
+            status = too_large ? HOST_FAILED_TOO_LARGE : HOST_FAILED_NO_ANSWER;
         } else if (!is_whole) {
             json_pick_init(&picked, asked->picks, asked->pick_count);
         }

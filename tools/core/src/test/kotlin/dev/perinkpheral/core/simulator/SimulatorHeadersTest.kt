@@ -58,7 +58,7 @@ object SimulatorHeadersTest {
                     return Json.parse(reader.readLine()) as Map<*, *>
                 }
                 val limits = mapOf("max" to 8, "rawMax" to 64, "values" to true, "formatPolicy" to 0)
-                check(get("/selection?text/plain", limits)["status"] == 200L)
+                check(get("/selection?text/plain", limits)["status"] == -7L)
                 check(get("/selection?application/vendor+json", limits)["status"] == -7L)
                 check(get("/selection?text/plain", limits + ("formatPolicy" to 1))["status"] == -7L)
                 val conflict = get("/conflict")

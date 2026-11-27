@@ -314,7 +314,9 @@ HOST_FUNCTION(http_send)
     const uint8_t *body = app_memory_at(runtime, _mem, body_offset, body_length);
     bool is_sound = url != NULL && headers != NULL && body != NULL && url_length >= 1 &&
                     url_length <= APP_URL_MAX && headers_length <= HOST_HTTP_HEADERS_MAX &&
-                    body_length <= HOST_HTTP_BODY_MAX && method >= HOST_HTTP_GET &&
+                    body_length <= HOST_HTTP_BODY_MAX &&
+                    (body_length == 0 || (method != HOST_HTTP_GET && method != HOST_HTTP_HEAD)) &&
+                    method >= HOST_HTTP_GET &&
                     method <= HOST_HTTP_METHOD_LAST && tag >= HOST_REQUEST_FIRST &&
                     tag <= HOST_REQUEST_LAST && is_request_text(url, url_length, false) &&
                     is_request_text(headers, headers_length, true);

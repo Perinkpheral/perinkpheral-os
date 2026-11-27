@@ -63,6 +63,7 @@ struct app {
     uint32_t document_offset;
     int document_capacity;
     uint8_t response_policy, poll_policies[APP_POLLS_MAX];
+    uint8_t poll_picks;
     uint32_t    data_buffer_offset; /* where in its memory the application takes data */
     bool        has_data_buffer;
 

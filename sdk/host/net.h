@@ -73,23 +73,17 @@
 APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, int32_t length,
                                          int32_t flags, int32_t http_status));
 
-/* For a poll with "pick", app_on_picked() receives the answer when the
- * effective response format is JSON. The manifest format policy, or
- * Content-Type under automatic selection, determines the format. Other
- * formats use streamed delivery and, where applicable, app_on_document().
- * "pick" is a list of JSON paths, for example "current.temperature_2m" or
- * "daily.weather_code[0]". Perinkpheral OS reads the answer and extracts the
- * values. The application receives this single call instead of pieces.
- * The picker checks balanced, matching containers (up to 64 levels), valid
- * number/true/false/null literals and completed strings with hexadecimal
- * \u escapes. Other escape letters and raw control bytes in strings are
- * not rejected. Member/value separators and a single root value are not
- * enforced: empty input and other malformed documents may be accepted.
- * For responses selected as JSON, a success (2xx) whose body fails these
- * checks gives HOST_FAILED_NO_ANSWER. Other HTTP statuses, such as 401, 404
- * or 503, are handed over as they are, with values only when the body is a
- * whole JSON document (an error message),
- * and none when it is not.
+/* A poll with nonempty "pick" selects JSON and app_on_picked(), regardless
+ * of Content-Type. Explicit raw/XML formats cannot be combined with pick.
+ * "pick" contains JSON paths such as "current.temperature_2m" or
+ * "daily.weather_code[0]". The application receives one call instead of pieces.
+ * The complete body must be one valid JSON value: matching containers (up to
+ * 64 levels), required separators, valid literals and escapes, and strings
+ * without unescaped control characters or invalid UTF-8. A 2xx response with
+ * an invalid body gives HOST_FAILED_NO_ANSWER. Other HTTP statuses, including
+ * 401, 404 and 503, are preserved; an invalid body supplies no values.
+ * Applications must still validate the schema and expected scalar types.
+ * HEAD supplies no values and preserves its HTTP status.
  *
  * request:     poll number in the manifest.
  * http_status: HTTP status, or a HOST_FAILED_* code.
@@ -100,10 +94,12 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * without quotes. Escaped quotes, backslashes and slashes are decoded.
  * Unicode escapes become UTF-8; surrogate escapes combine only when adjacent in the same string,
  * including across input chunks; unpaired surrogates are discarded.
- * Other escaped characters become spaces. Extracted strings are
+ * Short control escapes become spaces. Extracted strings are
  * NUL-terminated internally, so an embedded NUL ends the exposed value.
  * Only ASCII property names are supported reliably; non-ASCII key
- * characters become "?" and can match a path containing "?".
+ * characters become "?" and can match a path containing "?". Property names
+ * containing path delimiters, NUL or control characters are unaddressable;
+ * they cannot impersonate nested properties or array indices.
  * A value is at most HOST_VALUE_MAX bytes; a longer one
  * is cut between characters.
  * Returns HOST_ERR_NOT_FOUND if the answer does not contain the path,
@@ -147,7 +143,7 @@ HOST_IMPORT(answer_item, int32_t answer_item(void));
  * non-2xx responses preserve their HTTP status. */
 typedef struct host_answer_info {
     int32_t status;            /* HTTP status, or a HOST_FAILED_* code */
-    int32_t length;            /* Content-Length; -1 if absent */
+    int32_t length;            /* Content-Length; -1 if absent or outside 0..INT32_MAX */
     int32_t retry_after;       /* Retry-After in seconds; 0 if absent or given as a date */
     char    content_type[48];  /* "application/json; charset=utf-8" */
     char    etag[64];          /* for If-None-Match */
@@ -159,7 +155,7 @@ HOST_LAYOUT(host_answer_info_t, 476);
 /* Copies the first min(capacity, sizeof(host_answer_info_t)) bytes of the
  * Perinkpheral OS's struct, including zeroed absent fields. Returns bytes written,
  * HOST_ERR_ARGUMENT for a negative capacity or invalid destination, or
- * HOST_ERR_NOT_FOUND outside a data handler. Bytes beyond Perinkpheral OS's
+ * HOST_ERR_NOT_FOUND outside app_on_data/app_on_picked/app_on_document. Bytes beyond Perinkpheral OS's
  * struct are untouched; zero the destination first when accepting a
  * shorter struct. Capacity 0 writes nothing and returns 0 in a handler. */
 HOST_IMPORT(answer_info, int32_t answer_info(host_answer_info_t *response, int32_t capacity));
@@ -241,13 +237,20 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  *
  *                  enum { REQUEST_TOKEN = HOST_REQUEST_FIRST, REQUEST_EVENTS };
  *
+ *              Tags span 16..INT32_MAX. For a changing generation, test the
+ *              bound before adding: tag = tag < HOST_REQUEST_LAST ? tag + 1
+ *              : HOST_REQUEST_FIRST. Avoid reusing tags while old answers
+ *              could still arrive. No global uniqueness is guaranteed.
+ *
  * headers:     lines "Name: value" separated by '\n', at most four. The
  *              Perinkpheral OS sends "User-Agent: perinkpheral"; a User-Agent header
  *              given here replaces it. The same for polls. Each name is
  *              at most 31 bytes and each raw value at most 255 bytes.
  *              URL and header input must be printable ASCII. Headers use
  *              LF only; CRLF returns HOST_ERR_ARGUMENT. The body is a byte
- *              buffer and is not subject to this text restriction.
+ *              buffer and is not subject to this text restriction. GET and
+ *              HEAD require body_length == 0; nonempty bodies return
+ *              HOST_ERR_ARGUMENT before queuing.
  * {{key}}      reads the application's KV store, including keys not
  *              declared as settings. An absent declared setting uses its
  *              manifest default. URL values are percent encoded (except
@@ -298,7 +301,7 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
 #define HOST_HTTP_BODY_MAX    512
 #define HOST_HTTP_PENDING_MAX 16
 #define HOST_REQUEST_FIRST    16
-#define HOST_REQUEST_LAST     255
+#define HOST_REQUEST_LAST     INT32_MAX
 HOST_IMPORT(http_send,
             int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_length,
                                  const char *headers, int32_t headers_length,
@@ -315,8 +318,9 @@ HOST_IMPORT(http_send,
  * HOST_OK, or HOST_ERR_FAILED if the override could not be kept or forgotten. */
 HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t seconds));
 
-/* Response representation. Without a manifest format the final response's
- * media type selects JSON or XML. Unknown and absent types stay raw. */
+/* Response representation. Nonempty pick selects JSON. Otherwise, without
+ * a manifest format the final media type selects JSON or XML; unknown and
+ * absent types stay raw. */
 #define HOST_FORMAT_RAW  0
 #define HOST_FORMAT_JSON 1
 #define HOST_FORMAT_XML  2
@@ -327,8 +331,14 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
 #define HOST_SINCE_HOST_DOCUMENT_MAX "0.1.100"
 #define HOST_SINCE_RESPONSE_FORMAT "0.1.100"
 
-/* Register a guest buffer for structured raw responses, normally in
- * app_on_load. Its lifetime is the current instance. The buffer must be
+/* Register application-owned storage for structured responses, normally in
+ * app_on_load. Returns HOST_OK, or HOST_ERR_ARGUMENT for an invalid range,
+ * capacity, overlap, answer callback, or active document collection. A failed
+ * registration leaves the previous registration unchanged. Successful
+ * registration replaces the previous buffer, which may then be reused.
+ * Keep the registered storage valid until replacement or instance unload;
+ * registration is lost at unload and must be restored in app_on_load.
+ * The buffer must be
  * disjoint from app_data_buffer; capacity is 1..HOST_DOCUMENT_MAX.
  * While receiving, leave this buffer untouched until app_on_document.
  * Registration is refused inside an answer callback or while a structured
@@ -352,7 +362,13 @@ HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, in
  * A successful 2xx body is complete and validated, in the registered buffer,
  * with the given length (no NUL). HEAD, 204 and 205 deliver the HTTP status
  * with zero bytes. It remains usable until the next answer
- * or unload. Non-2xx statuses and validation, size or transport errors have
+ * or unload, or until a successful buffer replacement. answer_item(),
+ * answer_info() and answer_header() describe this response inside the callback,
+ * including for a document-only consumer. The callback status includes document
+ * validation/buffer errors. answer_info().status retains the transport status:
+ * for example, malformed JSON can give callback HOST_FAILED_NO_ANSWER with
+ * metadata status 200. Transport failures use HOST_FAILED_* in both places;
+ * terminal failures may lack headers. Non-2xx statuses and validation, size or transport errors have
  * zero length. An interrupted instance has no later completion. Raw MIME
  * and JSON pick polls continue through their own handlers. */
 #define HOST_SINCE_app_on_document "0.1.100"

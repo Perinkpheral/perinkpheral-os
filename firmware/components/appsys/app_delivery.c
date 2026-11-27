@@ -33,6 +33,8 @@ static bool call_handler(app_t *app, const app_delivery_t *delivery)
         app_installed(app);
     } else if (delivery->kind == APP_DELIVERY_UPDATED) {
         app_updated(app);
+    } else if (delivery->kind == APP_DELIVERY_POLL_FAILED) {
+        app_poll_failed(app, delivery->request, delivery->http_status);
     } else if (delivery->kind == APP_DELIVERY_VALUES) {
         app_values(app, delivery->request, delivery->http_status, delivery->picked);
     } else if (delivery->headers_only) {
@@ -50,7 +52,7 @@ static bool call(app_t *app, const app_delivery_t *delivery)
         delivery->loaded(delivery->loaded_context);
     }
     bool is_answer = delivery->kind == APP_DELIVERY_PIECE ||
-                        delivery->kind == APP_DELIVERY_VALUES;
+                        delivery->kind == APP_DELIVERY_VALUES || delivery->kind == APP_DELIVERY_POLL_FAILED;
     if (is_answer) {
         app_answer_begins(app, delivery->response, delivery->headers, delivery->http_status,
                           delivery->has_item ? delivery->item : -1);

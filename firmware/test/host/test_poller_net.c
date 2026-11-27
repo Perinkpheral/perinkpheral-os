@@ -1,8 +1,26 @@
 /* SPDX-License-Identifier: MIT */
 /* The real HTTP fetcher with in-memory reads and no network sockets. */
 #include "tinytest.h"
+#include <stdlib.h>
 #include "freertos/task.h"
+static void *request_calloc(size_t count, size_t size);
+static void *request_malloc(size_t size);
+#define calloc request_calloc
+#define malloc request_malloc
 #include "../../main/poller_net.c"
+#undef calloc
+#undef malloc
+
+static bool fail_request_allocation, fail_list_allocation, fail_client_init, fail_manifest;
+static esp_err_t header_error;
+static void *request_calloc(size_t count, size_t size)
+{
+    return fail_request_allocation ? NULL : calloc(count, size);
+}
+static void *request_malloc(size_t size)
+{
+    return fail_list_allocation && size == HOST_LIST_BYTES ? NULL : malloc(size);
+}
 
 static int response_status, read_failure, read_calls, cleanups, consumer_calls;
 static size_t body_bytes, received;
@@ -18,6 +36,8 @@ static const char *manifest_json;
 static esp_http_client_config_t active_client;
 static char *retry_header;
 static int cooldown_seconds, cooldown_calls;
+static int64_t content_length_override = -2;
+static const char *content_type = "application/json";
 static const char MOCK_BODY[] = "{\"value\":42}";
 static bool mock_success, mock_picked;
 static int delivered_replies;
@@ -36,6 +56,7 @@ int test_shutdown(int socket, int how) { (void)socket; (void)how; CHECK(false); 
 const char *esp_err_to_name(esp_err_t error) { (void)error; return "test error"; }
 esp_err_t esp_crt_bundle_attach(void *config) { (void)config; return ESP_OK; }
 esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config) {
+    if (fail_client_init) return NULL;
     CHECK_STR(config->url, "https://example.test/file");
     active_client = *config;
     return &response_status;
@@ -52,7 +73,7 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t client)
 {
     (void)client;
     if (header_failure != 0) return header_failure;
-    if (active_client.event_handler) reply_header("Content-Type", "application/json");
+    if (active_client.event_handler) reply_header("Content-Type", (char *)content_type);
     if (retry_header != NULL) reply_header("Retry-After", retry_header);
     if (mock_success) {
         reply_header("ETag", "\"revision-1\"");
@@ -86,13 +107,13 @@ esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client) { (vo
 esp_err_t esp_http_client_clear_response_buffer(esp_http_client_handle_t client) { (void)client; return ESP_OK; }
 esp_err_t esp_http_client_close(esp_http_client_handle_t client) { (void)client; return ESP_OK; }
 esp_err_t esp_http_client_get_url(esp_http_client_handle_t client, char *url, int capacity) { (void)client; (void)url; (void)capacity; return ESP_FAIL; }
-esp_err_t esp_http_client_set_header(esp_http_client_handle_t client, const char *name, const char *value) { (void)client; (void)name; (void)value; return ESP_OK; }
+esp_err_t esp_http_client_set_header(esp_http_client_handle_t client, const char *name, const char *value) { (void)client; (void)name; (void)value; return header_error; }
 esp_err_t esp_http_client_delete_header(esp_http_client_handle_t client, const char *name) { (void)client; (void)name; return ESP_OK; }
 int esp_http_client_write(esp_http_client_handle_t client, const char *bytes, int length) { (void)client; (void)bytes; return length; }
 esp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t client, int timeout) { (void)client; (void)timeout; return ESP_OK; }
 bool esp_http_client_is_complete_data_received(esp_http_client_handle_t client) { (void)client; return complete_body; }
 bool esp_http_client_is_chunked_response(esp_http_client_handle_t client) { (void)client; return false; }
-int64_t esp_http_client_get_content_length(esp_http_client_handle_t client) { (void)client; return (int64_t)body_bytes; }
+int64_t esp_http_client_get_content_length(esp_http_client_handle_t client) { (void)client; return content_length_override == -2 ? (int64_t)body_bytes : content_length_override; }
 int esp_http_client_get_and_clear_last_tls_error(esp_http_client_handle_t client, int *error, int *flags) { (void)client; *error = tls_error_code; *flags = certificate_flags; return tls_failure; }
 int esp_http_client_get_errno(esp_http_client_handle_t client) { (void)client; return socket_error; }
 void mbedtls_x509_crt_init(mbedtls_x509_crt *chain) { (void)chain; }
@@ -100,7 +121,7 @@ void mbedtls_x509_crt_free(mbedtls_x509_crt *chain) { (void)chain; }
 int mbedtls_x509_crt_parse(mbedtls_x509_crt *chain, const unsigned char *bytes, size_t length) { (void)chain; (void)bytes; (void)length; return -1; }
 void mbedtls_ssl_conf_ca_chain(mbedtls_ssl_config *config, mbedtls_x509_crt *chain, void *revocations) { (void)config; (void)chain; (void)revocations; }
 int32_t app_kv_get_or_default(const char *name, const char *key, void *value, int32_t capacity) { (void)name; (void)key; (void)value; (void)capacity; return HOST_ERR_NOT_FOUND; }
-char *app_store_read_manifest(const char *root, const char *name) { (void)root; (void)name; return manifest_json == NULL ? NULL : strdup(manifest_json); }
+char *app_store_read_manifest(const char *root, const char *name) { (void)root; (void)name; if (fail_manifest) { errno = ENOMEM; return NULL; } return manifest_json == NULL ? NULL : strdup(manifest_json); }
 long app_store_file_size(const char *root, const char *name, const char *file) { (void)root; (void)name; (void)file; return -1; }
 long app_store_read_file(const char *root, const char *name, const char *file, long offset, void *bytes, size_t capacity) { (void)root; (void)name; (void)file; (void)offset; (void)bytes; (void)capacity; return -1; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
@@ -117,6 +138,10 @@ static bool take(void *context, const uint8_t *piece, size_t length)
 
 static void reset(void)
 {
+    fail_request_allocation = fail_list_allocation = fail_client_init = fail_manifest = false;
+    header_error = ESP_OK;
+    content_length_override = -2;
+    content_type = "application/json";
     online = complete_body = true;
     socket_error = tls_error_code = certificate_flags = header_failure = 0;
     open_error = ESP_FAIL;
@@ -145,6 +170,8 @@ static bool fetch(size_t maximum, int *status)
     return result;
 }
 
+static app_delivery_kind_t delivered_kind;
+static int32_t delivered_length;
 static bool check_delivery(const char *name, const app_delivery_t *answer);
 static bool deliver(const char *name, const app_delivery_t *answer)
 {
@@ -165,6 +192,8 @@ static bool deliver(const char *name, const app_delivery_t *answer)
 
 static bool check_delivery(const char *name, const app_delivery_t *answer)
 {
+    delivered_kind = answer->kind;
+    delivered_length = answer->response != NULL ? answer->response->length : -1;
     delivered_status = answer->http_status;
     failed_before_first_with_type =
         (answer->flags & HOST_DATA_FAILED) &&
@@ -219,6 +248,39 @@ static bool poll_failure(bool picked)
 
 static void test_poll_memory_failures(void)
 {
+    reset();
+    fail_request_allocation = true;
+    bool network_failed = false;
+    int method = -1;
+    CHECK(poller_net_poll("probe", 0, 0, &method, &network_failed) == 0);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_only_on_screen);
+    CHECK(delivered_kind == APP_DELIVERY_POLL_FAILED && !network_failed && method == -1);
+    delivered_status = 0;
+    poller_net_poll_not_made("probe", 0, HOST_FAILED_NO_MEMORY);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_only_on_screen);
+    poller_ask_t ask = { .number = INT32_MAX, .url = "https://example.test/file" };
+    delivered_status = 0;
+    poller_net_request("probe", &ask);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && !delivered_only_on_screen);
+    reset();
+    fail_client_init = true;
+    CHECK(!poll_failure(true));
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_kind == APP_DELIVERY_VALUES);
+    reset();
+    fail_manifest = true;
+    poller_net_poll("probe", 0, 0, &method, &network_failed);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_only_on_screen);
+    reset();
+    header_error = ESP_ERR_NO_MEM;
+    manifest_json = "{\"polls\":[{\"url\":\"https://example.test/file\",\"every\":60,\"headers\":{\"X-Test\":\"value\"}}]}";
+    poller_net_poll("probe", 0, 0, &method, &network_failed);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_only_on_screen && cleanups == 1);
+    reset();
+    fail_list_allocation = true;
+    manifest_json = "{\"polls\":[{\"url\":\"https://example.test/file\",\"every\":60,\"pick\":[\"value[*]\"]}]}";
+    poller_net_poll("probe", 0, 0, &method, &network_failed);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_kind == APP_DELIVERY_VALUES);
+
     const int allocation_errors[] = {
         -0x7F00, /* MBEDTLS_ERR_SSL_ALLOC_FAILED */
         -0x2880, /* MBEDTLS_ERR_X509_ALLOC_FAILED */
@@ -377,10 +439,31 @@ static void test_retry_after(void)
     CHECK(cooldown_calls == 0);
 }
 
+static void test_pick_mime_and_lengths(void)
+{
+    const int64_t lengths[] = { -1, 0, INT32_MAX, (int64_t)INT32_MAX + 1, INT64_MAX };
+    for (size_t index = 0; index < sizeof lengths / sizeof lengths[0]; index++) {
+        reset();
+        content_length_override = lengths[index];
+        content_type = "text/html";
+        response_status = 503;
+        body_bytes = 5;
+        CHECK(!poll_failure(true));
+        CHECK(delivered_kind == APP_DELIVERY_VALUES && delivered_status == 503);
+        CHECK(delivered_length == (lengths[index] <= INT32_MAX ? lengths[index] : -1));
+    }
+    reset();
+    content_type = "text/plain";
+    body_bytes = 0;
+    CHECK(!poll_failure(true));
+    CHECK(delivered_kind == APP_DELIVERY_VALUES && delivered_status == HOST_FAILED_NO_ANSWER);
+}
+
 int main(void)
 {
     const poller_net_host_t host = { .deliver = deliver, .retry_after = record_retry_after };
     poller_net_start(&host);
+    test_pick_mime_and_lengths();
     test_poll_memory_failures();
     test_poll_transport_failures();
     test_retry_after();

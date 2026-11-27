@@ -1056,6 +1056,7 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
         return APP_MANIFEST_BAD_POLL;
     manifest->response_format = (uint8_t)format;
     manifest->poll_count = 0;
+    manifest->poll_picks = 0;
     if (polls == NULL) {
         return APP_MANIFEST_OK;
     }
@@ -1077,6 +1078,9 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
             break;
         }
         manifest->poll_formats[manifest->poll_count] = parsed->response_format;
+        if (parsed->pick_count > 0) {
+            manifest->poll_picks |= (uint8_t)(1u << manifest->poll_count);
+        }
         strcpy(manifest->poll_every_key[manifest->poll_count], parsed->every_key);
         manifest->poll_every_s[manifest->poll_count++] = parsed->every_s;
     }

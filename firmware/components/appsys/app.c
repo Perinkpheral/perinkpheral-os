@@ -687,6 +687,7 @@ void app_response_policy(app_t *app, const app_manifest_t *manifest)
 {
     app->response_policy = manifest->response_format;
     memcpy(app->poll_policies, manifest->poll_formats, sizeof app->poll_policies);
+    app->poll_picks = manifest->poll_picks;
 }
 bool app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags, int status)
 {
@@ -733,6 +734,15 @@ bool app_data_headers(app_t *app, int request, int http_status)
     if (HANDLER(app, app_on_data) && app->has_data_buffer)
         return !app->stop_reason;
     return app_data(app, request, NULL, 0, HOST_DATA_FIRST, http_status);
+}
+
+void app_poll_failed(app_t *app, int request, int status)
+{
+    if (request >= 0 && request < APP_POLLS_MAX && (app->poll_picks & (1u << request))) {
+        app_values(app, request, status, NULL);
+    } else {
+        app_data(app, request, NULL, 0, HOST_DATA_FAILED, status);
+    }
 }
 
 void app_values(app_t *app, int request, int http_status, json_pick_t *picked)
