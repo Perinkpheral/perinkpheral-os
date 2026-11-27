@@ -21,6 +21,9 @@ static int retry_after, round_poll, sent_item, response_ms;
 static bool session_memory = true, page_memory = true;
 static const char *served_manifest;
 static int deliveries, delivered_request, delivered_status;
+static bool reject_delivery, counted_session_recovers, fetch_completes;
+static int fetch_calls, fetch_completions;
+static bool fetch_signal;
 
 const esp_app_desc_t *esp_app_get_description(void) { return &running; }
 const app_manifest_t *launcher_installed(int *count)
@@ -43,7 +46,10 @@ int xSemaphoreTake(SemaphoreHandle_t semaphore, unsigned wait)
     (void)semaphore; (void)wait;
     return pdTRUE;
 }
-void xSemaphoreGive(SemaphoreHandle_t semaphore) { (void)semaphore; }
+void xSemaphoreGive(SemaphoreHandle_t semaphore)
+{
+    if (semaphore == &fetch_signal) fetch_completions++;
+}
 BaseType_t xTaskCreate(void (*task)(void *), const char *name, unsigned stack,
                        void *argument, unsigned priority, TaskHandle_t *handle)
 {
@@ -65,7 +71,12 @@ bool memory_peek(memory_need_t need)
     if (need == MEMORY_FOR_A_PAGE) return page_memory;
     return true;
 }
-bool memory_has(memory_need_t need) { counted_asks++; return memory_peek(need); }
+bool memory_has(memory_need_t need)
+{
+    counted_asks++;
+    if (need == MEMORY_FOR_A_SESSION && counted_session_recovers) session_memory = true;
+    return memory_peek(need);
+}
 bool wifi_is_online(void) { return network.phase == WIFI_PHASE_ONLINE; }
 void wifi_get_status(wifi_status_t *status) { *status = network; }
 bool power_is_saving(void) { return saving_power; }
@@ -91,7 +102,7 @@ bool host_deliver(const char *name, const app_delivery_t *delivery)
     deliveries++;
     delivered_request = delivery->request;
     delivered_status = delivery->http_status;
-    return true;
+    return !reject_delivery;
 }
 char *app_store_read_manifest(const char *root, const char *name)
 {
@@ -174,8 +185,12 @@ void poller_net_tell_failure(const char *name, int number, int why)
 }
 bool poller_net_fetch(const char *url, size_t max_bytes, poller_net_take_fn take, void *context, int *status)
 {
-    (void)url; (void)max_bytes; (void)take; (void)context; (void)status;
-    return false;
+    CHECK_STR(url, "https://example.test/catalog");
+    CHECK(max_bytes == 100 && take != NULL && context == &fetch_calls);
+    fetch_calls++;
+    *status = 200;
+    const uint8_t body[] = "catalog";
+    return take(context, body, sizeof body - 1) && fetch_completes;
 }
 
 static void set_network_online(bool online)
@@ -215,6 +230,14 @@ static void reset_poller(void)
     deliveries = delivered_request = delivered_status = 0;
     s_polled_now_at_ms = -POLL_NOW_EVERY_MS;
     sent_method = HOST_HTTP_GET;
+    counted_asks = fetch_calls = fetch_completions = 0;
+    counted_session_recovers = reject_delivery = false;
+    fetch_completes = true;
+    s_fetch_job = NULL;
+    s_fetch_done = &fetch_signal;
+    s_answering_app = NO_APP;
+    s_answer_invalidated = false;
+    s_answering_poll = false;
     s_lock = xSemaphoreCreateMutex();
 }
 
@@ -751,8 +774,96 @@ static void test_long_retry_after_survives_reload(void)
     CHECK(run_wanted_poll() && requests_sent == 2);
 }
 
+static bool take_catalog(void *context, const uint8_t *piece, size_t length)
+{
+    CHECK(context == &fetch_calls && length == 7 && memcmp(piece, "catalog", length) == 0);
+    return true;
+}
+
+static void test_fetch_job_admission(void)
+{
+    for (int outcome = 0; outcome < 4; outcome++) {
+        reset_poller();
+        CHECK(schedule_installed() == 1);
+        CHECK(!run_fetch_job());
+        fetch_job_t job = { .url = "https://example.test/catalog", .max_bytes = 100,
+                            .take = take_catalog, .context = &fetch_calls };
+        s_fetch_job = &job;
+        session_memory = false;
+        CHECK(run_fetch_job());
+        CHECK(job.wait_until_ms == FETCH_MEMORY_WAIT_MS && job.retry_at_ms == MEMORY_LOOK_AGAIN_MS);
+        CHECK(s_fetch_job == &job && counted_asks == 0 && fetch_completions == 0 && fetch_calls == 0);
+        clock_ms = job.retry_at_ms - 1;
+        CHECK(run_fetch_job());
+        CHECK(s_fetch_job == &job && counted_asks == 0 && fetch_completions == 0);
+        while (job.retry_at_ms < job.wait_until_ms) {
+            clock_ms = job.retry_at_ms;
+            CHECK(run_fetch_job());
+            CHECK(s_fetch_job == &job && counted_asks == 0 && fetch_completions == 0);
+        }
+        clock_ms = job.wait_until_ms;
+        if (outcome == 1) counted_session_recovers = true; /* failed peek, successful final check */
+        if (outcome == 2) session_memory = true;
+        if (outcome == 3) set_network_online(false);
+        CHECK(run_fetch_job());
+        CHECK(s_fetch_job == NULL && fetch_completions == 1);
+        CHECK(counted_asks == (outcome < 2 ? 1 : 0));
+        CHECK(fetch_calls == (outcome == 1 || outcome == 2 ? 1 : 0));
+        CHECK(job.is_whole == (outcome == 1 || outcome == 2));
+        CHECK(job.http_status == (outcome == 0 ? HOST_FAILED_NO_MEMORY : outcome == 3 ? 0 : 200));
+        CHECK(!run_fetch_job() && fetch_completions == 1);
+        session_memory = true;
+        set_network_online(true);
+        deadlines_cancel(DEADLINE_POLLER_LOOK, 0, 0);
+        advance_to(clock_ms);
+        CHECK(run_wanted_poll() && requests_sent == 1);
+    }
+}
+
+static void test_delivery_rejection(void)
+{
+    reset_poller();
+    begin_answer_locked(1, true);
+    app_delivery_t delivery = { .kind = APP_DELIVERY_PIECE, .request = 0,
+        .http_status = 200, .flags = HOST_DATA_FIRST };
+    CHECK(NET_HOST.deliver("probe", &delivery));
+    reject_delivery = true;
+    CHECK(!NET_HOST.deliver("probe", &delivery));
+    CHECK(deliveries == 2);
+    reject_delivery = false;
+    poller_hurry("probe");
+    CHECK(!NET_HOST.deliver("probe", &delivery));
+    CHECK(deliveries == 2);
+}
+
+static void test_queued_request_memory_wait(void)
+{
+    for (int recovers = 0; recovers <= 1; recovers++) {
+        reset_poller();
+        CHECK(schedule_installed() == 1);
+        CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
+              HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
+        session_memory = false;
+        for (int look = 1; look < MEMORY_LOOKS_MAX; look++) {
+            CHECK(!has_memory_for_session());
+            CHECK(!has_waited_for_memory_enough());
+            CHECK(counted_asks == 0 && has_pending_request());
+        }
+        counted_session_recovers = recovers;
+        CHECK(!has_memory_for_session());
+        CHECK(has_waited_for_memory_enough() == !recovers);
+        if (recovers) CHECK(has_memory_for_session());
+        CHECK(counted_asks == 1);
+        CHECK(run_pending_request(recovers ? 0 : HOST_FAILED_NO_MEMORY));
+        CHECK(raw_sent == recovers && failures_told == !recovers && !has_pending_request());
+    }
+}
+
 int main(void)
 {
+    test_fetch_job_admission();
+    test_delivery_rejection();
+    test_queued_request_memory_wait();
     test_request_admission();
     test_long_retry_after_survives_reload();
     test_list_round_stops_when_body_outlasts_retry_after();

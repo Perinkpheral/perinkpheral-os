@@ -178,6 +178,10 @@ void app_response_policy(app_t *app,const app_manifest_t *manifest);
 bool app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags,
               int http_status);
 
+/* Before body reads, complete a decided document-only result. Raw handlers
+ * receive no callback and continue through app_data(). */
+bool app_data_headers(app_t *app, int request, int http_status);
+
 /* Calls app_on_picked() (host_api.h) with the values picked from a JSON
  * answer, which answer_value(), answer_count() and answer_element() read; NULL
  * when there are none. http_status < 0: the request failed, the value is

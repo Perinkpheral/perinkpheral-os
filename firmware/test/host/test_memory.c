@@ -9,6 +9,37 @@
 #include "glyphs.h"
 #include "tinytest.h"
 
+#include <pthread.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+
+static _Thread_local bool failure_lock_held;
+static pthread_mutex_t failure_lock = PTHREAD_MUTEX_INITIALIZER;
+void memory_test_enter(portMUX_TYPE *lock)
+{
+    (void)lock;
+    pthread_mutex_lock(&failure_lock);
+    failure_lock_held = true;
+}
+void memory_test_exit(portMUX_TYPE *lock)
+{
+    (void)lock;
+    failure_lock_held = false;
+    pthread_mutex_unlock(&failure_lock);
+}
+
+static char warning[512];
+void memory_test_log(const char *format, ...)
+{
+    CHECK(!failure_lock_held);
+    va_list arguments;
+    va_start(arguments, format);
+    vsnprintf(warning, sizeof warning, format, arguments);
+    va_end(arguments);
+}
+
 static uint32_t free_bytes = 100 * KB;
 static size_t block_bytes = 64 * KB;
 static int64_t now_us;
@@ -109,6 +140,73 @@ static void test_peeking(void)
     CHECK(after.refusals == before.refusals + 1);
 }
 
+static void *refuse_glyph_packs(void *unused)
+{
+    (void)unused;
+    for (int index = 0; index < 10000; index++)
+        memory_has_glyph_pack(0);
+    return NULL;
+}
+
+static void test_concurrent_refusals(void)
+{
+    memory_counts_t before, after;
+    memory_read(&before);
+    pthread_t workers[4];
+    for (int index = 0; index < 4; index++)
+        CHECK(pthread_create(&workers[index], NULL, refuse_glyph_packs, NULL) == 0);
+    for (int index = 0; index < 4; index++)
+        CHECK(pthread_join(workers[index], NULL) == 0);
+    memory_read(&after);
+    CHECK(after.refusals == before.refusals + 40000);
+}
+
+static void test_failure_details(void)
+{
+    free_bytes = 100 * KB;
+    block_bytes = 64 * KB;
+    memory_look();
+    failed_allocation(12345, 0x5a, "allocation_probe");
+    memory_look();
+    CHECK_STR(warning, "the last one: 12345 bytes, caps 0x5a, allocation_probe");
+    memory_look();
+    failed_allocation(6789, 0xc3, NULL);
+    memory_look();
+    CHECK_STR(warning, "the last one: 6789 bytes, caps 0xc3, ?");
+    memory_counts_t counts;
+    memory_read(&counts);
+    CHECK(counts.failed_allocations == 3);
+}
+
+static void *fail_allocations(void *context)
+{
+    bool second = context != NULL;
+    for (int index = 0; index < 10000; index++)
+        failed_allocation(second ? 2222 : 1111, second ? 0xbb : 0xaa, second ? "second" : "first");
+    return NULL;
+}
+
+static void test_concurrent_failure_details(void)
+{
+    memory_counts_t before, after;
+    memory_read(&before);
+    pthread_t first, second;
+    bool second_context = true;
+    CHECK(pthread_create(&first, NULL, fail_allocations, NULL) == 0);
+    CHECK(pthread_create(&second, NULL, fail_allocations, &second_context) == 0);
+    for (int look = 0; look < 1000; look++) {
+        warning[0] = '\0';
+        memory_look();
+        if (strncmp(warning, "the last one:", 13) == 0) {
+            CHECK(strcmp(warning, "the last one: 1111 bytes, caps 0xaa, first") == 0 ||
+                  strcmp(warning, "the last one: 2222 bytes, caps 0xbb, second") == 0);
+        }
+    }
+    CHECK(pthread_join(first, NULL) == 0 && pthread_join(second, NULL) == 0);
+    memory_read(&after);
+    CHECK(after.failed_allocations == before.failed_allocations + 20000);
+}
+
 int main(void)
 {
     memory_start();
@@ -176,5 +274,8 @@ int main(void)
     CHECK(counts.failed_allocations == 1 && counts.sheds == 2 && counts.refusals == 4);
     test_glyph_admission();
     test_peeking();
+    test_failure_details();
+    test_concurrent_refusals();
+    test_concurrent_failure_details();
     REPORT();
 }

@@ -499,6 +499,31 @@ static void test_refusals_and_metadata(void)
     standin()->is_drawing = false;
 }
 
+static int document_calls, document_status;
+static void record_document(int32_t request, int32_t format, int32_t status, int32_t length)
+{
+    assert(request == 0 && format == HOST_FORMAT_JSON && length == 0);
+    document_calls++;
+    document_status = status;
+}
+
+static void test_document_settings_before_closing(void)
+{
+    standin_handlers_t saved = standin_handlers;
+    standin_handlers = (standin_handlers_t){ .on_document = record_document };
+    standin_reset();
+    document_calls = 0;
+    static const standin_pair_t headers[] = { { "Content-Type", "application/json" } };
+    standin_answer_headers(headers, 1);
+    standin_data(0, -1, 403, "refused", 7, 1, STANDIN_CUT, 0);
+    assert(document_calls == 1 && document_status == 403);
+    standin_settings();
+    standin_answer_headers(headers, 1);
+    standin_data(0, -1, HOST_FAILED_TIMEOUT, NULL, 0, 1, STANDIN_WHOLE, 0);
+    assert(document_calls == 2 && document_status == HOST_FAILED_TIMEOUT);
+    standin_handlers = saved;
+}
+
 int main(void)
 {
     test_arena_alignment();
@@ -510,6 +535,7 @@ int main(void)
     test_drawing();
     test_refusals_and_metadata();
     test_response_headers();
+    test_document_settings_before_closing();
     puts("the stand-in host: store, session, time, timers and alarms, answers, drawing");
     return 0;
 }

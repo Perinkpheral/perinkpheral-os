@@ -35,6 +35,8 @@ static bool call_handler(app_t *app, const app_delivery_t *delivery)
         app_updated(app);
     } else if (delivery->kind == APP_DELIVERY_VALUES) {
         app_values(app, delivery->request, delivery->http_status, delivery->picked);
+    } else if (delivery->headers_only) {
+        return app_data_headers(app, delivery->request, delivery->http_status);
     } else {
         return app_data(app, delivery->request, delivery->data, delivery->length, delivery->flags,
                         delivery->http_status);

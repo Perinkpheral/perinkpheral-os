@@ -55,6 +55,8 @@ typedef struct {
     /* PIECE: the failure that ends an answer nobody took the rest of. It
      * goes only to the instance taking that answer, never starts one. */
     bool is_closing;
+    /* PIECE: inspect headers before reading the body; never a raw callback. */
+    bool headers_only;
     /* PIECE and VALUES: what else is known of the answer, or NULL */
     const struct host_answer_info *response;
     const struct answer_headers *headers; /* borrowed, never retained after the handler */

@@ -2832,7 +2832,7 @@ void standin_intent(int32_t intent)
 
 void standin_settings(void)
 {
-    if (doc_reader.active && doc_reader.request < HOST_REQUEST_FIRST)
+    if ((doc_reader.active || doc_reader.ended) && doc_reader.request < HOST_REQUEST_FIRST)
         doc_reader = (document_reader_t){0};
     CALL(on_settings);
 }

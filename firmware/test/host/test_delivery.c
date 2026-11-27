@@ -14,6 +14,7 @@
 #include "app_scene.h"
 #include "app_store.h"
 #include "host_api.h"
+#include "host.h"
 #include "wm.h"
 #include "question_press.h"
 #include "m3_area.h"
@@ -137,8 +138,25 @@ static void no_header(gfx_t *surface, const scene_t *scene, void *context)
 static char                 root[64];
 static menu_t               menu;
 static scene_t             *probe;
-static wm_t                 wm;
-static app_delivery_state_t state;
+wm_t host_wm;
+app_delivery_state_t host_delivery;
+#define wm host_wm
+#define state host_delivery
+static scene_t *document_scene;
+scene_t *launcher_app_scene(const char *name)
+{
+    return strcmp(name, "document") == 0 ? document_scene : NULL;
+}
+const char *launcher_app_name(const scene_t *scene)
+{
+    return scene == document_scene ? "document" : NULL;
+}
+int64_t esp_timer_get_time(void) { return 0; }
+void poller_answer_was_abandoned(const char *name, int request) { (void)name; (void)request; }
+void host_end_background_answer(void)
+{
+    CHECK(false); /* These cases deliver one owner's answer at a time. */
+}
 
 static void copy_file(const char *from, const char *to)
 {
@@ -1105,9 +1123,41 @@ static void test_question_survives_background_delivery(void)
     app_scene_destroy(settings);
 }
 
+static void test_host_document_rejection(void)
+{
+    start_on(&menu.scene);
+    app_manifest_t manifest = { .name = "document", .title = "Document", .abi = HOST_API_VERSION };
+    char directory[128], path[160];
+    snprintf(directory, sizeof directory, "%s/document", root);
+    CHECK(mkdir(directory, 0755) == 0);
+    snprintf(path, sizeof path, "%s/app.wasm", directory);
+    copy_file("build/document/app.wasm", path);
+    document_scene = app_scene_create(&manifest, root, &SERVICES);
+    CHECK(document_scene != NULL);
+    host_answer_info_t response = { .content_type = "application/json", .status = 403 };
+    app_delivery_t headers = { .kind = APP_DELIVERY_PIECE, .request = 0, .http_status = 403,
+        .response = &response, .flags = HOST_DATA_FIRST, .headers_only = true };
+    /* The real host propagates document-only rejection in foreground and background. */
+    wm_open(&wm, document_scene);
+    CHECK(!host_deliver("document", &headers));
+    app_delivery_t closing = { .kind = APP_DELIVERY_PIECE, .request = 0,
+        .http_status = HOST_FAILED_NO_ANSWER, .flags = HOST_DATA_FAILED, .is_closing = true };
+    CHECK(!host_deliver("document", &closing));
+    wm_open_from_home(&wm, &menu.scene);
+    CHECK(!host_deliver("document", &headers));
+    CHECK(wm.suspended && state.in_background == document_scene);
+    CHECK(!host_deliver("document", &closing));
+    CHECK(!wm.suspended && state.in_background == NULL);
+    CHECK(app_scene_loaded_app(document_scene) == NULL);
+    CHECK(!host_deliver("missing", &headers));
+    app_scene_destroy(document_scene);
+    document_scene = NULL;
+}
+
 int main(void)
 {
     install_probe();
+    test_host_document_rejection();
     test_manifest_ownership();
     test_missing_application_area();
     test_frozen_settings_translation();

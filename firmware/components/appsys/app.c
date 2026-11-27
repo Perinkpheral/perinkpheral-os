@@ -728,6 +728,13 @@ bool app_data(app_t *app, int request, const uint8_t *data, size_t length, int f
            (takes_pieces || (app->document.active && app->document.request == request));
 }
 
+bool app_data_headers(app_t *app, int request, int http_status)
+{
+    if (HANDLER(app, app_on_data) && app->has_data_buffer)
+        return !app->stop_reason;
+    return app_data(app, request, NULL, 0, HOST_DATA_FIRST, http_status);
+}
+
 void app_values(app_t *app, int request, int http_status, json_pick_t *picked)
 {
     app->picked = picked;
@@ -742,7 +749,7 @@ void app_alarm(app_t *app, int id)
 
 void app_settings_changed(app_t *app)
 {
-    if (app->document.active && app->document.request < HOST_REQUEST_FIRST)
+    if ((app->document.active || app->document.ended) && app->document.request < HOST_REQUEST_FIRST)
         app->document = (document_reader_t){0};
     CALL_HANDLER(app, app_on_settings);
 }

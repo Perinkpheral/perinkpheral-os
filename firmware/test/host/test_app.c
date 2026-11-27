@@ -13,6 +13,7 @@
 
 #include "host_api.h"
 #include "budget_wasm.h"
+#include "document_wasm.h"
 #include "every_call_wasm.h"
 #include "probe_wasm.h"
 #include "frozen_probe_wasm.h"
@@ -1131,8 +1132,83 @@ static void test_bulk_memory_budget(void)
     app_unload(app);
 }
 
+static void check_document_result(int count, int status, int length)
+{
+    int32_t result[5];
+    CHECK(fake_kv_get("document", "document", result, sizeof result) == sizeof result);
+    CHECK(result[0] == count && result[1] == 0 && result[2] == HOST_FORMAT_JSON &&
+          result[3] == status && result[4] == length);
+}
+
+static app_t *load_document(bool dual, bool no_buffer)
+{
+    memset(kv_slots, 0, sizeof kv_slots);
+    if (no_buffer) {
+        uint8_t value = 1;
+        fake_kv_set("document", "no_buffer", &value, sizeof value);
+    }
+    app_t *app = NULL;
+    CHECK(app_load("document", HOST_API_VERSION,
+                   dual ? document_dual_wasm : document_wasm,
+                   dual ? sizeof document_dual_wasm : sizeof document_wasm,
+                   0, &SERVICES, &app) == APP_OK);
+    app_manifest_t manifest = { .response_format = HOST_FORMAT_JSON };
+    manifest.poll_formats[0] = HOST_FORMAT_JSON;
+    app_response_policy(app, &manifest);
+    return app;
+}
+
+static void test_document_delivery(void)
+{
+    const uint8_t body[] = "{\"value\":1234}";
+    app_t *app = load_document(false, false);
+    CHECK(!app_data(app, 0, body, sizeof body - 1, HOST_DATA_FIRST, 200));
+    check_document_result(1, HOST_FAILED_TOO_LARGE, 0);
+    CHECK(!app_data(app, 0, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_NO_ANSWER));
+    check_document_result(1, HOST_FAILED_TOO_LARGE, 0);
+    app_unload(app);
+
+    app = load_document(false, true);
+    CHECK(!app_data(app, 0, body, 1, HOST_DATA_FIRST, 200));
+    check_document_result(1, HOST_FAILED_NOT_READY, 0);
+    CHECK(!app_data(app, 0, body + 1, 1, HOST_DATA_LAST, 200));
+    check_document_result(1, HOST_FAILED_NOT_READY, 0);
+    app_unload(app);
+
+    app = load_document(false, false);
+    CHECK(!app_data_headers(app, 0, 403));
+    check_document_result(1, 403, 0);
+    CHECK(!app_data(app, 0, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_NO_ANSWER));
+    check_document_result(1, 403, 0);
+    /* Settings suppress the old closing delivery; the refetch fails before FIRST. */
+    CHECK(!app_data_headers(app, 0, 403));
+    check_document_result(2, 403, 0);
+    app_settings_changed(app);
+    CHECK(!app_data(app, 0, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_TIMEOUT));
+    check_document_result(3, HOST_FAILED_TIMEOUT, 0);
+    app_unload(app);
+
+    app = load_document(true, false);
+    CHECK(app_data_headers(app, 0, 403));
+    int32_t result[5];
+    CHECK(fake_kv_get("document", "piece", result, sizeof result) == HOST_ERR_NOT_FOUND);
+    CHECK(fake_kv_get("document", "document", result, sizeof result) == HOST_ERR_NOT_FOUND);
+    CHECK(app_data(app, 0, body, 2, HOST_DATA_FIRST, 403));
+    CHECK(fake_kv_get("document", "document", result, sizeof result) == HOST_ERR_NOT_FOUND);
+    CHECK(app_data(app, 0, body, 2, HOST_DATA_LAST, 403));
+    check_document_result(1, 403, 0);
+    CHECK(fake_kv_get("document", "piece", result, sizeof result) == sizeof result);
+    CHECK(result[0] == 2 && result[2] == 2 && result[3] == HOST_DATA_LAST && result[4] == 403);
+    CHECK(app_data(app, 0, body, sizeof body - 1, HOST_DATA_FIRST, 200));
+    check_document_result(1, 403, 0);
+    CHECK(app_data(app, 0, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_TIMEOUT));
+    check_document_result(2, HOST_FAILED_TIMEOUT, 0);
+    app_unload(app);
+}
+
 int main(void)
 {
+    test_document_delivery();
     test_screen_inversion();
     test_probe_contract();
     test_scene_state();

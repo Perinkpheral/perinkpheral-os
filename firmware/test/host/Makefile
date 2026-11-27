@@ -146,8 +146,8 @@ test_wifi_search: test_wifi_search.c tinytest.h $(NET)/wifi_search.c $(NET)/incl
 test_wifi_networks: test_wifi_networks.c tinytest.h $(NET)/wifi_networks.c $(NET)/include/wifi_networks.h
 	$(CC) $(CFLAGS) -I$(NET)/include -o $@ test_wifi_networks.c $(NET)/wifi_networks.c
 
-test_memory: test_memory.c tinytest.h $(MAIN)/memory.c $(MAIN)/memory.h $(MAIN)/glyphs.h $(wildcard memory_stubs/*.h)
-	$(CC) $(CFLAGS) -Imemory_stubs -I$(MAIN) -I$(DEADLINES)/include -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(SDK_LIB) -o $@ test_memory.c $(MAIN)/memory.c
+test_memory: test_memory.c tinytest.h $(MAIN)/memory.c $(MAIN)/memory.h $(MAIN)/glyphs.h $(wildcard memory_stubs/*.h memory_stubs/*/*.h)
+	$(CC) $(CFLAGS) -DMEMORY_TEST_LOG -pthread -Imemory_stubs -Iinstall_stubs -I$(MAIN) -I$(DEADLINES)/include -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(SDK_LIB) -o $@ test_memory.c $(MAIN)/memory.c
 
 test_m3_area: test_m3_area.c tinytest.h $(COMP)/wasm3/m3_area.c $(COMP)/wasm3/m3_area.h area_stubs/multi_heap.h
 	$(CC) $(CFLAGS) -Iarea_stubs -I$(COMP)/wasm3 -o $@ test_m3_area.c
@@ -203,7 +203,7 @@ test_wm: test_wm.c tinytest.h $(UI)/back_switch.c $(UI)/include/back_switch.h $(
 test_notice_queue: test_notice_queue.c tinytest.h $(UI)/notice_queue.c $(UI)/include/notice_queue.h $(GFX_DEPS)
 	$(CC) $(CFLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -o $@ test_notice_queue.c $(UI)/notice_queue.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c
 
-test_scenes: test_scenes.c tinytest.h $(MAIN)/header.c $(MAIN)/header.h $(MAIN)/menu_order.c $(MAIN)/menu_order.h $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(MAIN)/scenes.h $(MAIN)/screens.h $(UI)/include/scene.h $(GFX_DEPS)
+test_scenes: test_scenes.c tinytest.h $(UI)/kit.c $(MAIN)/header.c $(MAIN)/header.h $(MAIN)/menu_order.c $(MAIN)/menu_order.h $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(MAIN)/scenes.h $(MAIN)/screens.h $(UI)/include/scene.h $(GFX_DEPS)
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(SDK) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts $(QR_INCS) -o $@ test_scenes.c \
 		$(MAIN)/header.c $(MAIN)/menu_order.c $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR_SRCS)
 
@@ -251,6 +251,18 @@ build/wrongarg/app.wasm: apps/wrongarg/wrongarg.c apps/wrongarg/manifest.json $(
 build/wrongarg_wasm.h: build/wrongarg/app.wasm
 	(echo "static const unsigned char wrongarg_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@
 
+build/document/app.wasm: apps/document/document.c $(TOOLS) $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h)
+	@mkdir -p build/document
+	$(WASI_SDK_PATH)/bin/clang $(subst ;, ,$(shell $(TOOLS) flags compile)) $(subst ;, ,$(shell $(TOOLS) flags link)) -I$(SDK) $< -o $@
+
+build/document_dual/app.wasm: apps/document/document.c $(TOOLS) $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h)
+	@mkdir -p build/document_dual
+	$(WASI_SDK_PATH)/bin/clang $(subst ;, ,$(shell $(TOOLS) flags compile)) $(subst ;, ,$(shell $(TOOLS) flags link)) -I$(SDK) -DDUAL_HANDLER $< -o $@
+
+build/document_wasm.h: build/document/app.wasm build/document_dual/app.wasm
+	(echo "static const unsigned char document_wasm[] = {"; $(call c_bytes,build/document/app.wasm); echo "};"; \
+	 echo "static const unsigned char document_dual_wasm[] = {"; $(call c_bytes,build/document_dual/app.wasm); echo "};") > $@
+
 build/budget/app.wasm: apps/budget/budget.c $(TOOLS)
 	@mkdir -p build/budget
 	$(WASI_SDK_PATH)/bin/clang $(subst ;, ,$(shell $(TOOLS) flags compile)) $(subst ;, ,$(shell $(TOOLS) flags link)) $< -o $@
@@ -274,7 +286,7 @@ build/frozen_probe_wasm.h: ../../../sdk/abi/3/probe/app.wasm
 	@mkdir -p build
 	(echo "static const unsigned char frozen_probe_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@
 
-test_app: test_app.c tinytest.h build/budget_wasm.h build/frozen_probe_wasm.h build/host_imports.inc build/probe_wasm.h build/every_call_wasm.h build/wrongret_wasm.h build/wrongarg_wasm.h $(APP_SRCS) $(APPSYS)/app_internal.h $(APPSYS)/include/app.h $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(WASM3_OBJS)
+test_app: test_app.c tinytest.h build/document_wasm.h build/budget_wasm.h build/frozen_probe_wasm.h build/host_imports.inc build/probe_wasm.h build/every_call_wasm.h build/wrongret_wasm.h build/wrongarg_wasm.h $(APP_SRCS) $(APPSYS)/app_internal.h $(APPSYS)/include/app.h $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(WASM3_OBJS)
 	$(CC) $(CFLAGS) -Ibuild -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) -I$(SDK) -I$(SDK_LIB) \
 		-Dd_m3MaxLinearMemoryPages=1 $(QR_INCS) -o $@ test_app.c $(APP_SRCS) $(SDK_LIB)/json_pick.c $(UI)/list.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR)/qrcodegen/qrcodegen.c $(WASM3_OBJS)
 
@@ -328,10 +340,10 @@ test_polls: test_polls.c tinytest.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c
 		$(APPSTORE)/poll_schedule.c -lm
 
 # mkdtemp and friends are POSIX, not C11.
-test_delivery: test_delivery.c tinytest.h $(COMP)/wasm3/m3_area.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
-	$(CC) $(CFLAGS) -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) \
-		-Dd_m3MaxLinearMemoryPages=1 -Dd_m3ApplicationArea -I$(COMP)/wasm3 $(QR_INCS) -o $@ test_delivery.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
-		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) -lm
+test_delivery: test_delivery.c tinytest.h $(MAIN)/host_apps.c build/document/app.wasm $(COMP)/wasm3/m3_area.h build/host_imports.inc build/probe/app.wasm build/settings/app.wasm $(MAIN)/question_press.c $(MAIN)/question_press.h $(wildcard $(APPSYS)/*.c $(APPSYS)/include/*.h $(APPSTORE)/*.c $(APPSTORE)/include/*.h) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(WASM3_OBJS) $(MANIFEST_SRCS)
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -Inet_stubs -Ipoller_stubs -Iinstall_stubs -Imemory_stubs -Ipersistence_stubs -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) \
+		-Dd_m3MaxLinearMemoryPages=1 -Dd_m3ApplicationArea -I$(COMP)/wasm3 $(QR_INCS) -o $@ test_delivery.c $(MAIN)/host_apps.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
+		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) $(HOST_TEST_LDFLAGS) -lm
 
 test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store.c \

@@ -48,11 +48,40 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
         while (text[end] != '\0' && text[end] != ' ' && end < TEXT_BUFFER - 1) {
             end++;
         }
+        while (end > 0 && gfx_is_utf8_tail(text[end])) {
+            end--;
+        }
         for (int i = 0; i < end; i++) {
             line[i] = text[i];
         }
         line[end] = '\0';
         if (gfx_text_font_width(font, line) > width && fits > 0) {
+            break;
+        }
+        if (gfx_text_font_width(font, line) > width) {
+            int boundary = end;
+            while (boundary > 0) {
+                boundary--;
+                while (boundary > 0 && gfx_is_utf8_tail(text[boundary])) {
+                    boundary--;
+                }
+                line[boundary] = '\0';
+                if (boundary > 0 && gfx_text_font_width(font, line) <= width) {
+                    end = boundary;
+                    break;
+                }
+            }
+            /* A character wider than the line still consumes one whole character. */
+            if (boundary == 0) {
+                end = 1;
+                while (text[end] != '\0' && gfx_is_utf8_tail(text[end])) {
+                    end++;
+                }
+            }
+            fits = after = end;
+            while (text[after] == ' ') {
+                after++;
+            }
             break;
         }
         fits = end;

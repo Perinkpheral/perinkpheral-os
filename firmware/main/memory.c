@@ -5,6 +5,9 @@
 #include "memory.h"
 
 #include <stddef.h>
+#include <stdatomic.h>
+
+#include "freertos/FreeRTOS.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -49,12 +52,13 @@ static const struct {
  * no data for as long as it lasts - a restart puts it back together. */
 #define SESSION_REFUSED_FOR_S (10 * SECONDS_PER_MINUTE)
 
-static volatile uint32_t s_refusals;
-static volatile uint32_t s_failed_allocations;
+static atomic_uint_least32_t s_refusals;
+static portMUX_TYPE s_failure_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_failed_allocations;
 /* The last allocation that found no room: what was asked, of which call. */
-static volatile size_t      s_failed_size;
-static volatile uint32_t    s_failed_caps;
-static const char *volatile s_failed_function;
+static size_t              s_failed_size;
+static uint32_t            s_failed_caps;
+static const char         *s_failed_function;
 static uint32_t          s_failures_seen; /* by the last look */
 static uint32_t          s_sheds;
 static int               s_critical_looks;
@@ -73,10 +77,12 @@ static uint32_t uptime_s(void)
  * and nothing else. */
 static void on_failed_allocation(size_t size, uint32_t caps, const char *function)
 {
+    portENTER_CRITICAL(&s_failure_lock);
     s_failed_size = size;
     s_failed_caps = caps;
     s_failed_function = function; /* a literal of the heap's */
     s_failed_allocations++;
+    portEXIT_CRITICAL(&s_failure_lock);
 }
 
 void memory_start(void)
@@ -118,7 +124,7 @@ bool memory_has(memory_need_t need)
 {
     bool has = memory_peek(need);
     if (!has) {
-        s_refusals++;
+        atomic_fetch_add_explicit(&s_refusals, 1, memory_order_relaxed);
     }
     if (need == MEMORY_FOR_A_SESSION) {
         if (has) {
@@ -134,7 +140,7 @@ bool memory_has_glyph_pack(size_t pack_bytes)
 {
     bool has = glyph_pack_room(pack_bytes);
     if (!has) {
-        s_refusals++;
+        atomic_fetch_add_explicit(&s_refusals, 1, memory_order_relaxed);
     }
     return has;
 }
@@ -150,7 +156,12 @@ void memory_look(void)
 {
     size_t free_bytes = esp_get_free_heap_size();
     size_t block_bytes = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    portENTER_CRITICAL(&s_failure_lock);
     uint32_t failures = s_failed_allocations;
+    size_t failed_size = s_failed_size;
+    uint32_t failed_caps = s_failed_caps;
+    const char *failed_function = s_failed_function;
+    portEXIT_CRITICAL(&s_failure_lock);
     bool is_critical = free_bytes < CRITICAL_FREE_BYTES || block_bytes < CRITICAL_BLOCK_BYTES ||
                        failures != s_failures_seen;
     s_failures_seen = failures;
@@ -174,9 +185,8 @@ void memory_look(void)
         ESP_LOGW(TAG, "short of memory: %u free, %u in one block, %u allocations failed",
                  (unsigned)free_bytes, (unsigned)block_bytes, (unsigned)failures);
         if (failures != 0) {
-            const char *function = s_failed_function;
-            ESP_LOGW(TAG, "the last one: %u bytes, caps 0x%lx, %s", (unsigned)s_failed_size,
-                     (unsigned long)s_failed_caps, function != NULL ? function : "?");
+            ESP_LOGW(TAG, "the last one: %u bytes, caps 0x%lx, %s", (unsigned)failed_size,
+                     (unsigned long)failed_caps, failed_function != NULL ? failed_function : "?");
         }
         if (s_critical_looks == 1) {
             s_sheds++;
@@ -194,7 +204,9 @@ void memory_look(void)
 
 void memory_read(memory_counts_t *counts)
 {
-    counts->refusals = s_refusals;
+    counts->refusals = atomic_load_explicit(&s_refusals, memory_order_relaxed);
+    portENTER_CRITICAL(&s_failure_lock);
     counts->failed_allocations = s_failed_allocations;
+    portEXIT_CRITICAL(&s_failure_lock);
     counts->sheds = s_sheds;
 }

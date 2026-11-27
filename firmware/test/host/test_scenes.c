@@ -6,6 +6,7 @@
 #include "scenes.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #include "gfx_icons.h"
 #include "header.h"
@@ -234,8 +235,26 @@ static void test_text_lines(void)
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "word word word", word + 4, 2) == 2);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "", 400, 4) == 0);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "   ", 400, 4) == 0);
-    /* a word wider than the line is a line of its own, cut */
-    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "wordwordwordword word", word + 4, 4) == 2);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "wordwordwordword word", word + 4, 5) == 5);
+    static uint8_t expected[sizeof frame];
+    gfx_t reference;
+    gfx_init(&reference, expected, 400, 300);
+    const char *texts[] = { "wordwordword", "éééééééééééé" };
+    const char *parts[][3] = { { "word", "word", "word" }, { "éééé", "éééé", "éééé" } };
+    for (int family = GFX_FAMILY_DEPARTURE_MONO; family <= GFX_FAMILY_JERSEY; family++) {
+        gfx_font_use(family);
+        for (int sample = 0; sample < 2; sample++) {
+            memset(frame, 0, sizeof frame);
+            memset(expected, 0, sizeof expected);
+            int width = gfx_text_font_width(kit_font(KIT_TEXT), parts[sample][0]);
+            CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, texts[sample], width, 3) == 3);
+            for (int row = 0; row < 3; row++)
+                kit_text(&reference, 0, row * gfx_font_height(kit_font(KIT_TEXT)), KIT_TEXT,
+                         parts[sample][row], width);
+            CHECK(memcmp(frame, expected, sizeof frame) == 0);
+        }
+    }
+    gfx_font_use(GFX_FAMILY_DEPARTURE_MONO);
 }
 
 static int answers, confirmations;

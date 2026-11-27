@@ -484,6 +484,15 @@ static void fetch_values(request_t *request, esp_http_client_handle_t client,
 static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
                          const char *app_name, int poll_number, int http_status)
 {
+    if (http_status < HTTP_OK_FIRST || http_status > HTTP_OK_LAST) {
+        app_delivery_t headers = { .kind = APP_DELIVERY_PIECE, .request = poll_number,
+            .http_status = http_status, .response = &request->response, .headers = &request->headers,
+            .flags = HOST_DATA_FIRST, .headers_only = true, .has_item = s_item >= 0, .item = s_item };
+        if (!hand_over(app_name, &headers)) {
+            close_unwanted_answer(app_name, poll_number, &request->response, &request->headers);
+            return;
+        }
+    }
     uint8_t *piece = request->piece, *next = request->next_piece;
     cut_at(now_ms() + PIECES_WITHIN_MS);
     int      length = read_piece(client, piece);

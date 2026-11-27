@@ -43,6 +43,8 @@ object PollManifestTest {
                 }
             }
             refused(get + ("format" to "auto"))
+            manifest(get, "0.1.102")
+            ManifestCheck(sdk).check(app)
             accepted(get)
             accepted(get + ("method" to "GET"))
             val pick = get + ("pick" to listOf("value"))

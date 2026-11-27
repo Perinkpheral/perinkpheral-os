@@ -22,7 +22,8 @@ static const char MOCK_BODY[] = "{\"value\":42}";
 static bool mock_success, mock_picked;
 static int delivered_replies;
 static bool refuse_rest;
-static int delivered_pieces, last_flags;
+static int delivered_pieces, last_flags, header_deliveries;
+static bool delivered_closing, refuse_headers;
 
 SemaphoreHandle_t xSemaphoreCreateMutex(void) { return &mutex_taken; }
 int xSemaphoreTake(SemaphoreHandle_t lock, unsigned wait) { (void)wait; CHECK(!*lock); *lock = true; return pdTRUE; }
@@ -122,7 +123,8 @@ static void reset(void)
     tls_failure = ESP_OK;
     delivered_status = delivered_replies = 0;
     refuse_rest = false;
-    delivered_pieces = last_flags = 0;
+    delivered_pieces = last_flags = header_deliveries = 0;
+    delivered_closing = refuse_headers = false;
     mock_success = false;
     manifest_json = NULL;
     retry_header = NULL;
@@ -146,7 +148,16 @@ static bool fetch(size_t maximum, int *status)
 static bool check_delivery(const char *name, const app_delivery_t *answer);
 static bool deliver(const char *name, const app_delivery_t *answer)
 {
+    if (answer->headers_only) {
+        CHECK(read_calls == 0 && answer->flags == HOST_DATA_FIRST && !answer->is_closing);
+        CHECK(answer->length == 0 && answer->data == NULL && answer->response != NULL);
+        CHECK(answer_format(0, answer->headers, answer->response) == HOST_FORMAT_JSON);
+        header_deliveries++;
+        return !refuse_headers;
+    }
     delivered_pieces++;
+    delivered_closing = answer->is_closing;
+    CHECK(!answer->is_closing || answer->flags == HOST_DATA_FAILED);
     last_flags = answer->flags;
     check_delivery(name, answer);
     return !refuse_rest;
@@ -260,6 +271,7 @@ static void test_poll_transport_failures(void)
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_TIMEOUT);
         reset(); body_bytes = 0; read_failure = -1;
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
+        CHECK(!delivered_closing);
         reset(); body_bytes = 0; complete_body = false;
         CHECK(poll_failure(picked)); CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
         if (!picked)
@@ -309,12 +321,39 @@ static void test_unwanted_rest_is_not_read(void)
     CHECK(!poll_failure(false));
     CHECK(read_calls == 2); /* the first piece, and the one read to tell whether it is the last */
     CHECK(delivered_pieces == 2 && last_flags == HOST_DATA_FAILED);
-    CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
+    CHECK(delivered_status == HOST_FAILED_NO_ANSWER && delivered_closing);
 
     reset();
     body_bytes = 8 * HOST_DATA_CHUNK_MAX;
     CHECK(!poll_failure(false));
     CHECK(delivered_pieces == 8 && last_flags == HOST_DATA_LAST && delivered_status == 200);
+}
+
+static void test_headers_refuse_slow_body(void)
+{
+    reset();
+    response_status = 403;
+    body_bytes = 1;
+    complete_body = false;
+    read_failure = -1;
+    expire_read = true;
+    refuse_headers = true;
+    CHECK(!poll_failure(false));
+    CHECK(header_deliveries == 1 && read_calls == 0 && clock_ms == 0);
+    CHECK(delivered_pieces == 1 && delivered_closing && last_flags == HOST_DATA_FAILED);
+    CHECK(cleanups == 1 && !mutex_taken);
+
+    /* Raw consumers accept the header probe and see their original failure sequence. */
+    reset();
+    response_status = 403;
+    body_bytes = 1;
+    complete_body = false;
+    read_failure = -1;
+    expire_read = true;
+    CHECK(!poll_failure(false));
+    CHECK(header_deliveries == 1 && read_calls > 0);
+    CHECK(delivered_pieces == 1 && last_flags == HOST_DATA_FAILED && !delivered_closing);
+    CHECK(delivered_status == HOST_FAILED_TIMEOUT);
 }
 
 static void test_retry_after(void)
@@ -345,6 +384,7 @@ int main(void)
     test_poll_memory_failures();
     test_poll_transport_failures();
     test_retry_after();
+    test_headers_refuse_slow_body();
     test_unwanted_rest_is_not_read();
     test_successful_poll_delivery();
     int status;
