@@ -4,6 +4,11 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.102
+
+- A streamed answer that no application takes any more is no longer read to its end. An answer kept downloading for up to 300 s, and other polls, catalog reads and installs waited behind it, when the application had been left with a button, had stopped, or read only a document that had already failed or been refused. Found by the stress run of 2026-11-27 (docs/testing/stress-2026-11-27.md): an endless answer held the connection for 307 s, now 1.7 s.
+- The short-of-memory warning in the log names the size and kind of the last allocation that failed.
+
 ## 0.1.101
 
 - An application's memory is now what its stack and data take, at most 64 KB, instead of a fixed 64 KB page, and the application area is 112 KB, down from 144 KB: Perinkpheral OS and TLS get 32 KB of heap back, and what an application does not use for data is room for its code. Applications built earlier still load when they fit; rebuilding with this SDK makes them smaller. An application that calls `app_alloc()` declares its arena with `APP_ALLOC_ARENA(bytes)`.

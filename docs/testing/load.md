@@ -3,9 +3,9 @@
 Run load testing after [endurance testing](stability.md) has passed on the same image.
 The scenarios measure resource limits, responsiveness and recovery under sustained load.
 
-Nothing here is automated: `tools/cli` has no workload runner, and under the feature
-freeze of 2026-11-20 none is added to the product. The scenarios use the existing
-commands and a shell loop on the bench computer.
+Nothing here is automated yet: `tools/cli` has no workload runner. The feature freeze
+covers the firmware, not test tools; a runner may be added. The short stress run of
+2026-11-27 is recorded in [stress-2026-11-27.md](stress-2026-11-27.md).
 
 ## Builds
 
