@@ -7,8 +7,8 @@ import java.security.MessageDigest
 import java.io.File
 import java.nio.file.Files
 
-/** Recorded entries stay fixed except approved capacity growth, appended icon IDs and
- * response metadata. Unrecorded entries fail the check too: an unrecorded call could
+/** Checks require exact recorded entries. Snapshots permit approved capacity growth,
+ * appended icon IDs and response metadata. Unrecorded entries fail checks too: a call could
  * change unnoticed. Until ABI 3 is frozen, `unfrozen` permits rewriting recorded entries. */
 object ContractSnapshot {
     /** Input admission and storage reservations may grow. Output bounds, truncation
@@ -36,6 +36,9 @@ object ContractSnapshot {
 
     fun run(sdk: Sdk, wasi: File, out: File, check: Boolean, unfrozen: Boolean = false) {
         val current = entries(sdk, wasi)
+        val polls = current.getValue("constant MANIFEST_POLLS_MAX").toLong()
+        val firstRequest = current.getValue("constant HOST_REQUEST_FIRST").toLong()
+        if (polls > firstRequest) throw BuildError("MANIFEST_POLLS_MAX must not exceed HOST_REQUEST_FIRST ($firstRequest)")
         // An authorized release-baseline rewrite folds pre-release additions into the floor.
         val recordsReleaseBaseline = !check && unfrozen && sdk.version == sdk.firmwareFirst
         if (!recordsReleaseBaseline) checkIntroductionStamps(sdk, current, out)
@@ -59,9 +62,9 @@ object ContractSnapshot {
         if (out.isFile) {
             val recorded = read(out)
             val broken = recorded.filter { (key, value) ->
-                current[key] != value && !limitIncrease(key, value, current) &&
+                current[key] != value && (check || (!limitIncrease(key, value, current) &&
                     !iconCountAddition(key, value, current, recorded) &&
-                    !answerInfoExtension(key, current, recorded)
+                    !answerInfoExtension(key, current, recorded)))
             }
             if (broken.isNotEmpty()) throw BuildError("$label changed:\n" + broken.entries.joinToString("\n") {
                 "  ${it.key}: recorded ${it.value}; now ${current[it.key] ?: "missing"}"

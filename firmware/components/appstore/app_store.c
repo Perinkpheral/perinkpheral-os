@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -224,8 +225,13 @@ bool app_store_prune_translations(const char *root, const char *name)
     DIR *directory = opendir(path);
     if (directory == NULL) return errno == ENOENT;
     bool success = true;
-    struct dirent *entry;
-    while ((entry = readdir(directory)) != NULL) {
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            success = errno == 0;
+            break;
+        }
         if (app_store_is_generated_translation(entry->d_name)) {
             char file[PATH_MAX_BYTES];
             if (!file_path_of(file, root, name, entry->d_name, "") || remove(file) != 0) {
@@ -344,8 +350,13 @@ static bool stage_translation_removals(const char *folder)
     DIR *directory = opendir(folder);
     if (directory == NULL) return false;
     bool success = true;
-    struct dirent *entry;
-    while ((entry = readdir(directory)) != NULL) {
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            success = errno == 0;
+            break;
+        }
         if (!app_store_is_generated_translation(entry->d_name)) continue;
         char incoming[2 * PATH_MAX_BYTES];
         snprintf(incoming, sizeof incoming, "%s/%.*s%s", folder, APP_FILE_NAME_MAX, entry->d_name, INCOMING_SUFFIX);
@@ -535,7 +546,8 @@ static bool data_bytes(const char *root, const char *name, const char *except, b
             continue;
         }
         long size = app_store_file_size(root, name, entry->d_name);
-        if (size < 0 || size > APP_FILES_MAX_BYTES || total > APP_FILES_MAX_BYTES - taken_by(size)) {
+        if (size < 0 || size > LONG_MAX - (MANIFEST_FILE_BLOCK_BYTES - 1) ||
+            total > LONG_MAX - taken_by(size)) {
             break;
         }
         total += taken_by(size);
@@ -590,7 +602,8 @@ app_write_result_t app_store_write_file(const char *root, const char *name, cons
     if (!data_bytes(root, name, file, true, &other_bytes)) {
         return APP_WRITE_FAILED;
     }
-    if (other_bytes + taken_by(size_after) > APP_FILES_WRITER_MAX_BYTES) {
+    if (size_after > APP_FILES_WRITER_MAX_BYTES ||
+        other_bytes > APP_FILES_WRITER_MAX_BYTES - taken_by(size_after)) {
         return APP_WRITE_NO_SPACE;
     }
     FILE *opened = fopen(path, size < 0 ? "wb" : "r+b");

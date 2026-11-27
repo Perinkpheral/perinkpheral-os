@@ -231,7 +231,8 @@ bool app_manifest_accepts_setting(const char *json, const char *key, const char 
  * URL - "api.example.com", "192.168.1.10:32400" - or "{{key}}" for the
  * server the user named in the setting of the "url" type under that key,
  * whose value `value_of` gives. True when the URL is http or https and its
- * host is one of them. The polls of the manifest are the author's own and
+ * host is one of them. On allocation failure, returns false with errno ENOMEM.
+ * The polls of the manifest are the author's own and
  * are not held to the list.
  *
  * A server of the user's own is how an application reaches what lives in

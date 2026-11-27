@@ -342,10 +342,11 @@ static void prepare_in_host_loop(void *argument)
 {
     preparation_t *preparation = argument;
     request_t *request = preparation->request;
+    errno = 0;
     char *manifest = preparation->only_listed_hosts
                          ? app_store_read_manifest(STORAGE_APPS_ROOT, request->app_name) : NULL;
     if (preparation->only_listed_hosts && manifest == NULL) {
-        preparation->failure = HOST_FAILED_NOT_ALLOWED;
+        preparation->failure = errno == ENOMEM ? HOST_FAILED_NO_MEMORY : HOST_FAILED_NOT_ALLOWED;
         return;
     }
     text_request_result_t result = text_template_prepare_request(&request->poll, manifest,

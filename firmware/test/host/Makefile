@@ -98,7 +98,7 @@ test_status: test_status.c tinytest.h $(MAIN)/status.c $(MAIN)/status.h $(NET)/w
 	$(CC) $(CFLAGS) -Ievent_stubs -Iinstall_stubs -Ipersistence_stubs -I$(MAIN) -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -o $@ test_status.c $(MAIN)/status.c $(NET)/wifi_status.c $(NET)/wifi_plan.c
 
 test_poller_net: test_poller_net.c tinytest.h $(MAIN)/poller_net.c $(MAIN)/poller_net.h $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c $(wildcard net_stubs/*.h net_stubs/*/*.h)
-	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Inet_stubs -Ipoller_stubs -Iinstall_stubs -I$(UI)/include -I$(GFX)/include -I$(NET)/include -I$(MAIN) -o $@ test_poller_net.c $(MANIFEST_SRCS) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c -lm
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -Inet_stubs -Ipoller_stubs -Iinstall_stubs -I$(UI)/include -I$(GFX)/include -I$(NET)/include -I$(MAIN) -o $@ test_poller_net.c $(filter-out $(APPSTORE)/json_tree.c,$(MANIFEST_SRCS)) $(APPSTORE)/text_template.c $(APPSYS)/answer_headers.c -lm
 TESTS   += test_host_events
 
 # Unused hardware paths of host.c are discarded; the queue, buttons and frame path run here.

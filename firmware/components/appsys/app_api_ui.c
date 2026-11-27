@@ -673,8 +673,14 @@ HOST_FUNCTION(header_set_text)
     m3ApiGetArg(uint32_t, text_offset);
     m3ApiGetArg(int32_t, length);
     const uint8_t *text = app_memory_at(runtime, _mem, text_offset, length);
-    if ((side != HOST_HEADER_LEFT && side != HOST_HEADER_RIGHT) || text == NULL ||
-        length > HOST_HEADER_TEXT_MAX) {
+    if ((side != HOST_HEADER_LEFT && side != HOST_HEADER_RIGHT) || text == NULL) {
+        m3ApiReturn(HOST_ERR_ARGUMENT);
+    }
+    const uint8_t *end = memchr(text, 0, (size_t)length);
+    if (end != NULL) {
+        length = (int32_t)(end - text);
+    }
+    if (length > HOST_HEADER_TEXT_MAX) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     app_t *app = APP_OF(runtime);
@@ -691,13 +697,21 @@ HOST_FUNCTION(header_set_status)
     m3ApiGetArg(uint32_t, text_offset);
     m3ApiGetArg(int32_t, length);
     app_t *app = APP_OF(runtime);
-    char text[HOST_TEXT_MAX + 1];
+    const uint8_t *given = app_memory_at(runtime, _mem, text_offset, length);
     bool is_valid_icon = icon == HOST_ICON_NONE || (icon >= 0 && icon < GFX_ICON_COUNT);
-    if ((side != HOST_HEADER_LEFT && side != HOST_HEADER_RIGHT) || !is_valid_icon ||
-        length > HOST_STATUS_TEXT_MAX ||
-        !app_text_copy(runtime, _mem, text_offset, length, text)) {
+    if ((side != HOST_HEADER_LEFT && side != HOST_HEADER_RIGHT) || !is_valid_icon || given == NULL) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
+    const uint8_t *end = memchr(given, 0, (size_t)length);
+    if (end != NULL) {
+        length = (int32_t)(end - given);
+    }
+    if (length > HOST_STATUS_TEXT_MAX) {
+        m3ApiReturn(HOST_ERR_ARGUMENT);
+    }
+    char text[HOST_STATUS_TEXT_MAX + 1];
+    memcpy(text, given, (size_t)length);
+    text[length] = '\0';
     if (app->services->header_set_status != NULL) {
         app->services->header_set_status(app->name, side, icon, text);
     }

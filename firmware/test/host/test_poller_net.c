@@ -13,6 +13,27 @@ static void *request_malloc(size_t size);
 #undef calloc
 #undef malloc
 
+static int json_allocations, fail_json_at;
+static bool json_only_authorization, in_host_loop;
+/* ESP-IDF allocators need not set errno when they return NULL. */
+static bool refuse_json_allocation(void)
+{
+    return (!json_only_authorization || in_host_loop) && ++json_allocations == fail_json_at;
+}
+static void *json_test_calloc(size_t count, size_t size)
+{
+    return refuse_json_allocation() ? NULL : calloc(count, size);
+}
+static void *json_test_malloc(size_t size)
+{
+    return refuse_json_allocation() ? NULL : malloc(size);
+}
+#define calloc json_test_calloc
+#define malloc json_test_malloc
+#include "../../components/appstore/json_tree.c"
+#undef calloc
+#undef malloc
+
 static bool fail_request_allocation, fail_list_allocation, fail_client_init, fail_manifest;
 static esp_err_t header_error;
 static void *request_calloc(size_t count, size_t size)
@@ -137,7 +158,7 @@ int32_t app_kv_get_or_default(const char *name, const char *key, void *value, in
 char *app_store_read_manifest(const char *root, const char *name) { (void)root; (void)name; if (fail_manifest) { errno = ENOMEM; return NULL; } return manifest_json == NULL ? NULL : strdup(manifest_json); }
 long app_store_file_size(const char *root, const char *name, const char *file) { (void)root; (void)name; (void)file; return -1; }
 long app_store_read_file(const char *root, const char *name, const char *file, long offset, void *bytes, size_t capacity) { (void)root; (void)name; (void)file; (void)offset; (void)bytes; (void)capacity; return -1; }
-void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
+void events_call_patiently(events_call_fn run, void *argument) { in_host_loop = true; run(argument); in_host_loop = false; }
 bool wifi_is_online(void) { return online; }
 
 static bool take(void *context, const uint8_t *piece, size_t length)
@@ -152,6 +173,8 @@ static bool take(void *context, const uint8_t *piece, size_t length)
 static void reset(void)
 {
     fail_request_allocation = fail_list_allocation = fail_client_init = fail_manifest = false;
+    json_allocations = fail_json_at = 0;
+    json_only_authorization = in_host_loop = false;
     header_error = ESP_OK;
     content_length_override = -2;
     content_type = "application/json";
@@ -283,6 +306,39 @@ static void test_poll_memory_failures(void)
     fail_manifest = true;
     poller_net_poll("probe", 0, 0, &method, &network_failed);
     CHECK(delivered_status == HOST_FAILED_NO_MEMORY && delivered_only_on_screen);
+    reset();
+    fail_manifest = true;
+    poller_net_request("probe", &ask);
+    CHECK(delivered_status == HOST_FAILED_NO_MEMORY && !delivered_only_on_screen);
+    for (int authorization = 0; authorization <= 1; authorization++) {
+        reset();
+        manifest_json = "{\"hosts\":[\"example.test\"],\"polls\":[{\"url\":\"https://example.test/file\",\"every\":60}]}";
+        json_only_authorization = authorization != 0;
+        request_t request = { .poll = { .url = "https://example.test/file" } };
+        preparation_t preparation = { .request = &request, .only_listed_hosts = true };
+        request.app_name = "probe";
+        if (authorization) {
+            events_call_patiently(prepare_in_host_loop, &preparation);
+            CHECK(preparation.failure == 0);
+        } else {
+            CHECK(load_poll(&request, "probe", 0));
+        }
+        int allocations = json_allocations;
+        CHECK(allocations > 0);
+        for (int allocation = 1; allocation <= allocations; allocation++) {
+            json_allocations = 0;
+            fail_json_at = allocation;
+            delivered_status = 0;
+            errno = 0;
+            if (authorization) {
+                poller_net_request("probe", &ask);
+            } else {
+                poller_net_poll("probe", 0, 0, &method, &network_failed);
+            }
+            CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
+            CHECK(delivered_only_on_screen == !authorization);
+        }
+    }
     reset();
     header_error = ESP_ERR_NO_MEM;
     manifest_json = "{\"polls\":[{\"url\":\"https://example.test/file\",\"every\":60,\"headers\":{\"X-Test\":\"value\"}}]}";

@@ -4,6 +4,7 @@
  */
 #include "text_template.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -204,7 +205,7 @@ text_request_result_t text_template_prepare_request(app_poll_t *poll, const char
         return TEXT_REQUEST_NOT_READY;
     }
     if (manifest != NULL && !app_manifest_allows_url(manifest, url, value_of, context)) {
-        return TEXT_REQUEST_NOT_ALLOWED;
+        return errno == ENOMEM ? TEXT_REQUEST_NO_MEMORY : TEXT_REQUEST_NOT_ALLOWED;
     }
     char expanded[APP_HEADER_VALUE_MAX + 1];
     for (int i = 0; i < poll->header_count; i++) {

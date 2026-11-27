@@ -431,7 +431,7 @@ HOST_FUNCTION(xml_child)
     m3ApiGetArg(int32_t, from);
     const char *text = (const char *)app_memory_at(runtime, _mem, document, length);
     const char *name = (const char *)app_memory_at(runtime, _mem, key, key_length);
-    if (!text || (key_length && !name)) {
+    if (!text || !name) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     m3ApiReturn(xml_query_child(text, length, parent, name, key_length, from));

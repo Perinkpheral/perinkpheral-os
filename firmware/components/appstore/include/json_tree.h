@@ -43,7 +43,8 @@ typedef struct json {
 
 /* Parses a terminated text. Returns NULL when it is not one JSON value,
  * is nested deeper than JSON_DEPTH_MAX or memory ran out. The tree is
- * freed with json_free(). */
+ * freed with json_free(). Sets errno to ENOMEM on allocation failure,
+ * EINVAL on invalid input, and zero on success. */
 json_t *json_parse(const char *text);
 
 /* Frees a tree; NULL is allowed. */

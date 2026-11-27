@@ -95,7 +95,9 @@ HOST_IMPORT(screen_set_inverted, int32_t screen_set_inverted(int32_t inverted));
  * date when the user disables the header clock. Blank while time is unknown.
  * The text is drawn in Perinkpheral OS font and size. A text that does not fit
  * is cut with "...". The two sides never overlap.
- * Length 0 returns the side to Perinkpheral OS. A text of one space leaves the
+ * The complete counted range must be valid. Text ends at its first NUL, and
+ * that content must fit HOST_HEADER_TEXT_MAX bytes; longer content is refused.
+ * Empty content returns the side to Perinkpheral OS. A text of one space leaves the
  * side empty.
  * Not a drawing call: callable from any handler. The text is cleared when
  * the application leaves the screen; called off the screen, it has no
@@ -114,7 +116,9 @@ HOST_IMPORT(header_set_text, int32_t header_set_text(int32_t side, const char *t
  * Layout: icon text ... text icon. On HOST_HEADER_LEFT the icon replaces
  * Perinkpheral OS icon and the text follows it. On HOST_HEADER_RIGHT the text
  * replaces the date and the icon follows it.
- * A side belongs to the application that set it last. Length 0 with
+ * The complete counted range must be valid. Text ends at its first NUL, and
+ * that content must fit HOST_STATUS_TEXT_MAX bytes; longer content is refused.
+ * A side belongs to the application that set it last. Empty content with
  * HOST_ICON_NONE releases the side, if this application still owns it.
  * The side is also released when the application is removed and when the
  * device restarts, or an update changes the application's id.

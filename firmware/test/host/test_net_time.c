@@ -41,12 +41,14 @@ int main(void)
         CHECK(net_time_zone_offset() == 3600);
     }
     CHECK(net_time_zone_offset_at(HOST_TIME_MIN) == 3600);
-    CHECK(net_time_zone_offset_at(-1) == 3600);
+    CHECK(net_time_zone_offset_at(-1) == 0);
     CHECK(net_time_zone_offset_at(0) == 3600);
     CHECK(net_time_zone_offset_at(HOST_TIME_MAX) == 3600);
     CHECK(net_time_zone_offset_at(HOST_TIME_MIN - 1) == 0);
     CHECK(net_time_zone_offset_at(HOST_TIME_MAX + 1) == 0);
     net_time_set_zone("CET-1CEST,M3.5.0/2,M10.5.0/3");
+    CHECK(net_time_zone_offset_at(-299851200) == 0); /* 1960-07-01 UTC is unsupported. */
+    CHECK(net_time_zone_offset_at(15681600) == 7200); /* 1970-07-01 12:00 UTC */
     CHECK(net_time_zone_offset_at(946684800) == 3600); /* 2000-01-01 UTC */
     CHECK(net_time_zone_offset_at(962452800) == 7200); /* 2000-07-01 UTC */
     s_automatic = false;

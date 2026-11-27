@@ -332,6 +332,20 @@ static void test_package_files_are_not_written(void)
     CHECK(app_store_file_size(root, "certs", "root.pem") == 5);
 }
 
+static void test_retained_files_exceed_package_limit(void)
+{
+    fresh_root();
+    install("app", "app", "App");
+    static const char data[40 * 1024];
+    write_file("app", "old.dat", data, sizeof data);
+    write_file("app", "new.dat", data, sizeof data);
+    long bytes = -1;
+    CHECK(app_store_files_bytes(root, "app", &bytes) && bytes == 80 * 1024);
+    CHECK(app_store_retained_bytes(root, "app", &bytes) && bytes == 80 * 1024);
+    CHECK(app_store_remove(root, "app"));
+    CHECK(rmdir(root) == 0);
+}
+
 static void test_translation_replacement(void)
 {
     fresh_root();
@@ -366,6 +380,7 @@ static void test_translation_replacement(void)
 int main(void)
 {
     test_translation_replacement();
+    test_retained_files_exceed_package_limit();
     test_list_is_sorted_by_title();
     test_broken_ones_are_passed_over();
     test_capacity_and_missing_root();

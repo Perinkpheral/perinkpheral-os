@@ -10,11 +10,11 @@
 #include "base.h"
 
 /* Moments accepted by time_local_at(), time_text() and time_from_local():
- * 1900-01-01 through 2100-01-01, inclusive, in UTC. Unix seconds may be negative
- * or zero; zero denotes 1970-01-01 for these explicit conversions.
+ * 1970-01-01 through 2100-01-01, inclusive, in UTC. Unix seconds are nonnegative;
+ * zero denotes 1970-01-01 for these explicit conversions.
  * Outside this range: HOST_ERR_ARGUMENT, with destinations unchanged.
  * time_from_local() checks the moment after normalizing the local fields. */
-#define HOST_TIME_MIN (-2208988800LL)
+#define HOST_TIME_MIN 0LL
 #define HOST_TIME_MAX 4102444800LL
 
 /* Current-clock validity and alarm_set_at(): 2026-01-01 through 2100-01-01,

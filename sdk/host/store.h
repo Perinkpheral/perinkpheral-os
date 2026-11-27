@@ -63,8 +63,9 @@ HOST_IMPORT(kv_set, int32_t kv_set(const char *key, int32_t key_length, const vo
  * A file supplied by an update replaces an existing file of the same
  * name, including one written by the application. Generated strings.xx and
  * manifest.xx language tables absent from a replacement package are removed;
- * other files are retained. Builder, installation, update and runtime use the
- * same data quota: translations and certificates count; app.wasm and
+ * other files are retained. An application without writes_files may therefore
+ * retain more than HOST_FILES_MAX across updates. Builder, installation, update
+ * and runtime count the same data files: translations and certificates count; app.wasm and
  * manifest.json do not. Manifest storage is admitted separately. An incomplete
  * quota census fails with HOST_ERR_FAILED. */
 #define HOST_FILE_NAME_MAX    23

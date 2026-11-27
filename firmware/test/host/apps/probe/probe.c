@@ -510,10 +510,6 @@ void app_on_draw(void)
         mark(25, 5);
         mark(manifest_height == 300 ? 27 : 29, 5);
     }
-    if (header_during_draw) {
-        header_set_text(HOST_HEADER_LEFT, "Draw header", 11);
-        header_set_text(HOST_HEADER_RIGHT, "Draw right", 10);
-    }
     host_chart_t validation_chart = { .width = 1, .height = 1, .count = 1,
         .flags = HOST_CHART_FIXED_RANGE, .minimum = 0, .maximum = 10 };
     const int32_t chart_value = 1;
@@ -536,11 +532,33 @@ void app_on_draw(void)
         value[0] == 'o' && value[1] == 'k' &&
         xml_attrs(xml, sizeof xml - 1, 1, (const host_xml_field_t *)0xfffffff0u, 1, value, sizeof value) == HOST_ERR_ARGUMENT &&
         xml_child(xml, sizeof xml - 1, 0, "item", 4, 0) == 1 &&
+        xml_child(xml, sizeof xml - 1, 0, (const char *)0xffffffffu, 0, 0) == HOST_ERR_ARGUMENT &&
+        xml_child(xml, sizeof xml - 1, 0, (const char *)0, 0, 0) == 1 &&
         xml_attr(xml, sizeof xml - 1, 1, "a", 1, 0, value, sizeof value) == 2 &&
         value[0] == 'o' && value[1] == 'k' && value[2] == 0 &&
         xml_child((const char *)0xfffffff0u, 32, -1, 0, 0, 0) == HOST_ERR_ARGUMENT &&
         xml_attr(xml, sizeof xml - 1, 1, "a", 1, 0, (char *)0xfffffff0u, 32) == HOST_ERR_ARGUMENT) {
         mark(8, ROW_SCENE_STATE);
+    }
+    char header_text[64] = "OK";
+    char status_text[32] = "Ready";
+    char excessive_header[HOST_HEADER_TEXT_MAX + 1];
+    char excessive_status[HOST_STATUS_TEXT_MAX + 1];
+    for (unsigned index = 0; index < sizeof excessive_header; index++) excessive_header[index] = 'x';
+    for (unsigned index = 0; index < sizeof excessive_status; index++) excessive_status[index] = 'x';
+    if (header_set_text(HOST_HEADER_LEFT, header_text, sizeof header_text) == HOST_OK &&
+        header_set_status(HOST_HEADER_RIGHT, HOST_ICON_NONE, status_text, sizeof status_text) == HOST_OK &&
+        header_set_text(HOST_HEADER_LEFT, excessive_header, sizeof excessive_header) == HOST_ERR_ARGUMENT &&
+        header_set_status(HOST_HEADER_RIGHT, HOST_ICON_NONE, excessive_status, sizeof excessive_status) == HOST_ERR_ARGUMENT &&
+        header_set_text(HOST_HEADER_LEFT, (const char *)memory_end(), 64) == HOST_ERR_ARGUMENT &&
+        header_set_status(HOST_HEADER_RIGHT, HOST_ICON_NONE, (const char *)memory_end(), 32) == HOST_ERR_ARGUMENT) {
+        mark(34, ROW_SCENE_STATE);
+    }
+    header_set_text(HOST_HEADER_LEFT, "", 0);
+    header_set_status(HOST_HEADER_RIGHT, HOST_ICON_NONE, "", 0);
+    if (header_during_draw) {
+        header_set_text(HOST_HEADER_LEFT, "Draw header", 11);
+        header_set_text(HOST_HEADER_RIGHT, "Draw right", 10);
     }
     if (reads_empty) { mark(0, ROW_SCENE_STATE); }
     if (reads_scene) { mark(2, ROW_SCENE_STATE); }
@@ -794,7 +812,7 @@ void app_on_draw(void)
         mark(18, ROW_LOCAL_TIME);
     }
     static const int64_t invalid_moments[] = {
-        INT64_MIN, INT64_MAX, HOST_TIME_MIN - 1, HOST_TIME_MAX + 1,
+        INT64_MIN, INT64_MAX, -1, -299851200, HOST_TIME_MIN - 1, HOST_TIME_MAX + 1,
     };
     bool range_checked = true;
     for (unsigned i = 0; i < sizeof invalid_moments / sizeof invalid_moments[0]; i++) {
@@ -817,8 +835,8 @@ void app_on_draw(void)
     static const host_local_time_t invalid_fields[] = {
         { .year = INT32_MAX, .month = INT32_MIN, .day = INT32_MAX,
           .hour = INT32_MAX, .minute = INT32_MIN, .second = INT32_MAX },
-        { .year = INT32_MIN }, { .year = 1899 }, { .year = 2101 },
-        { .year = 1900, .month = 1, .day = 1 }, /* before the UTC lower bound in this zone */
+        { .year = INT32_MIN }, { .year = 1969 }, { .year = 2101 },
+        { .year = 1970, .month = 1, .day = 1 }, /* before the UTC lower bound in this zone */
     };
     bool fields_checked = true;
     for (unsigned i = 0; i < sizeof invalid_fields / sizeof invalid_fields[0]; i++) {
@@ -830,13 +848,13 @@ void app_on_draw(void)
         mark(24, ROW_LOCAL_TIME);
     }
     bool boundaries_checked = true;
-    static const int64_t boundaries[] = { HOST_TIME_MIN, -1, 0, 946684800, HOST_CLOCK_MIN - 1, HOST_TIME_MAX };
+    static const int64_t boundaries[] = { 0, 15681600, 946684800, HOST_CLOCK_MIN - 1, HOST_TIME_MAX };
     for (unsigned i = 0; i < sizeof boundaries / sizeof boundaries[0]; i++) {
         host_local_time_t parts;
         boundaries_checked = boundaries_checked && time_local_at(boundaries[i], &parts) == HOST_OK &&
             time_from_local(&parts, &moment) == HOST_OK && moment == boundaries[i];
     }
-    const host_local_time_t carried_year = { .year = 1899, .month = 13, .day = 1, .hour = 1 };
+    const host_local_time_t carried_year = { .year = 1969, .month = 13, .day = 1, .hour = 1 };
     if (boundaries_checked && time_from_local(&carried_year, &moment) == HOST_OK && moment == HOST_TIME_MIN) {
         mark(26, ROW_LOCAL_TIME);
     }

@@ -1,14 +1,17 @@
 /* SPDX-License-Identifier: MIT */
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "app_store.h"
 #include "tinytest.h"
 
-typedef enum { HEALTHY, OPEN_DIR, READ_DIR, CLOSE_DIR, FILE_STAT, SEEK_FILE, READ_FILE, CLOSE_FILE } fault_t;
+typedef enum { HEALTHY, OPEN_DIR, READ_DIR, CLOSE_DIR, FILE_STAT, SEEK_FILE, READ_FILE, CLOSE_FILE,
+               HUGE_FILE, TOTAL_OVERFLOW } fault_t;
 static fault_t fault;
 static DIR *fault_opendir(const char *path)
 {
@@ -28,7 +31,12 @@ static int fault_closedir(DIR *directory)
 static int fault_stat(const char *path, struct stat *found)
 {
     if (fault == FILE_STAT && strstr(path, "cache") != NULL) { errno = EIO; return -1; }
-    return stat(path, found);
+    int result = stat(path, found);
+    if (result == 0 && strstr(path, "cache") != NULL) {
+        if (fault == HUGE_FILE) found->st_size = LONG_MAX;
+        if (fault == TOTAL_OVERFLOW) found->st_size = LONG_MAX - (MANIFEST_FILE_BLOCK_BYTES - 1);
+    }
+    return result;
 }
 static int fault_fseek(FILE *file, long offset, int origin)
 {
@@ -98,6 +106,35 @@ int main(void)
     }
     fault = HEALTHY;
     CHECK(app_store_read_file(root, "app", "cache", 0, bytes, 6) == 6 && memcmp(bytes, "abcdef", 6) == 0);
+    CHECK(app_store_write_file(root, "app", "other", 0, "x", 1) == APP_WRITE_OK);
+    for (fault = HUGE_FILE; fault <= TOTAL_OVERFLOW; fault++) {
+        total = 99;
+        CHECK(!app_store_files_bytes(root, "app", &total) && total == 99);
+    }
+    fault = HEALTHY;
+    snprintf(path, sizeof path, "%s/app/strings.ru", root);
+    file = fopen(path, "wb"); CHECK(file != NULL);
+    fputs("old ids", file); CHECK(fclose(file) == 0);
+    char incoming[APP_STORE_PATH_MAX];
+    CHECK(app_store_begin_file(root, "app", "app.wasm", incoming));
+    file = fopen(incoming, "wb"); CHECK(file != NULL);
+    fputs("new module", file); CHECK(fclose(file) == 0);
+    fault = READ_DIR;
+    CHECK(!app_store_commit_file(root, "app", "app.wasm"));
+    CHECK(app_store_file_size(root, "app", "app.wasm") == APP_FILE_NOT_FOUND);
+    fault = HEALTHY;
+    CHECK(app_store_begin_file(root, "app", "manifest.json", incoming));
+    file = fopen(incoming, "wb"); CHECK(file != NULL);
+    fputs("new manifest", file); CHECK(fclose(file) == 0);
+    fault = READ_DIR;
+    CHECK(!app_store_commit_all(root, "app"));
+    fault = HEALTHY;
+    char *manifest = app_store_read_manifest(root, "app");
+    CHECK(manifest != NULL && strstr(manifest, "\"name\":\"app\"") != NULL);
+    free(manifest);
+    CHECK(app_store_file_size(root, "app", "strings.ru") == 7);
+    CHECK(app_store_commit_all(root, "app"));
+    CHECK(app_store_file_size(root, "app", "strings.ru") == APP_FILE_NOT_FOUND);
     CHECK(app_store_remove(root, "app")); CHECK(rmdir(root) == 0);
     REPORT();
 }

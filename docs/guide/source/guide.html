@@ -115,8 +115,8 @@
   <tr><td>Store key</td><td class="n">1 - 15 characters</td><td>Characters <code>!</code> to <code>~</code></td></tr>
   <tr><td>Store value</td><td class="n">1024 bytes</td><td></td></tr>
   <tr><td>Store total</td><td class="n">2048 bytes</td><td>Per application, settings included, counted as stored: 64 bytes per value plus its length rounded up to a multiple of 32 bytes. Guaranteed for every installed application. Removed applications' stores may be reclaimed when storage is full</td></tr>
-  <tr><td>Files of a package</td><td class="n">64 KB</td><td>Per application. Each file counts as whole 4 KB blocks</td></tr>
-  <tr><td>Files of an application that writes</td><td class="n">32 KB</td><td>With <code>"writes_files": true</code>, unused space within the quota is reserved from installation. Catalog installation counts data files plus the manifest; runtime writes count data files only. Each file is rounded up to 4 KB</td></tr>
+  <tr><td>Files of a package</td><td class="n">64 KB</td><td>Per incoming package; retained files can exceed this after updates. Each file counts as whole 4 KB blocks</td></tr>
+  <tr><td>Files of an application that writes</td><td class="n">32 KB</td><td>With <code>"writes_files": true</code>, unused space within the quota is reserved from installation. Catalog installation and runtime writes count data files only; the module and manifest are excluded. Each file is rounded up to 4 KB</td></tr>
   <tr><td>File name</td><td class="n">1 - 23 characters</td><td><code>a-z 0-9 . - _</code>; the first character is a letter, digit, <code>-</code> or <code>_</code>. Names ending in <code>.new</code> are reserved. <code>file_write()</code> also refuses <code>app.wasm</code>, <code>manifest.json</code>, every name beginning with <code>manifest.</code> and the files the manifest lists in <code>certificates</code></td></tr>
 </table>
 
@@ -244,6 +244,7 @@ static const char PRESSES_KEY[] = "presses";
 
 static int32_t presses;
 static int32_t storage_failed;
+static int32_t restore_failed;
 
 static void draw_line(int32_t line, const char *text)
 {
@@ -257,10 +258,12 @@ void app_on_load(void)
     int32_t length = kv_get(PRESSES_KEY, PRESSES_KEY_LENGTH, &amp;loaded, sizeof loaded);
     presses = length == (int32_t)sizeof loaded &amp;&amp; loaded &gt;= 0 ? loaded : 0;
     storage_failed = length &lt; 0 &amp;&amp; length != HOST_ERR_NOT_FOUND;
+    restore_failed = storage_failed;
 }
 
 void app_on_button(int32_t event)
 {
+    if (restore_failed) return;
     switch (event) {
     case BTN_UP_PRESSED:
     case BTN_OK_PRESSED:
@@ -279,6 +282,10 @@ void app_on_button(int32_t event)
 
 void app_on_draw(void)
 {
+    if (restore_failed) {
+        draw_line(0, "Storage error.");
+        return;
+    }
     char counter_buffer[32];
     app_text_t counter;
     app_text_start(&amp;counter, counter_buffer, sizeof counter_buffer);
@@ -433,7 +440,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <p>Settings are declared in the manifest. The device's web page builds the settings form from the manifest alone. Each value is stored as text in the application's store, under the key of the setting.</p>
 <p>The application reads a setting with <code>kv_get()</code> and the key of the setting.</p>
 <p>Settings form values must be printable ASCII; list values also allow line breaks between items.</p>
-<p>When the user saves the form, Perinkpheral OS calls <code>app_on_settings()</code> and requests all polls again; queued work and active server cooldowns can delay execution.</p>
+<p>When the user saves the form, Perinkpheral OS calls <code>app_on_settings()</code> and requests all automatic polls again; queued work and active server cooldowns can delay execution.</p>
 <h3>Setting fields</h3>
 <table>
   <tr><th style="width:22%">Field</th><th>Rule</th></tr>
@@ -992,7 +999,7 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
 <h1 id="time">11. Time</h1>
 <ul>
   <li><code>time_now()</code> returns Unix time in seconds within <code>HOST_CLOCK_MIN</code> - <code>HOST_CLOCK_MAX</code> (2026-01-01 through 2100-01-01 UTC, inclusive). Outside that range the current clock is unknown: <code>time_now()</code> and <code>time_zone_offset()</code> return 0, and <code>time_local()</code> returns <code>HOST_ERR_NOT_FOUND</code> without changing its destination.</li>
-  <li>Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time. <code>time_local_at()</code> and <code>time_from_local()</code> convert moments from 1900-01-01 through 2100-01-01 UTC, inclusive, using the configured POSIX time-zone rules at that moment. This conversion range is available even while the current clock is unknown; zero denotes 1970-01-01 UTC.</li>
+  <li>Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time. <code>time_local_at()</code> and <code>time_from_local()</code> convert moments from 1970-01-01 through 2100-01-01 UTC, inclusive, using the configured POSIX time-zone rules at that moment. This conversion range is available even while the current clock is unknown; zero denotes 1970-01-01 UTC.</li>
   <li><code>time_text()</code> formats a moment from the conversion range in the device's language. Applications do not need their own names of days and months. Formats: "15:04", "Fri 13 Nov", "Friday", "Fri", "13 November", and a relative form: "15:04", "Tmrw 15:04", "Sat 15:04", "21 Nov". Relative styles show a date such as "21 Nov" while the current clock is unknown.</li>
   <li>To be called for time-zone changes and clock corrections of at least two seconds, declare the <code>time_changed</code> intent. Smaller corrections are not reported.</li>
 </ul>
@@ -1223,7 +1230,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <p>ABI 3 starts with the first public release, firmware 0.2.0. Packages built before that release have no compatibility guarantee and must be rebuilt. After release, changed signatures or meanings require a new ABI. HOST_SINCE_ stamps identify later additions; baseline entries need none. Firmware releases and ABI generations are independent. Missing exports remain optional.</p>
 <p>A module has fixed linear memory of at most 64 KB (65536 bytes); growth is refused by both the build and the runtime. ABI 3 keeps at least 112 KB (114688 bytes) shared by linear memory, interpreter allocations and contract scratch memory. A module within the linear-memory ceiling can still exceed this shared area. Interpreter estimates are advisory. Surface sizes of 400 x 300 or 400 x 260 and ink levels 0..16 are guarantees. Timings, font metrics, dithering patterns and physical panel facts are informative, not compatibility promises. Measure text with the API.</p>
 <p>The supported set is {3}. The manifest ABI is retained through loading and checked before execution. The device page uses ABI membership and the firmware minimum together for Install, Update and Update all; /api/status reports supported_abis. The downloaded manifest is authoritative. Catalog publishing copies identity and compatibility metadata from the packaged manifest.</p>
-<p>tools/perinkpheral contract snapshot records sdk/abi/3.txt and the separate package hashes in sdk/abi/3/fixtures.txt; contract check verifies both. Changed or removed recorded entries are rejected, except for increases of the explicit admission and reservation limits in ContractSnapshot.growableLimits, contiguous appended icon IDs, and appended host_answer_info_t fields beyond its old extent with alignment and every existing field preserved. Output sizes, struct fields and all other layouts remain fixed. Using an increased limit requires an explicit manifest firmware minimum; the builder does not infer it. Later imports, exports and constants require a valid HOST_SINCE_ introduction stamp. At the release floor, an owner-approved --unfrozen snapshot may establish unstamped baseline entries; ordinary snapshots and all checks still require stamps for unrecorded entries. Recorded stamps remain immutable. Before the first public release, owner-approved contract snapshot --unfrozen may rewrite entries. Frozen packages under sdk/abi/3/ and their hashes remain test inputs and are never regenerated to satisfy a compatibility check.</p>
+<p>tools/perinkpheral contract snapshot records sdk/abi/3.txt and the separate package hashes in sdk/abi/3/fixtures.txt; contract check verifies both. Checks require every recorded value to match. Ordinary snapshots permit increases of the explicit admission and reservation limits in ContractSnapshot.growableLimits, contiguous appended icon IDs, and appended host_answer_info_t fields beyond its old extent with alignment and every existing field preserved. MANIFEST_POLLS_MAX cannot exceed HOST_REQUEST_FIRST, keeping poll numbers separate from direct-request tags. Other changes and removals are rejected. Output sizes, struct fields and all other layouts remain fixed. Using an increased limit requires an explicit manifest firmware minimum; the builder does not infer it. Later imports, exports and constants require a valid HOST_SINCE_ introduction stamp. At the release floor, an owner-approved --unfrozen snapshot may establish unstamped baseline entries; ordinary snapshots and all checks still require stamps for unrecorded entries. Recorded stamps remain immutable. Before the first public release, owner-approved contract snapshot --unfrozen may rewrite entries. Frozen packages under sdk/abi/3/ and their hashes remain test inputs and are never regenerated to satisfy a compatibility check.</p>
 <h2>Binary representation and buffers</h2>
 <p>The contract uses wasm32 little-endian C layouts and two's complement signed integers. Pointers are unsigned 32-bit memory offsets; zero is NULL. 32-bit integers and pointers have size/alignment 4, 64-bit integers 8, bytes 1. Structs keep C field order and natural alignment with trailing padding. sdk/abi/3.txt records every size, alignment, field type and offset. String-table size, count and offsets are little-endian 16-bit words. Picture dimensions are bytes; bitmap rows are high-bit first and padded to whole bytes.</p>
 <p>Ordinary input buffers are consumed or copied before an import returns. The exported app_data_buffer and app_strings_buffer storage must remain valid until unload. A registered document buffer must remain valid until successful replacement or unload. Handler data is valid until the handler returns. Lengths and capacities count bytes. The first NUL within a textual argument's supplied range ends its content; the entire supplied range must still be valid application memory. Input truncation preserves UTF-8 boundaries. KV values, sessions, file bytes, HTTP bodies, bitmaps and document buffers remain byte-exact. log_write sanitizes every supplied byte, including NUL. Text outputs have no appended NUL except fields produced by xml_attrs() and the fixed string fields of host_answer_info_t. Only xml_attrs field capacities include their terminators. Unless documented otherwise, status-returning calls reject negative lengths/capacities or invalid memory ranges with HOST_ERR_ARGUMENT.</p>
@@ -1294,7 +1301,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">gfx_draw_map_radius(map, lat_e6, lon_e6, radius_m)</td><td>The ring of places 100000 - 2000000 m from a place, in the current colour, clipped to the map</td></tr>
   <tr><td class="c">void screen_redraw(flags)</td><td>Requests a redraw. Flags: <code>HOST_REDRAW_NORMAL</code>, <code>HOST_REDRAW_SOON</code>, <code>HOST_REDRAW_CLEAN</code>, <code>HOST_REDRAW_NO_BLINK</code>, <code>HOST_REDRAW_QUESTION</code>. QUESTION accepts OK only from a press begun after the question reached the panel</td></tr>
   <tr><td class="c">int32_t screen_set_inverted(int32_t inverted)</td><td>0: normal; nonzero: invert the completed frame, including Perinkpheral OS header. Returns <code>HOST_OK</code>; a change requests a redraw. Scene lifetime and background rules: <a href="#screen-inversion">Whole-screen inversion</a></td></tr>
-  <tr><td class="c">header_set_text(side, text, length)</td><td>Sets the application's text in Perinkpheral OS header above its screen: <code>HOST_HEADER_LEFT</code> or <code>HOST_HEADER_RIGHT</code>, up to 63 bytes. Length 0 returns the side to Perinkpheral OS. Callable from any handler; off the screen it has no effect</td></tr>
+  <tr><td class="c">header_set_text(side, text, length)</td><td>Sets the application's text in Perinkpheral OS header above its screen: <code>HOST_HEADER_LEFT</code> or <code>HOST_HEADER_RIGHT</code>, up to 63 bytes before the first NUL. The complete counted range must be valid; longer content is refused. Empty content returns the side to Perinkpheral OS. Callable from any handler; off the screen it has no effect</td></tr>
 </table>
 
 <p>Drawing coordinates are bounded to -4096 through 4096. Both bitmap calls require positive dimensions no larger than the current surface, even if clipping would hide the excess. QR cell size is 0 - 16.</p>
@@ -1356,7 +1363,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <table>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>
   <tr><td class="c">notification_post(notice)</td><td>Queues a notification from a <code>host_notice_t</code>: first (required), second, detail, icon. <code>HOST_ERR_NO_SPACE</code> when four are queued</td></tr>
-  <tr><td class="c">header_set_status(side, icon, text, length)</td><td>Sets an icon and up to 31 bytes of text above screens with a header, including the owner's screen. A screen's left text wins over kept left status; kept right status wins over screen text. The application that last sets a side owns it. HOST_ICON_NONE with empty text releases it only if the caller still owns it. Cleared by a restart, removal or an update that changes the application id</td></tr>
+  <tr><td class="c">header_set_status(side, icon, text, length)</td><td>Sets an icon and up to 31 bytes of text before the first NUL above screens with a header, including the owner's screen. A screen's left text wins over kept left status; kept right status wins over screen text. The application that last sets a side owns it. HOST_ICON_NONE with empty text releases it only if the caller still owns it. Cleared by a restart, removal or an update that changes the application id</td></tr>
 </table>
 
 <h2 id="ref-store">Store and files</h2>
@@ -1392,7 +1399,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">text_fill(pattern, pattern_length, arguments, count, text, capacity)</td><td>Replaces <code>{0}</code> .. <code>{3}</code> with <code>host_text_argument_t</code> values. The first NUL within a supplied text range ends its content. Pattern and text arguments are each cut to HOST_TEXT_MAX bytes between UTF-8 characters. The output is a prefix of that expansion limited to HOST_TEXT_MAX and capacity, without a terminator. The first character that cannot fit an argument or output limit ends expansion; later suffixes are not appended. Returns bytes copied</td></tr>
   <tr><td class="c">void log_write(level, text, length)</td><td>Writes one log line of up to 200 bytes. Levels: <code>HOST_LOG_ERROR</code>, <code>HOST_LOG_WARN</code>, <code>HOST_LOG_INFO</code>, <code>HOST_LOG_DEBUG</code></td></tr>
 </table>
-<p><code>time_local_at()</code> and <code>time_text()</code> accept Unix seconds -2208988800 through 4102444800: 1900-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). <code>time_from_local()</code> checks the same range after normalizing local fields. Negative seconds and zero are valid conversion arguments. <code>alarm_set_at()</code> and <code>sys_time_set()</code> accept the current-clock range instead: 1767225600 through 4102444800 (<code>HOST_CLOCK_MIN</code> through <code>HOST_CLOCK_MAX</code>). Out-of-range arguments return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged.</p>
+<p><code>time_local_at()</code> and <code>time_text()</code> accept Unix seconds 0 through 4102444800: 1970-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). <code>time_from_local()</code> checks the same range after normalizing local fields. Zero is a valid conversion argument; negative seconds are refused. <code>alarm_set_at()</code> and <code>sys_time_set()</code> accept the current-clock range instead: 1767225600 through 4102444800 (<code>HOST_CLOCK_MIN</code> through <code>HOST_CLOCK_MAX</code>). Out-of-range arguments return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged.</p>
 <h1 id="ref-time">21. Time</h1>
 <table>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>

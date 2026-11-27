@@ -1501,6 +1501,7 @@ int main(int argc, char **argv)
     app_t *text_probe = load_probe();
     draw(text_probe);
     CHECK(gfx_get(&surface, 14, ROW_SCENE_STATE));
+    CHECK(gfx_get(&surface, 34, ROW_SCENE_STATE)); /* header text counts bytes before NUL */
     app_unload(text_probe);
 
     test_manifest_geometry_in_load();

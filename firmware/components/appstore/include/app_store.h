@@ -107,11 +107,12 @@ bool app_store_drop_incoming(const char *root, const char *name);
 void app_store_recover(const char *root);
 
 /* What the application's data files take, excluding the module and manifest:
- * whole blocks, including translations and certificates. False on any census
- * failure; *bytes is then unchanged. */
+ * whole blocks, including translations and certificates. Retained files can
+ * exceed one incoming package's limit after updates; the census does not enforce
+ * admission quotas. False on any census failure; *bytes is then unchanged. */
 bool app_store_files_bytes(const char *root, const char *name, long *bytes);
-/* Replacement removes generated language tables as a set. False on any census
- * failure; *bytes is then unchanged. */
+/* The same census without generated language tables, removed as a set on
+ * replacement. False on any census failure; *bytes is then unchanged. */
 bool app_store_retained_bytes(const char *root, const char *name, long *bytes);
 
 typedef enum {

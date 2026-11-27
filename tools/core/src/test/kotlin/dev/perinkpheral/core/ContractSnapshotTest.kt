@@ -99,7 +99,7 @@ object ContractSnapshotTest {
                 val value = line.substringAfter('\t').toLong()
                 check(value > 1)
                 snapshot.writeText(baseline.replace(line, "$key\t${value - 1}"))
-                run(true) // Previously valid smaller requests remain accepted.
+                refused(key, true) // Checks require every capacity increase to be recorded.
                 run() // Ordinary recording accepts and records growth.
                 check(snapshot.readText() == baseline)
                 snapshot.writeText(baseline.replace(line, "$key\t${value + 1}"))
@@ -114,6 +114,22 @@ object ContractSnapshotTest {
             refused("constant HOST_SESSION_MAX")
             refused("constant HOST_SESSION_MAX", true)
             app.writeText(application)
+            val limits = File(scratch, "sdk/lib/manifest_limits.h")
+            val originalLimits = limits.readText()
+            val firstRequest = sdk.contract.number("HOST_REQUEST_FIRST")
+            for (polls in listOf(firstRequest, firstRequest + 1)) {
+                limits.writeText(originalLimits.replace(Regex("MANIFEST_POLLS_MAX[ \\t]+\\d+"), "MANIFEST_POLLS_MAX $polls"))
+                if (polls == firstRequest) {
+                    refused("constant MANIFEST_POLLS_MAX", true)
+                    run()
+                    run(true)
+                } else {
+                    refused("MANIFEST_POLLS_MAX")
+                    refused("MANIFEST_POLLS_MAX", true)
+                }
+                snapshot.writeText(baseline)
+            }
+            limits.writeText(originalLimits)
             for (name in listOf("HOST_DATA_CHUNK_MAX", "SYS_SETTING_MAX", "HOST_ICON_CELLS",
                 "HOST_TEXT_MAX", "HOST_VALUE_MAX", "HOST_LIST_BYTES", "HOST_HEADER_TEXT_MAX",
                 "MANIFEST_SETTING_VALUE_MAX", "MANIFEST_ICON_CELLS")) {

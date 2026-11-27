@@ -9,6 +9,7 @@ _Static_assert(MANIFEST_PICK_PATHS_MAX == JSON_PICK_PATHS_MAX &&
                    MANIFEST_PICK_PATH_MAX == JSON_PICK_PATH_MAX,
                "a manifest names as many paths, as long, as the picker takes");
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -831,6 +832,7 @@ static bool is_link_value(const char *value)
 bool app_manifest_allows_url(const char *json, const char *url,
                              app_manifest_value_fn value_of, void *context)
 {
+    errno = 0;
     host_t host;
     if (!host_in_url(url, &host)) {
         return false;

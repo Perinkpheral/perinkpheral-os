@@ -76,7 +76,7 @@ defect of the checks:
   can retain one instance across streamed chunks and interleave settings or
   alarms into it; those sequences require interpreter/simulator tests.
 - The header is taken to show the clock, so a frame is drawn again every minute.
-- Time-zone rules cover the full 1900-2100 conversion range. Current-clock queries
+- Time-zone rules cover the full 1970-2100 conversion range. Current-clock queries
   report unknown outside the separate 2026-2100 clock range; the raw test clock
   remains available to the harness.
 - Mock headers describe the final response: no automatic headers, transfer decoding or
@@ -132,7 +132,7 @@ Host-scheduled polling and real HTTP pacing remain simulator concerns.
 
 `clock_probes` is an array of `{ "now": <epoch>, "event": <epoch>, "presses": "O" }`.
 `now` is zero or in `HOST_CLOCK_MIN..HOST_CLOCK_MAX`; `event` is in
-`HOST_TIME_MIN..HOST_TIME_MAX`, including negative seconds and zero.
+`HOST_TIME_MIN..HOST_TIME_MAX`, including zero; negative seconds are refused.
 Exactly one of `event` or `local` is required. For floating calendar times, use
 `{ "now": <epoch>, "local": "2027-03-29T12:00:00", "presses": "O" }`: its date
 is converted with `time_from_local()` independently in each zone before checking the

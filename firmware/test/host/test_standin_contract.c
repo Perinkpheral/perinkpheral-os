@@ -140,7 +140,7 @@ static void test_time_ranges(void)
 {
     standin_reset();
     standin()->zone_offset = 3600;
-    const int64_t moments[] = { HOST_TIME_MIN, -1, 0, 946684800, HOST_CLOCK_MIN - 1,
+    const int64_t moments[] = { 0, 15681600, 946684800, HOST_CLOCK_MIN - 1,
                                 HOST_CLOCK_MIN, HOST_TIME_MAX };
     for (size_t index = 0; index < sizeof moments / sizeof moments[0]; index++) {
         host_local_time_t parts;
@@ -151,6 +151,11 @@ static void test_time_ranges(void)
         CHECK(time_text(moments[index], HOST_TIME_CLOCK, text, sizeof text) == sizeof text);
     }
     CHECK(alarm_set_at(0, HOST_CLOCK_MIN - 1) == HOST_ERR_ARGUMENT);
+    host_local_time_t untouched = { .year = 12345 };
+    char unchanged[] = "keep";
+    CHECK(time_local_at(-1, &untouched) == HOST_ERR_ARGUMENT && untouched.year == 12345);
+    CHECK(time_text(-1, HOST_TIME_CLOCK, unchanged, sizeof unchanged) == HOST_ERR_ARGUMENT &&
+          memcmp(unchanged, "keep", sizeof unchanged) == 0);
     CHECK(alarm_set_at(0, HOST_CLOCK_MAX + 1) == HOST_ERR_ARGUMENT);
     CHECK(alarm_set_at(0, HOST_CLOCK_MIN) == HOST_OK);
     CHECK(alarm_set_at(0, HOST_CLOCK_MAX) == HOST_OK);

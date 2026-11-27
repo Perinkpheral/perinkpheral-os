@@ -11,7 +11,7 @@
 
 #include "gfx_icons.h"
 
-#define TEXT_BUFFER 128 /* a line of the largest text an application may give */
+#define TEXT_BUFFER 128 /* bound native stack use while wrapping longer application text */
 
 /* ---- primitives ---- */
 
@@ -48,6 +48,7 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
         while (text[end] != '\0' && text[end] != ' ' && end < TEXT_BUFFER - 1) {
             end++;
         }
+        bool buffer_full = end == TEXT_BUFFER - 1;
         while (end > 0 && gfx_is_utf8_tail(text[end])) {
             end--;
         }
@@ -89,7 +90,7 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
         while (text[after] == ' ') {
             after++;
         }
-        if (text[after] == '\0' || end >= TEXT_BUFFER - 1 ||
+        if (text[after] == '\0' || buffer_full || after >= TEXT_BUFFER - 1 ||
             gfx_text_font_width(font, line) > width) {
             break;
         }

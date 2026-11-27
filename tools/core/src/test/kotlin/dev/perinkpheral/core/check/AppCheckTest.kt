@@ -343,10 +343,10 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
-        Break("network", "historical conversion probes accept pre-1970 dates and the Unix epoch",
+        Break("network", "historical conversion probes accept dates since the Unix epoch",
             emptyList(), "", checkPatch = mapOf("clock_probes" to listOf(
-                mapOf("now" to 1795262400L, "event" to -2208988800L),
-                mapOf("now" to 1795262400L, "event" to -1L),
+                mapOf("now" to 1795262400L, "event" to 15681600L),
+                mapOf("now" to 1795262400L, "event" to 946684800L),
                 mapOf("now" to 1795262400L, "event" to 0L)))),
 
         Break("network", "poll_run during Retry-After queues deferred work",
@@ -598,7 +598,8 @@ object AppCheckTest {
                     assert(time_local_at(962452800LL, &parts) == HOST_OK);
                     assert(parts.year == 2000 && parts.month == 7 && parts.day == 1 && parts.hour == 14);
                     assert(time_from_local(&parts, &moment) == HOST_OK && moment == 962452800LL);
-                    assert(time_local_at(-2208988800LL, &parts) == HOST_OK && parts.year == 1900);
+                    assert(time_local_at(-1, &parts) == HOST_ERR_ARGUMENT);
+                    assert(time_local_at(0, &parts) == HOST_OK && parts.year == 1970);
                     return 0;
                 }
             """.trimIndent())

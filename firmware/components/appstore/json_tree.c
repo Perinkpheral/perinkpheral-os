@@ -5,6 +5,7 @@
 #include "json_tree.h"
 #include "units.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +28,8 @@ static json_t *new_node(json_type_t type)
     json_t *node = calloc(1, sizeof *node);
     if (node != NULL) {
         node->type = type;
+    } else {
+        errno = ENOMEM;
     }
     return node;
 }
@@ -92,6 +95,7 @@ static char *read_string(reader_t *reader)
     }
     char *copy = malloc((size_t)(end - reader->at));
     if (copy == NULL) {
+        errno = ENOMEM;
         return NULL;
     }
     char *out = copy;
@@ -277,7 +281,9 @@ static json_t *read_value(reader_t *reader)
 
 json_t *json_parse(const char *text)
 {
+    errno = 0;
     if (text == NULL) {
+        errno = EINVAL;
         return NULL;
     }
     reader_t reader = { .at = text };
@@ -288,6 +294,9 @@ json_t *json_parse(const char *text)
             json_free(root);
             root = NULL;
         }
+    }
+    if (root == NULL && errno != ENOMEM) {
+        errno = EINVAL;
     }
     return root;
 }

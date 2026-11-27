@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "gfx_icons.h"
 #include "header.h"
@@ -242,6 +243,21 @@ static void test_text_lines(void)
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "ééé", 1, 8) == 3);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "€€€", 1, 8) == 3);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "😀😀😀", 1, 8) == 3);
+    char spaced[203];
+    memset(spaced, ' ', sizeof spaced);
+    spaced[0] = 'a';
+    spaced[201] = 'b';
+    spaced[202] = '\0';
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, spaced, 400, 4) == 2);
+    char multibyte[161];
+    for (int index = 0; index < 40; index++) {
+        memcpy(multibyte + 4 * index, "😀", 4);
+    }
+    multibyte[160] = '\0';
+    /* A full byte buffer must finish the line even after backing up over UTF-8. */
+    alarm(5);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_CAPTION, multibyte, 400, 4) == 2);
+    alarm(0);
     static uint8_t expected[sizeof frame];
     gfx_t reference;
     gfx_init(&reference, expected, 400, 300);

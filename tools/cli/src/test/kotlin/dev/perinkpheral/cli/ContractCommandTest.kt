@@ -34,8 +34,9 @@ object ContractCommandTest {
             appHeader.writeText(original.replace(
                 Regex("""^#define[ \t]+HOST_SESSION_MAX[ \t]+[^\n]+""", RegexOption.MULTILINE),
                 "#define HOST_SESSION_MAX ${sessionMax + 1}"))
-            command(true, "contract", "check")
+            check("constant HOST_SESSION_MAX" in command(false, "contract", "check"))
             command(true, "contract", "snapshot")
+            command(true, "contract", "check")
             appHeader.writeText(original)
             check("constant HOST_SESSION_MAX" in command(false, "contract", "check"))
             check("constant HOST_SESSION_MAX" in command(false, "contract", "check", "--unfrozen"))

@@ -61,6 +61,47 @@ object SdkDevexTest {
                 139 to "check store fail\ncheck drawing ok\nsanitizer failed")
             check(crashed.all { it.state == AppCheck.State.FAILED })
             if (wasi != null) {
+                val guideApp = File(scratch, "guide/hello").apply { mkdirs() }
+                val guide = File(root, "docs/guide/source/guide.html").readText()
+                val example = guide.substringAfter("<h2 id=\"start-sample\">")
+                    .substringAfter("<pre>").substringBefore("</pre>")
+                    .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+                File(guideApp, "hello.c").writeText("/* SPDX-License-Identifier: MIT */\n$example\n")
+                File(root, "sdk/apps/hello/manifest.json").copyTo(File(guideApp, "manifest.json"))
+                File(guideApp, "test").mkdirs()
+                File(guideApp, "test/restore.c").writeText("""
+                    /* SPDX-License-Identifier: MIT */
+                    #include "host_api.h"
+                    #include "standin.h"
+                    #include <assert.h>
+                    #include <string.h>
+                    static int32_t failed_restore(const char *key, int32_t key_length, void *out, int32_t capacity)
+                    {
+                        (void)key; (void)key_length; (void)out; (void)capacity;
+                        return HOST_ERR_FAILED;
+                    }
+                    #define kv_get failed_restore
+                    #include "../hello.c"
+                    #undef kv_get
+                    int main(void)
+                    {
+                        standin_reset();
+                        int32_t saved = 42, restored = 0;
+                        assert(kv_set("presses", 7, &saved, sizeof saved) == HOST_OK);
+                        int32_t writes = standin()->store_writes;
+                        app_on_load();
+                        app_on_button(BTN_UP_PRESSED);
+                        assert(standin()->store_writes == writes);
+                        assert(kv_get("presses", 7, &restored, sizeof restored) == sizeof restored && restored == saved);
+                        standin()->is_drawing = true;
+                        app_on_draw();
+                        assert(strstr(standin()->draw_text, "Storage error.") != NULL);
+                        assert(strstr(standin()->draw_text, "Presses:") == NULL);
+                        return 0;
+                    }
+                """.trimIndent())
+                val guideReport = checker.run(guideApp, only = "logic")
+                check(guideReport.failed.isEmpty()) { guideReport.failed.joinToString("\n") { it.details.joinToString("\n") } }
                 val fresh = File(scratch, "fresh")
                 Applications.create(root, fresh, "Fresh", "Test Author") { "" }
                 File(fresh, "strings").mkdirs()

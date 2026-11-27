@@ -32,9 +32,8 @@ object SimButtonsTimeTest {
                     char text[8];
                     if (time_now() != 0 || time_zone_offset() != 0 ||
                         time_local(&parts) != HOST_ERR_NOT_FOUND ||
-                        time_local_at(-2208988800LL, &parts) != HOST_OK ||
-                        parts.year != 1900 || parts.hour != 1 ||
-                        time_from_local(&parts, &moment) != HOST_OK || moment != -2208988800LL ||
+                        time_local_at(-1, &parts) != HOST_ERR_ARGUMENT ||
+                        time_local_at(-299851200, &parts) != HOST_ERR_ARGUMENT ||
                         time_local_at(0, &parts) != HOST_OK || parts.year != 1970 || parts.hour != 1 ||
                         time_from_local(&parts, &moment) != HOST_OK || moment != 0 ||
                         time_text(0, HOST_TIME_CLOCK, text, 5) != 5 || text[1] != '1' ||
@@ -62,7 +61,7 @@ object SimButtonsTimeTest {
             """.trimIndent())
             val scenarios = File(scratch, "scenarios").apply { mkdirs() }
             File(scenarios, "scenario.json").writeText(Json.write(mapOf(
-                "app" to app.path, "at" to -2208988800L, "tz" to "Etc/GMT-1",
+                "app" to app.path, "at" to 1L, "tz" to "Etc/GMT-1",
                 "steps" to listOf("shot initial", "press 1 2L 3 4", "shot pressed"))))
             for ((name, x) in listOf("initial" to 0, "pressed" to 1)) {
                 val expected = BufferedImage(400, 300, BufferedImage.TYPE_BYTE_BINARY)
