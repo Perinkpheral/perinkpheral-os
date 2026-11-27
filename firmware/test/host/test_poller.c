@@ -85,12 +85,13 @@ void power_release_radio(void)
 void settings_watch(settings_watch_fn watcher) { (void)watcher; }
 bool events_is_host_loop(void) { return true; }
 void events_call_patiently(events_call_fn run, void *argument) { run(argument); }
-void host_deliver(const char *name, const app_delivery_t *delivery)
+bool host_deliver(const char *name, const app_delivery_t *delivery)
 {
     CHECK_STR(name, "probe");
     deliveries++;
     delivered_request = delivery->request;
     delivered_status = delivery->http_status;
+    return true;
 }
 char *app_store_read_manifest(const char *root, const char *name)
 {

@@ -688,13 +688,13 @@ void app_response_policy(app_t *app, const app_manifest_t *manifest)
     app->response_policy = manifest->response_format;
     memcpy(app->poll_policies, manifest->poll_formats, sizeof app->poll_policies);
 }
-void app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags, int status)
+bool app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags, int status)
 {
     if (length > HOST_DATA_CHUNK_MAX || app->stop_reason)
-        return;
+        return false;
     uint8_t *memory = m3_GetMemory(app->runtime, NULL, 0);
     if (!memory)
-        return;
+        return false;
     if (HANDLER(app, app_on_data) && app->has_data_buffer) {
         if (length)
             memcpy(memory + app->data_buffer_offset, data, length);
@@ -702,11 +702,12 @@ void app_data(app_t *app, int request, const uint8_t *data, size_t length, int f
                      (int32_t)length, (int32_t)flags, (int32_t)status);
     }
     if (app->stop_reason)
-        return;
+        return false;
     memory = m3_GetMemory(app->runtime, NULL, 0);
     if (!memory)
-        return;
+        return false;
     bool done = false;
+    bool takes_pieces = HANDLER(app, app_on_data) && app->has_data_buffer;
     if (HANDLER(app, app_on_document)) {
         int policy = request >= 0 && request < APP_POLLS_MAX ? app->poll_policies[request]
                                                              : app->response_policy;
@@ -715,10 +716,16 @@ void app_data(app_t *app, int request, const uint8_t *data, size_t length, int f
         done = document_reader_feed(&app->document, buffer, app->document_capacity, request, format,
                                     status, data, (int)length, flags,
                                     app->headers && app->headers->head_response);
+        /* A document that has already failed is told so now when nothing else reads the
+         * answer: the rest of it is not worth the one connection the device has. */
+        if (!done && !takes_pieces)
+            done = document_reader_end_early(&app->document);
     }
     if (done && !app->stop_reason)
         CALL_HANDLER(app, app_on_document, (int32_t)request, (int32_t)app->document.format,
                      (int32_t)app->document.status, (int32_t)app->document.used);
+    return !app->stop_reason &&
+           (takes_pieces || (app->document.active && app->document.request == request));
 }
 
 void app_values(app_t *app, int request, int http_status, json_pick_t *picked)

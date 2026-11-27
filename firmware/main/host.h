@@ -85,7 +85,8 @@ bool host_remove_app_later(const char *app_name);
 void host_start_once(const char *app_name);
 
 /* Gives the application what is for it, on the screen or off it. */
-void host_deliver(const char *app_name, const app_delivery_t *delivery);
+/* Returns whether somebody takes the rest of an answer given piece by piece. */
+bool host_deliver(const char *app_name, const app_delivery_t *delivery);
 
 /* Takes the application off the screen and out of the stack, its last
  * handlers run, before its files go: what it saves in app_on_terminate()

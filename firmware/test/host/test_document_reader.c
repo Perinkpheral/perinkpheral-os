@@ -68,6 +68,25 @@ int main(void)
     CHECK(document_reader_feed(&r, buf, 32, 9, 2, 200, json, n, HOST_DATA_FIRST | HOST_DATA_LAST,
                                false));
     CHECK(r.status == HOST_FAILED_NO_ANSWER && !r.used);
+    /* A document too large for its buffer is failed before the rest of its answer comes,
+     * once: the rest of that answer, its failure among them, gives no second result. */
+    CHECK(!document_reader_end_early(&r));
+    CHECK(!document_reader_feed(&r, buf, 4, 10, 1, 200, json, n, HOST_DATA_FIRST, false));
+    CHECK(r.active && r.error == HOST_FAILED_TOO_LARGE);
+    CHECK(document_reader_end_early(&r));
+    CHECK(r.status == HOST_FAILED_TOO_LARGE && !r.used && !r.active);
+    CHECK(!document_reader_end_early(&r));
+    CHECK(!document_reader_feed(&r, buf, 4, 10, 1, 200, json, n, 0, false));
+    CHECK(!document_reader_feed(&r, buf, 4, 10, 0, HOST_FAILED_NO_ANSWER, NULL, 0,
+                                HOST_DATA_FAILED, false));
+    CHECK(r.status == HOST_FAILED_TOO_LARGE);
+    /* The next answer of the same request, failing before its FIRST, is told. */
+    CHECK(document_reader_feed(&r, buf, 4, 10, 1, HOST_FAILED_NO_NETWORK, NULL, 0,
+                               HOST_DATA_FAILED, false));
+    CHECK(r.status == HOST_FAILED_NO_NETWORK);
+    /* A document still being read is not ended. */
+    CHECK(!document_reader_feed(&r, buf, 32, 11, 1, 200, json, 3, HOST_DATA_FIRST, false));
+    CHECK(!document_reader_end_early(&r) && r.active);
     const char *invalid[] = {"",
                              "   ",
                              "[1 2]",

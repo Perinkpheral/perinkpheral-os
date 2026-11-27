@@ -100,6 +100,10 @@ void app_delivery_init(app_delivery_state_t *state);
 typedef struct {
     scene_t *owner;
     int      request;
+    /* app_deliver() of a piece that is not the last: nobody takes the rest
+     * of this answer - the instance that took its first piece is gone or
+     * stopped, or reads neither pieces nor a document any more. */
+    bool     rest_unwanted;
 } app_abandoned_t;
 
 /* A press of the user's, at `now_ms`. */

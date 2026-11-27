@@ -20,7 +20,8 @@ void app_delivery_init(app_delivery_state_t *state)
     state->settings_ms = 0;
 }
 
-static void call_handler(app_t *app, const app_delivery_t *delivery)
+/* Returns whether the instance takes the rest of an answer given piece by piece. */
+static bool call_handler(app_t *app, const app_delivery_t *delivery)
 {
     if (delivery->kind == APP_DELIVERY_ALARM) {
         app_alarm(app, delivery->request);
@@ -35,12 +36,13 @@ static void call_handler(app_t *app, const app_delivery_t *delivery)
     } else if (delivery->kind == APP_DELIVERY_VALUES) {
         app_values(app, delivery->request, delivery->http_status, delivery->picked);
     } else {
-        app_data(app, delivery->request, delivery->data, delivery->length, delivery->flags,
-                 delivery->http_status);
+        return app_data(app, delivery->request, delivery->data, delivery->length, delivery->flags,
+                        delivery->http_status);
     }
+    return true;
 }
 
-static void call(app_t *app, const app_delivery_t *delivery)
+static bool call(app_t *app, const app_delivery_t *delivery)
 {
     if (delivery->loaded != NULL) {
         delivery->loaded(delivery->loaded_context);
@@ -51,10 +53,11 @@ static void call(app_t *app, const app_delivery_t *delivery)
         app_answer_begins(app, delivery->response, delivery->headers, delivery->http_status,
                           delivery->has_item ? delivery->item : -1);
     }
-    call_handler(app, delivery);
+    bool takes_rest = call_handler(app, delivery);
     if (is_answer) {
         app_answer_ends(app);
     }
+    return takes_rest;
 }
 
 /* Nothing more of this answer will come. */
@@ -150,6 +153,7 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
         if (state->answer_owner == owner && state->answer_request == delivery->request && is_last(delivery)) {
             state->answer_owner = NULL;
         }
+        abandoned.rest_unwanted = true;
         return abandoned;
     }
     if (delivery->kind == APP_DELIVERY_SETTINGS && state->answer_owner == owner &&
@@ -160,8 +164,9 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     bool is_on_screen = wm->current == owner && !wm->suspended;
     if (is_on_screen) {
         app_t *app = app_scene_loaded_app(owner);
+        abandoned.rest_unwanted = app == NULL;
         if (app != NULL) {
-            call(app, delivery);
+            abandoned.rest_unwanted = !call(app, delivery);
             note_piece(state, owner, delivery);
             /* On the screen there is nothing to ask for. */
             app_take_focus_request(app);
@@ -189,6 +194,7 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     }
 
     if (delivery->only_on_screen) {
+        abandoned.rest_unwanted = true;
         return abandoned;
     }
     /* The rest of the old poll will be suppressed. Start the settings
@@ -217,9 +223,7 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
         app = app_scene_begin_background(owner);
         state->in_background = owner;
     }
-    if (app != NULL) {
-        call(app, delivery);
-    }
+    abandoned.rest_unwanted = app == NULL || !call(app, delivery);
     if (app == NULL && app_scene_needs_memory(owner) &&
         (delivery->kind == APP_DELIVERY_PIECE || delivery->kind == APP_DELIVERY_VALUES)) {
         abandoned = (app_abandoned_t){ .owner = owner, .request = delivery->request };

@@ -172,7 +172,10 @@ void app_answer_begins(app_t *app, const struct host_answer_info *response,
 void app_answer_ends(app_t *app);
 
 void app_response_policy(app_t *app,const app_manifest_t *manifest);
-void app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags,
+/* Hands one piece to app_on_data() and the document reader. Returns whether
+ * the instance takes the rest of the answer: it has app_on_data(), or its
+ * document is still being read. */
+bool app_data(app_t *app, int request, const uint8_t *data, size_t length, int flags,
               int http_status);
 
 /* Calls app_on_picked() (host_api.h) with the values picked from a JSON

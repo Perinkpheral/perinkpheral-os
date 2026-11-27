@@ -20,6 +20,12 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
                                  .status = status,
                                  .active = format != HOST_FORMAT_RAW};
     }
+    if (r->ended && r->request == request && !(flags & HOST_DATA_FIRST)) {
+        /* The rest of an answer whose result was given early. */
+        if (flags & (HOST_DATA_LAST | HOST_DATA_FAILED))
+            r->ended = false;
+        return false;
+    }
     if (flags & HOST_DATA_FAILED) {
         if (r->active && r->request != request)
             return false;
@@ -53,5 +59,16 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
         r->status = r->error;
         r->used = 0;
     }
+    return true;
+}
+
+bool document_reader_end_early(document_reader_t *r)
+{
+    if (!r->active || !r->error)
+        return false;
+    r->active = false;
+    r->ended = true;
+    r->status = r->error;
+    r->used = 0;
     return true;
 }

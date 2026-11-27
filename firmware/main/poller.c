@@ -116,6 +116,7 @@ void poller_look(void)
 typedef struct {
     const char           *app_name;
     const app_delivery_t *delivery;
+    bool                  is_rest_wanted;
 } handed_t;
 
 /* Whose request is under way, by id: an application updated meanwhile has
@@ -140,20 +141,19 @@ static void begin_answer_locked(uint32_t app, bool is_poll)
 
 static void deliver_in_host_loop(void *argument)
 {
-    const handed_t       *handed = argument;
+    handed_t             *handed = argument;
     const app_manifest_t *app = launcher_find(handed->app_name);
     lock();
     bool current = app != NULL && app->id == s_answering_app && !s_answer_invalidated;
     unlock();
-    if (current) {
-        host_deliver(handed->app_name, handed->delivery);
-    }
+    handed->is_rest_wanted = current && host_deliver(handed->app_name, handed->delivery);
 }
 
-static void hand_over(const char *app_name, const app_delivery_t *delivery)
+static bool hand_over(const char *app_name, const app_delivery_t *delivery)
 {
     handed_t handed = { .app_name = app_name, .delivery = delivery };
     events_call_patiently(deliver_in_host_loop, &handed);
+    return handed.is_rest_wanted;
 }
 
 /* Under the poller lock. The same deadline covers an application's polls

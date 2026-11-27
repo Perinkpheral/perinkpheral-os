@@ -374,7 +374,8 @@ static void test_foreground_stream_interrupted_by_navigation(void)
     int calls = 0;
     app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = 1, .http_status = 200,
         .flags = HOST_DATA_FIRST, .loaded = count_delivery, .loaded_context = &calls };
-    CHECK(app_deliver(&state, &wm, probe, &piece, 0).owner == NULL);
+    app_abandoned_t taken = app_deliver(&state, &wm, probe, &piece, 0);
+    CHECK(taken.owner == NULL && !taken.rest_unwanted); /* the probe reads pieces */
     uint64_t instance = app_scene_instance(probe);
     wm_button(&wm, SCENE_BUTTON_BACK, SCENE_PRESS_LONG);
     CHECK(app_scene_instance(probe) == 0);
@@ -383,6 +384,7 @@ static void test_foreground_stream_interrupted_by_navigation(void)
     piece.flags = 0;
     app_abandoned_t abandoned = app_deliver(&state, &wm, probe, &piece, 1);
     CHECK(abandoned.owner == probe && abandoned.request == 1 && calls == 1);
+    CHECK(abandoned.rest_unwanted); /* the instance that took the beginning is gone */
     piece.flags = HOST_DATA_LAST;
     CHECK(app_deliver(&state, &wm, probe, &piece, 2).owner == NULL);
     CHECK(calls == 1);

@@ -132,9 +132,9 @@ void poller_net_start(const poller_net_host_t *host)
     ESP_ERROR_CHECK(esp_timer_create(&timer, &s_cut.timer));
 }
 
-static void hand_over(const char *app_name, const app_delivery_t *delivery)
+static bool hand_over(const char *app_name, const app_delivery_t *delivery)
 {
-    s_host->deliver(app_name, delivery);
+    return s_host->deliver(app_name, delivery);
 }
 
 /* The item of a list a poll with "each" goes over: -1 for any other. */
@@ -150,7 +150,7 @@ static void hand_over_values(const char *app_name, int request, int http_status,
     hand_over(app_name, &delivery);
 }
 
-static void hand_over_piece(const char *app_name, int request, int http_status,
+static bool hand_over_piece(const char *app_name, int request, int http_status,
                             const host_answer_info_t *response, const answer_headers_t *headers,
                             const uint8_t *data, size_t length,
                             int flags)
@@ -159,7 +159,7 @@ static void hand_over_piece(const char *app_name, int request, int http_status,
                                 .http_status = http_status, .response = response, .headers = headers,
                                 .data = data, .length = length, .flags = flags,
                                 .has_item = s_item >= 0, .item = s_item };
-    hand_over(app_name, &delivery);
+    return hand_over(app_name, &delivery);
 }
 
 /* The settings of an application are values in its own store; a poll's
@@ -491,9 +491,19 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
             }
             flags |= HOST_DATA_LAST;
         }
-        hand_over_piece(app_name, poll_number, http_status, &request->response, &request->headers, piece,
-                        (size_t)length, flags);
+        bool is_rest_wanted = hand_over_piece(app_name, poll_number, http_status, &request->response,
+                                              &request->headers, piece, (size_t)length, flags);
         if (flags & HOST_DATA_LAST) {
+            return;
+        }
+        if (!is_rest_wanted) {
+            /* Nobody takes the rest: the instance that took the beginning is gone, or reads
+             * only a document that has failed already. The connection is the device's only
+             * one; the polls of every application wait for it. The failure ends the answer
+             * for the delivery's own bookkeeping; nobody is told of it. */
+            ESP_LOGI(TAG, "%s/%d: the rest of the answer is not wanted", app_name, poll_number);
+            hand_over_piece(app_name, poll_number, HOST_FAILED_NO_ANSWER, &request->response,
+                            &request->headers, NULL, 0, HOST_DATA_FAILED);
             return;
         }
         flags = 0;

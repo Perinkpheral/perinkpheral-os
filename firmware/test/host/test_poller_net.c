@@ -21,6 +21,8 @@ static int cooldown_seconds, cooldown_calls;
 static const char MOCK_BODY[] = "{\"value\":42}";
 static bool mock_success, mock_picked;
 static int delivered_replies;
+static bool refuse_rest;
+static int delivered_pieces, last_flags;
 
 SemaphoreHandle_t xSemaphoreCreateMutex(void) { return &mutex_taken; }
 int xSemaphoreTake(SemaphoreHandle_t lock, unsigned wait) { (void)wait; CHECK(!*lock); *lock = true; return pdTRUE; }
@@ -119,6 +121,8 @@ static void reset(void)
     open_error = ESP_FAIL;
     tls_failure = ESP_OK;
     delivered_status = delivered_replies = 0;
+    refuse_rest = false;
+    delivered_pieces = last_flags = 0;
     mock_success = false;
     manifest_json = NULL;
     retry_header = NULL;
@@ -139,14 +143,23 @@ static bool fetch(size_t maximum, int *status)
     return result;
 }
 
-static void deliver(const char *name, const app_delivery_t *answer)
+static bool check_delivery(const char *name, const app_delivery_t *answer);
+static bool deliver(const char *name, const app_delivery_t *answer)
+{
+    delivered_pieces++;
+    last_flags = answer->flags;
+    check_delivery(name, answer);
+    return !refuse_rest;
+}
+
+static bool check_delivery(const char *name, const app_delivery_t *answer)
 {
     delivered_status = answer->http_status;
     failed_before_first_with_type =
         (answer->flags & HOST_DATA_FAILED) &&
         answer_format(0, answer->headers, answer->response) == HOST_FORMAT_JSON;
     delivered_only_on_screen = answer->only_on_screen;
-    if (!mock_success) return;
+    if (!mock_success) return true;
 
     delivered_replies++;
     CHECK_STR(name, "probe");
@@ -171,6 +184,7 @@ static void deliver(const char *name, const app_delivery_t *answer)
         CHECK(answer->length == sizeof MOCK_BODY - 1 && answer->data != NULL &&
               memcmp(answer->data, MOCK_BODY, sizeof MOCK_BODY - 1) == 0);
     }
+    return true;
 }
 
 static void record_retry_after(int seconds)
@@ -285,6 +299,24 @@ static void test_successful_poll_delivery(void)
     }
 }
 
+/* Nobody takes the rest of a streamed answer: it is not read further, and the delivery's own
+ * bookkeeping gets its end. */
+static void test_unwanted_rest_is_not_read(void)
+{
+    reset();
+    body_bytes = 64 * HOST_DATA_CHUNK_MAX;
+    refuse_rest = true;
+    CHECK(!poll_failure(false));
+    CHECK(read_calls == 2); /* the first piece, and the one read to tell whether it is the last */
+    CHECK(delivered_pieces == 2 && last_flags == HOST_DATA_FAILED);
+    CHECK(delivered_status == HOST_FAILED_NO_ANSWER);
+
+    reset();
+    body_bytes = 8 * HOST_DATA_CHUNK_MAX;
+    CHECK(!poll_failure(false));
+    CHECK(delivered_pieces == 8 && last_flags == HOST_DATA_LAST && delivered_status == 200);
+}
+
 static void test_retry_after(void)
 {
     reset();
@@ -313,6 +345,7 @@ int main(void)
     test_poll_memory_failures();
     test_poll_transport_failures();
     test_retry_after();
+    test_unwanted_rest_is_not_read();
     test_successful_poll_delivery();
     int status;
     reset(); CHECK(fetch(4096, &status)); CHECK(status == 200 && received == HOST_DATA_CHUNK_MAX + 17);

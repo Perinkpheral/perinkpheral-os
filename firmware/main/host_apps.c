@@ -183,28 +183,30 @@ bool host_is_delivering(void)
     return s_is_delivering;
 }
 
-void host_deliver(const char *app_name, const app_delivery_t *delivery)
+bool host_deliver(const char *app_name, const app_delivery_t *delivery)
 {
     scene_t *owner = launcher_app_scene(app_name);
-    if (owner != NULL) {
-        /* An alarm, news or settings for another application in the middle of an answer taken
-         * piece by piece: that answer gives way as it does to a press - its poll is asked again
-         * in a while - for there is room for one instance. */
-        if (delivery->kind != APP_DELIVERY_PIECE && host_delivery.is_mid_answer &&
-            host_delivery.in_background != NULL && host_delivery.in_background != owner) {
-            host_end_background_answer();
-        }
-        s_is_delivering = true;
-        app_abandoned_t abandoned = app_deliver(&host_delivery, &host_wm, owner, delivery,
-                                                esp_timer_get_time() / US_PER_MS);
-        s_is_delivering = false;
-        if (abandoned.owner != NULL) {
-            const char *interrupted = launcher_app_name(abandoned.owner);
-            if (interrupted != NULL) {
-                poller_answer_was_abandoned(interrupted, abandoned.request);
-            }
+    if (owner == NULL) {
+        return false;
+    }
+    /* An alarm, news or settings for another application in the middle of an answer taken
+     * piece by piece: that answer gives way as it does to a press - its poll is asked again
+     * in a while - for there is room for one instance. */
+    if (delivery->kind != APP_DELIVERY_PIECE && host_delivery.is_mid_answer &&
+        host_delivery.in_background != NULL && host_delivery.in_background != owner) {
+        host_end_background_answer();
+    }
+    s_is_delivering = true;
+    app_abandoned_t abandoned = app_deliver(&host_delivery, &host_wm, owner, delivery,
+                                            esp_timer_get_time() / US_PER_MS);
+    s_is_delivering = false;
+    if (abandoned.owner != NULL) {
+        const char *interrupted = launcher_app_name(abandoned.owner);
+        if (interrupted != NULL) {
+            poller_answer_was_abandoned(interrupted, abandoned.request);
         }
     }
+    return !abandoned.rest_unwanted;
 }
 
 /* An alarm that has come is handed to its application like an answer. */
