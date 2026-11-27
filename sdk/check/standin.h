@@ -53,6 +53,7 @@ typedef struct {
     int32_t            method; /* HOST_HTTP_*, GET when zero */
     const char        *body; /* template, or NULL */
     int format_policy;
+    bool manual;
 } standin_poll_t;
 
 typedef struct {
@@ -277,7 +278,12 @@ typedef struct {
     char    refused_request[STANDIN_NOTE_BYTES]; /* the first request the device refuses for what it asks */
     int32_t handler_requests, handler_request_bytes; /* queued since the handler began */
     int32_t sends;
-    int32_t polls_run[4];
+    int32_t polls_run[4]; /* accepted poll_run calls; these do not start transport */
+    bool poll_pending[4];
+    bool poll_network_failed[4];
+    int64_t poll_ready_at_ms[4];
+    int64_t poll_run_accepted_ms;
+    int64_t poll_cooldown_until_ms;
     int32_t poll_interval[4];
     int32_t answer_item;
 
@@ -340,6 +346,9 @@ bool standin_url_allowed(const char *url);
 bool standin_headers_ready(const standin_request_t *request);
 /* Readiness includes a poll's headers and body, expanded with the same item. */
 bool standin_poll_ready(int32_t poll, int32_t item);
+/* A capability round supplies an ordinary trigger for periodic polls only.
+ * Explicit pending work coalesces and waits for throttling/cooldown. */
+bool standin_poll_take(int32_t poll);
 bool standin_header_lines_ready(const char *headers, int32_t length);
 /* How many items a poll with "each" is asked for; -1 for a poll without. */
 int32_t standin_poll_items(int32_t poll);

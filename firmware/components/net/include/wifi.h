@@ -40,6 +40,8 @@ typedef struct {
     bool         is_radio_off;   /* turned off to save power; the phase is as it was left */
     bool         was_reached;    /* the last attempt to join the network succeeded */
     bool         access_point_up; /* the setup access point is up, not only meant to be */
+    bool         connection_known; /* retained through deliberate radio shutdown only */
+    uint32_t     connection_generation; /* first connection and genuine reconnections */
 } wifi_status_t;
 
 /* The strings are copied. With Wi-Fi off (WIFI_PHASE_OFF) the driver is

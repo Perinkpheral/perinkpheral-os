@@ -83,6 +83,8 @@ typedef struct {
     uint8_t poll_count;
     uint8_t response_format;
     uint8_t poll_picks; /* one bit per poll selecting picked delivery */
+
+    uint8_t manual_polls; /* one bit per poll; no automatic triggers */
     uint32_t poll_every_s[APP_POLLS_MAX];
     /* The setting a poll's pace is the user's choice in ("every": "{{key}}"),
      * or empty; poll_every_s is then what holds while nothing is chosen. */
@@ -92,6 +94,11 @@ typedef struct {
     bool     has_icon;
     uint16_t icon[APP_ICON_CELLS];
 } app_manifest_t;
+
+static inline bool app_manifest_poll_is_manual(const app_manifest_t *manifest, int poll)
+{
+    return (manifest->manual_polls & (1u << poll)) != 0;
+}
 
 typedef struct {
     char name[APP_HEADER_NAME_MAX + 1];
@@ -113,6 +120,7 @@ typedef struct {
     char         pick[JSON_PICK_PATHS_MAX][JSON_PICK_PATH_MAX + 1];
     uint8_t      pick_count;
     uint8_t      response_format;
+    bool         manual; /* starts only with poll_run; no periodic interval */
     /* "each": the list setting the poll goes over, one request an item,
      * {{key}} of it being that item; empty for a poll of one request. */
     char         each_key[MANIFEST_SETTING_KEY_MAX + 1];
@@ -135,7 +143,7 @@ typedef enum {
     APP_MANIFEST_BAD_HOSTS,   /* "hosts" is not a list of a few host names */
     APP_MANIFEST_BAD_SETTING, /* "settings" is not a list of sound settings */
     APP_MANIFEST_BAD_INTENT,  /* "intents" is not a list of kinds the host knows */
-    APP_MANIFEST_BAD_POLL,  /* too many polls, or one without a sound url and every */
+    APP_MANIFEST_BAD_POLL,  /* too many polls, an invalid request or automatic interval */
 } app_manifest_result_t;
 
 app_manifest_result_t app_manifest_parse(const char *json, app_manifest_t *manifest);

@@ -194,9 +194,9 @@ static void test_schedule(void)
 
     /* the first runs are spread out */
     uint32_t first_in_ms;
-    CHECK(poll_schedule_add(&schedule, 0xA, 0, 60, &first_in_ms) && first_in_ms == 0);
-    CHECK(poll_schedule_add(&schedule, 0xB, 0, 15, &first_in_ms) && first_in_ms == 2000);
-    CHECK(poll_schedule_add(&schedule, 0xB, 1, 900, &first_in_ms) && first_in_ms == 4000);
+    CHECK(poll_schedule_add(&schedule, 0xA, 0, 60, false, &first_in_ms) && first_in_ms == 0);
+    CHECK(poll_schedule_add(&schedule, 0xB, 0, 15, false, &first_in_ms) && first_in_ms == 2000);
+    CHECK(poll_schedule_add(&schedule, 0xB, 1, 900, false, &first_in_ms) && first_in_ms == 4000);
     CHECK(poll_schedule_pace_ms(&schedule, 0xA, 0) == 60000);
     CHECK(poll_schedule_pace_ms(&schedule, 0xB, 0) == 15000);
 
@@ -223,9 +223,9 @@ static void test_schedule_hurry(void)
     poll_schedule_t schedule;
     uint32_t first_in_ms;
     poll_schedule_init(&schedule);
-    poll_schedule_add(&schedule, 0xA, 0, 600, &first_in_ms);
-    poll_schedule_add(&schedule, 0xB, 0, 600, &first_in_ms);
-    poll_schedule_add(&schedule, 0xB, 1, 900, &first_in_ms);
+    poll_schedule_add(&schedule, 0xA, 0, 600, false, &first_in_ms);
+    poll_schedule_add(&schedule, 0xB, 0, 600, false, &first_in_ms);
+    poll_schedule_add(&schedule, 0xB, 1, 900, false, &first_in_ms);
     /* the settings of one application changed: its polls, and only its */
     poll_schedule_want_of(&schedule, 0xB);
     int asked = 0;
@@ -255,7 +255,7 @@ static void test_pace(void)
     uint32_t first_in_ms;
     bool is_another = false;
     poll_schedule_init(&schedule);
-    poll_schedule_add(&schedule, 0xA, 0, 600, &first_in_ms);
+    poll_schedule_add(&schedule, 0xA, 0, 600, false, &first_in_ms);
     /* the server said when to come again */
     CHECK(poll_schedule_set_interval(&schedule, 0xA, 0, 3600, &is_another) && is_another);
     CHECK(poll_schedule_pace_ms(&schedule, 0xA, 0) == 3600000);
@@ -279,9 +279,9 @@ static void test_schedule_is_bounded(void)
     uint32_t first_in_ms;
     poll_schedule_init(&schedule);
     for (int i = 0; i < POLL_SCHEDULE_MAX; i++) {
-        CHECK(poll_schedule_add(&schedule, i, 0, 60, &first_in_ms));
+        CHECK(poll_schedule_add(&schedule, i, 0, 60, false, &first_in_ms));
     }
-    CHECK(!poll_schedule_add(&schedule, 99, 0, 60, &first_in_ms));
+    CHECK(!poll_schedule_add(&schedule, 99, 0, 60, false, &first_in_ms));
 }
 
 /* The most applications a device holds, each with the most polls: all scheduled. */
@@ -292,7 +292,7 @@ static void test_schedule_holds_every_installed_poll(void)
     poll_schedule_init(&schedule);
     for (int app = 1; app <= CATALOG_INSTALLED_MAX; app++) {
         for (int poll = 0; poll < APP_POLLS_MAX; poll++) {
-            CHECK(poll_schedule_add(&schedule, app, poll, 60, &first_in_ms));
+            CHECK(poll_schedule_add(&schedule, app, poll, 60, false, &first_in_ms));
         }
     }
     CHECK(poll_schedule_has(&schedule, CATALOG_INSTALLED_MAX, APP_POLLS_MAX - 1));
@@ -306,8 +306,8 @@ static void test_put_off_poll_run_survives_the_answer(void)
     poll_schedule_t schedule;
     uint32_t first_in_ms;
     poll_schedule_init(&schedule);
-    poll_schedule_add(&schedule, 0xA, 0, 86400, &first_in_ms);
-    poll_schedule_add(&schedule, 0xA, 1, 600, &first_in_ms);
+    poll_schedule_add(&schedule, 0xA, 0, 86400, false, &first_in_ms);
+    poll_schedule_add(&schedule, 0xA, 1, 600, false, &first_in_ms);
     CHECK(!poll_schedule_is_due_soon(&schedule, 0xA, 0));
     /* taken to be asked; its answer calls poll_run() within the second */
     CHECK(poll_schedule_want(&schedule, 0xA, 0));
@@ -423,8 +423,8 @@ static void test_floor_and_removal(void)
     poll_schedule_t schedule;
     uint32_t first_in_ms;
     poll_schedule_init(&schedule);
-    poll_schedule_add(&schedule, 0xA, 0, 60, &first_in_ms);
-    poll_schedule_add(&schedule, 0xB, 0, 900, &first_in_ms);
+    poll_schedule_add(&schedule, 0xA, 0, 60, false, &first_in_ms);
+    poll_schedule_add(&schedule, 0xB, 0, 900, false, &first_in_ms);
     /* saving power: no poll closer to its last than the floor */
     poll_schedule_set_floor(&schedule, 300);
     CHECK(poll_schedule_pace_ms(&schedule, 0xA, 0) == 300000);
@@ -471,7 +471,7 @@ static void test_setting_interval_restored(void)
     poll_schedule_init(&schedule);
     uint32_t first_in_ms;
     bool changed = false;
-    CHECK(poll_schedule_add(&schedule, 1, 0, 900, &first_in_ms));
+    CHECK(poll_schedule_add(&schedule, 1, 0, 900, false, &first_in_ms));
     CHECK(poll_schedule_set_interval(&schedule, 1, 0, 3600, &changed));
     uint32_t restored = poll_schedule_normalize_interval(app_manifest_interval_seconds("1 s"));
     CHECK(restored == APP_POLL_EVERY_MIN_S);
@@ -595,8 +595,48 @@ static void test_body_expansion(void)
     CHECK_STR(poll.body, "value=current");
 }
 
+static void test_manual_polls(void)
+{
+    static const char json[] = MANIFEST_START
+        "[{\"url\":\"https://example.test\",\"manual\":true,\"pick\":[\"value\"]}]}";
+    app_manifest_t manifest;
+    app_poll_t poll;
+    CHECK(app_manifest_parse(json, &manifest) == APP_MANIFEST_OK);
+    CHECK(app_manifest_poll_is_manual(&manifest, 0) && manifest.poll_every_s[0] == 0);
+    CHECK(app_manifest_parse_poll(json, 0, &poll) == APP_MANIFEST_OK);
+    CHECK(poll.manual && poll.pick_count == 1 && poll.every_key[0] == '\0');
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":true,\"every\":60}]") == APP_MANIFEST_OK);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":false}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":1,\"every\":60}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":null}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":true,\"every\":null}]") == APP_MANIFEST_BAD_POLL);
+    CHECK(parse_polls("[{\"url\":\"http://x\",\"manual\":true,\"every\":10.5}]") == APP_MANIFEST_BAD_POLL);
+    poll_schedule_t schedule;
+    poll_schedule_init(&schedule);
+    uint32_t first_ms;
+    CHECK(poll_schedule_add(&schedule, 1, 0, 0, true, &first_ms));
+    poll_schedule_set_floor(&schedule, 300);
+    CHECK(poll_schedule_pace_ms(&schedule, 1, 0) == 0);
+    poll_schedule_want_of(&schedule, 1);
+    poll_schedule_network_is_back(&schedule);
+    CHECK(poll_schedule_next_wanted(&schedule) == NULL);
+    CHECK(poll_schedule_want(&schedule, 1, 0));
+    CHECK(poll_schedule_want(&schedule, 1, 0));
+    CHECK(poll_schedule_next_wanted(&schedule)->poll == 0);
+    poll_schedule_answered(&schedule, 1, 0);
+    poll_schedule_network_failed(&schedule, 1, 0);
+    poll_schedule_network_is_back(&schedule);
+    CHECK(poll_schedule_next_wanted(&schedule) != NULL);
+    poll_schedule_answered(&schedule, 1, 0);
+    poll_schedule_network_is_back(&schedule);
+    CHECK(poll_schedule_next_wanted(&schedule) == NULL);
+    bool changed = false;
+    CHECK(!poll_schedule_set_interval(&schedule, 1, 0, 60, &changed));
+}
+
 int main(void)
 {
+    test_manual_polls();
     test_poll_methods_and_body_limits();
     test_body_expansion();
     test_queued_destination_after_settings_change();

@@ -57,10 +57,14 @@ the icon unchanged, as a server failure does not mean Wi-Fi was lost.
       "https://example.com/api/state": { "status": 401, "body": "{}" }
     }
 
-Wi-Fi loss, address acquisition and power-profile reconnect scheduling are not modeled.
-The `network_up` intent endpoint delivers subscribed news only; it does not simulate
-a connection or request manifest polls. Reconnect scheduling and transport-failure
-classification are covered by `firmware/test/host/test_poller.c` and `test_poller_net.c`.
+Wi-Fi loss, address acquisition and deliberate radio cycling are not modeled.
+The `network_up` endpoint retries requested manifest polls that failed in transport,
+then delivers subscribed news. Healthy and never requested manual polls stay idle.
+The simulator uses the firmware poll scheduler for pending coalescing, the accepted-call
+window and list rounds. Manual polls have no automatic deadline or settings trigger.
+Normalized Retry-After and the bare-429 fallback defer every manifest-poll trigger on
+uptime; raw-request responses do not create poll cooldowns. The firmware host tests
+cover power-profile reconnect classification and transport failures.
 
 Not simulated: the menu of several applications, the system API except
 `sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,

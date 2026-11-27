@@ -25,6 +25,8 @@
 #include "answer_headers.h"
 #include <strings.h>
 
+#define POLL_RUN_WINDOW_MS 1000
+
 standin_handlers_t standin_handlers;
 
 static standin_t *world;
@@ -108,6 +110,7 @@ void standin_reset(void)
     host->now = standin_subject.at != 0 ? standin_subject.at : DEFAULT_TIME;
     host->zone_offset = standin_subject.zone_offset;
     host->answer_item = -1;
+    host->poll_run_accepted_ms = -POLL_RUN_WINDOW_MS;
     pending_headers = NULL;
     pending_header_count = 0;
     host->is_new = true;
@@ -1138,14 +1141,14 @@ void standin_answer_headers(const standin_pair_t *headers, int32_t count)
     pending_header_count = headers != NULL ? count : 0;
 }
 
-static void prepare_answer(int32_t status)
+static void prepare_answer(int32_t status, int32_t request)
 {
     response_info = (host_answer_info_t){ .status = status, .length = -1 };
     answer_headers_reset(&response_headers);
     for (int32_t index = 0; status >= 0 && index < pending_header_count; index++) {
         const standin_pair_t *field = &pending_headers[index];
         answer_headers_add(&response_headers, field->key, field->value);
-        answer_info_header(&response_info, field->key, field->value);
+        answer_info_header(&response_info, field->key, field->value, world->now);
         if (strcasecmp(field->key, "Content-Length") == 0) {
             long long length = strtoll(field->value, NULL, 10);
             response_info.length = length >= 0 && length <= INT32_MAX ? (int32_t)length : -1;
@@ -1153,6 +1156,15 @@ static void prepare_answer(int32_t status)
     }
     pending_headers = NULL;
     pending_header_count = 0;
+    if (request >= 0 && request < standin_subject.poll_count) {
+        world->poll_network_failed[request] = status == HOST_FAILED_NO_NETWORK ||
+            status == HOST_FAILED_NO_ANSWER || status == HOST_FAILED_TIMEOUT;
+        int32_t cooldown_s = answer_poll_cooldown(&response_info);
+        int64_t until_ms = world->uptime_ms + (int64_t)cooldown_s * 1000;
+        if (cooldown_s > 0 && until_ms > world->poll_cooldown_until_ms) {
+            world->poll_cooldown_until_ms = until_ms;
+        }
+    }
 }
 
 int32_t answer_value(int32_t index, char *text, int32_t capacity)
@@ -1232,17 +1244,36 @@ int32_t poll_run(int32_t poll)
     if (poll < 0 || poll >= standin_subject.poll_count) {
         return HOST_ERR_ARGUMENT;
     }
-    if (world->monitor_backoff && world->uptime_ms < world->retry_until_ms) {
-        world->early_requests++;
-    }
     world->polls_run[poll]++;
+    if (world->poll_pending[poll]) {
+        return HOST_OK;
+    }
+    int64_t since_ms = world->uptime_ms - world->poll_run_accepted_ms;
+    world->poll_pending[poll] = true;
+    if (since_ms < POLL_RUN_WINDOW_MS) {
+        world->poll_ready_at_ms[poll] = world->poll_run_accepted_ms + POLL_RUN_WINDOW_MS;
+    } else {
+        world->poll_run_accepted_ms = world->uptime_ms;
+    }
     return HOST_OK;
+}
+
+bool standin_poll_take(int32_t poll)
+{
+    standin_t *host = standin();
+    if ((standin_subject.polls[poll].manual && !host->poll_pending[poll]) ||
+        host->uptime_ms < host->poll_ready_at_ms[poll] || host->uptime_ms < host->poll_cooldown_until_ms) {
+        return false;
+    }
+    host->poll_pending[poll] = false;
+    host->poll_network_failed[poll] = false;
+    return true;
 }
 
 int32_t poll_set_interval(int32_t poll, int32_t seconds)
 {
     standin();
-    if (poll < 0 || poll >= standin_subject.poll_count || (seconds != 0 && (seconds < 10 || seconds > SECONDS_PER_DAY))) {
+    if (poll < 0 || poll >= standin_subject.poll_count || standin_subject.polls[poll].manual || (seconds != 0 && (seconds < 10 || seconds > SECONDS_PER_DAY))) {
         return HOST_ERR_ARGUMENT;
     }
     world->poll_interval[poll] = seconds;
@@ -2916,6 +2947,14 @@ void standin_alarm(int32_t id)
 
 void standin_intent(int32_t intent)
 {
+    standin();
+    if (intent == HOST_INTENT_NETWORK_UP) {
+        for (int poll = 0; poll < standin_subject.poll_count; poll++) {
+            if (world->poll_network_failed[poll]) {
+                world->poll_pending[poll] = true;
+            }
+        }
+    }
     if ((standin_subject.intents & (1u << intent)) != 0) {
         CALL(on_intent, intent);
     }
@@ -3022,7 +3061,7 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
                   int32_t piece, int32_t ending, int32_t failure)
 {
     standin_t *host = standin();
-    prepare_answer(status);
+    prepare_answer(status, request);
     bool head = prepare_method(request);
     if (head) {
         length = 0;
@@ -3069,7 +3108,7 @@ void standin_data(int32_t request, int32_t item, int32_t status, const void *bod
     } while (at < given);
     if (ending == STANDIN_FAILED || too_large) {
         failure = too_large ? HOST_FAILED_TOO_LARGE : failure;
-        prepare_answer(failure);
+        prepare_answer(failure, request);
         deliver_piece(request, NULL, NULL, 0, HOST_DATA_FAILED, failure, head);
     }
     host->is_delivering = false;
@@ -3079,7 +3118,7 @@ void standin_picked(int32_t poll, int32_t item, int32_t status, const void *body
 {
     standin_t *host = standin();
     const standin_poll_t *asked = &standin_subject.polls[poll];
-    prepare_answer(status);
+    prepare_answer(status, poll);
     bool head = prepare_method(poll);
     if (standin_handlers.on_picked == NULL) {
         return;

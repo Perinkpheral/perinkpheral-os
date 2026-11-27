@@ -47,6 +47,12 @@ bool poll_schedule_has(const poll_schedule_t *schedule, int app, int poll)
     return find((poll_schedule_t *)schedule, app, poll) != NULL;
 }
 
+bool poll_schedule_is_wanted(const poll_schedule_t *schedule, int app, int poll)
+{
+    const poll_entry_t *entry = find((poll_schedule_t *)schedule, app, poll);
+    return entry != NULL && entry->is_wanted;
+}
+
 static bool is_among(int app, const int *apps, int app_count)
 {
     for (int i = 0; i < app_count; i++) {
@@ -69,7 +75,7 @@ void poll_schedule_keep_only(poll_schedule_t *schedule, const int *apps, int app
 }
 
 bool poll_schedule_add(poll_schedule_t *schedule, int app, int poll, uint32_t every_s,
-                       uint32_t *first_in_ms)
+                       bool manual, uint32_t *first_in_ms)
 {
     if (schedule->count >= POLL_SCHEDULE_MAX) {
         return false;
@@ -79,6 +85,7 @@ bool poll_schedule_add(poll_schedule_t *schedule, int app, int poll, uint32_t ev
     entry->app = app;
     entry->poll = poll;
     entry->every_ms = every_s * MS_PER_SECOND;
+    entry->manual = manual;
     entry->is_wanted = false;
     entry->is_due_soon = false;
     entry->failed_for_network = false;
@@ -88,7 +95,7 @@ bool poll_schedule_add(poll_schedule_t *schedule, int app, int poll, uint32_t ev
 uint32_t poll_schedule_pace_ms(const poll_schedule_t *schedule, int app, int poll)
 {
     const poll_entry_t *entry = find((poll_schedule_t *)schedule, app, poll);
-    if (entry == NULL) {
+    if (entry == NULL || entry->manual) {
         return 0;
     }
     return entry->every_ms > schedule->floor_ms ? entry->every_ms : schedule->floor_ms;
@@ -102,6 +109,9 @@ bool poll_schedule_set_interval(poll_schedule_t *schedule, int app, int poll, ui
     }
     poll_entry_t *entry = find(schedule, app, poll);
     if (entry == NULL) {
+        return false;
+    }
+    if (entry->manual) {
         return false;
     }
     *is_another = entry->every_ms != every_s * MS_PER_SECOND;
@@ -130,7 +140,7 @@ bool poll_schedule_want(poll_schedule_t *schedule, int app, int poll)
 void poll_schedule_want_of(poll_schedule_t *schedule, int app)
 {
     for (int i = 0; i < schedule->count; i++) {
-        if (schedule->entries[i].app == app) {
+        if (schedule->entries[i].app == app && !schedule->entries[i].manual) {
             want(schedule, &schedule->entries[i]);
         }
     }

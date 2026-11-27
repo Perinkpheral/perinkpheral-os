@@ -335,6 +335,10 @@ object AppCheckTest {
                 mapOf("now" to 1795262400L, "event" to -2208988800L),
                 mapOf("now" to 1795262400L, "event" to -1L),
                 mapOf("now" to 1795262400L, "event" to 0L)))),
+
+        Break("network", "poll_run during Retry-After queues deferred work",
+            listOf("void app_on_picked(int32_t request, int32_t http_status)\n{\n    rate_limit(http_status);" to
+                "void app_on_picked(int32_t request, int32_t http_status)\n{\n    rate_limit(http_status);\n    if (http_status == 429) poll_run(request);"), ""),
         Break("sessions", "a session reserved on focus needs no allocation on blur",
             listOf("    session_get(&page, sizeof page);" to
                 "    session_get(&page, sizeof page);\n    session_set(&page, sizeof page);",

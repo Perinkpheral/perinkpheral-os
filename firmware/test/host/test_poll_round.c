@@ -15,7 +15,7 @@ static void test_all_items(int polls, int items, bool one_app)
     for (int index = 0; index < polls; index++) {
         uint32_t first_ms;
         CHECK(poll_schedule_add(&schedule, one_app ? 1 : index + 1,
-                                one_app ? index : 0, 300, &first_ms));
+                                one_app ? index : 0, 300, false, &first_ms));
     }
     for (int index = 0; index < polls; index++) {
         CHECK(poll_schedule_want(&schedule, one_app ? 1 : index + 1, one_app ? index : 0));
@@ -101,7 +101,7 @@ static void test_requested_again_during_answer(void)
     poll_schedule_t schedule;
     poll_schedule_init(&schedule);
     uint32_t first_ms;
-    CHECK(poll_schedule_add(&schedule, 1, 0, 300, &first_ms));
+    CHECK(poll_schedule_add(&schedule, 1, 0, 300, false, &first_ms));
     CHECK(poll_schedule_want(&schedule, 1, 0));
     poll_rounds_t rounds = { 0 };
     poll_turn_t turn;

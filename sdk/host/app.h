@@ -106,7 +106,8 @@ HOST_IMPORT(session_get, int32_t session_get(void *buffer, int32_t capacity));
  * the handler. Corrections of a few seconds are not reported. */
 #define HOST_INTENT_TIME_CHANGED 1 /* the clock or the time zone was changed: recompute
                                       values derived from the time */
-#define HOST_INTENT_NETWORK_UP   2 /* the device is connected to its network again */
+#define HOST_INTENT_NETWORK_UP   2 /* first connection or genuine reconnection, in every power
+                                      profile; deliberate radio cycling does not deliver it */
 #define HOST_INTENT_STARTED      3 /* the device was powered up or restarted: restore from
                                       the store what a restart clears - alarms and
                                       pending requests */

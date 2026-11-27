@@ -32,9 +32,10 @@
  * background unload calls app_on_terminate() only. Neither callback runs
  * after the instance has faulted. Saving the application's settings also
  * stops a poll stream; the instance may stay loaded, with no call to end
- * the stream, and that poll is requested again, subject to queued work and
- * server cooldowns. The next HOST_DATA_FIRST starts a new answer.
- * Perinkpheral OS repeats an interrupted GET or HEAD poll after one
+ * the stream. An automatic poll is requested again, subject to queued work and
+ * server cooldowns; a manual poll needs another poll_run().
+ * The next HOST_DATA_FIRST starts a new answer.
+ * Perinkpheral OS repeats an interrupted automatic GET or HEAD poll after one
  * minute, or after its interval when that is shorter; other poll methods keep
  * their normal pace. An
  * interrupted answer to http_send() is dropped, and the application
@@ -131,7 +132,18 @@ HOST_IMPORT(answer_element,
  * for the current answer. */
 HOST_IMPORT(answer_item, int32_t answer_item(void));
 
-/* Response metadata. Future fields may be appended beyond its existing size
+/* Retry-After accepts a complete unsigned decimal integer of seconds or an
+ * IMF-fixdate (for example "Fri, 27 Nov 2026 12:00:00 GMT"), with optional
+ * surrounding spaces/tabs. Dates use one captured wall clock per response.
+ * An unknown clock, expired date, absent or invalid value yields 0; positive
+ * overflow saturates at INT32_MAX. Decimal seconds do not require a clock.
+ * Perinkpheral OS defers all of the application's manifest polls by a positive
+ * delay, or 60 seconds for HTTP 429 without one, and ends active list rounds.
+ * Cooldowns use uptime and are unaffected by later wall-clock changes.
+ * http_send responses never defer manifest polls or other raw requests;
+ * applications implement their own raw-request cooldowns from this metadata.
+ *
+ * Response metadata. Future fields may be appended beyond its existing size
  * with alignment and the existing field types, offsets and sizes preserved.
  * Valid inside app_on_data(), app_on_picked(), and app_on_document(),
  * for the current answer. The same for every piece of one answer.
@@ -144,7 +156,7 @@ HOST_IMPORT(answer_item, int32_t answer_item(void));
 typedef struct host_answer_info {
     int32_t status;            /* HTTP status, or a HOST_FAILED_* code */
     int32_t length;            /* Content-Length; -1 if absent or outside 0..INT32_MAX */
-    int32_t retry_after;       /* Retry-After in seconds; 0 if absent or given as a date */
+    int32_t retry_after;       /* normalized Retry-After delay in seconds; see above */
     char    content_type[48];  /* "application/json; charset=utf-8" */
     char    etag[64];          /* for If-None-Match */
     char    last_modified[32]; /* for If-Modified-Since */
@@ -197,6 +209,12 @@ APP_EXPORT(app_data_buffer, uint8_t *app_data_buffer(void));
  * supplies escaping and Content-Type in headers. Headers and body expand
  * together immediately before sending; "each" substitutes its item in both.
  * "pick" works with every method; HEAD has no values. Only GET follows redirects. */
+
+/* A poll with "manual": true starts only through poll_run(), never at startup,
+ * on settings changes or on a schedule. "every" is optional and, when supplied,
+ * validated but unused. A requested round retains transport-failure retries on
+ * reconnection, queueing, pick/each and server cooldowns. A healthy or never
+ * requested manual poll is not started on reconnection. */
 
 /* Network availability is reported in the answer: a request made without
  * a network fails with HOST_FAILED_NO_NETWORK. The radio can be off
@@ -306,7 +324,7 @@ HOST_IMPORT(http_send,
 
 /* Overrides the interval of poll number `poll`, in seconds, kept across
  * restarts and updates. Positive values must be 10..86400; anything else
- * except 0 returns HOST_ERR_ARGUMENT, as does an unknown poll. 0 forgets
+ * except 0 returns HOST_ERR_ARGUMENT, as does an unknown or manual poll. 0 forgets
  * the stored code override and resumes the manifest's interval or its
  * interval setting. A code override takes precedence over that setting.
  * A changed resolved interval, before the power-saving floor, restarts the

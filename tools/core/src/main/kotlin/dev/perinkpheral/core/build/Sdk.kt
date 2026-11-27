@@ -80,12 +80,12 @@ class Sdk(val root: File) {
         val polls = (manifest["polls"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
         return buildList {
             if (polls.any { (it["method"] ?: "GET") != "GET" || it.containsKey("body") }) add("POLL_METHOD")
-
+            if (polls.any { it["manual"] == true }) add("POLL_MANUAL")
         }
     }
 
     companion object {
-        private val MANIFEST_FEATURES = setOf("POLL_METHOD", "RESPONSE_FORMAT")
+        private val MANIFEST_FEATURES = setOf("POLL_METHOD", "RESPONSE_FORMAT", "POLL_MANUAL")
     }
 
     val hostApiVersion: Long by lazy { contract.number("HOST_API_VERSION") }

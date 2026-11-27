@@ -270,7 +270,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                     // The manifest's headers as lines "Name: value", for the host to fill when it asks.
                     val headers = (poll["headers"] as? Map<*, *>)?.entries?.joinToString("\n") { (name, value) -> "$name: $value" }
                     appendLine("    { ${text(poll["url"] as String)}, ${if (picks.isEmpty()) "NULL" else "PICKS_$index"}, ${picks.size}, " +
-                        "${text(poll["each"] as? String)}, ${text(poll["prefix"] as? String)}, ${text(headers)}, HOST_HTTP_${poll["method"] ?: "GET"}, ${text(poll["body"] as? String)}, ${policy(poll["format"] ?: manifest["format"])} },")
+                        "${text(poll["each"] as? String)}, ${text(poll["prefix"] as? String)}, ${text(headers)}, HOST_HTTP_${poll["method"] ?: "GET"}, ${text(poll["body"] as? String)}, ${policy(poll["format"] ?: manifest["format"])}, ${poll["manual"] == true} },")
                 }
                 appendLine("};")
             }

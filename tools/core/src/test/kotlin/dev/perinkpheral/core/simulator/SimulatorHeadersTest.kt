@@ -45,6 +45,16 @@ object SimulatorHeadersTest {
             exchange.sendResponseHeaders(200,-1)
             exchange.close()
         }
+        server.createContext("/slow-throttle") { exchange ->
+            exchange.responseHeaders.add("Retry-After", "1")
+            exchange.sendResponseHeaders(429, 2)
+            exchange.responseBody.use {
+                it.write('x'.code)
+                it.flush()
+                Thread.sleep(1200)
+                it.write('y'.code)
+            }
+        }
         server.start()
         try {
             Socket(InetAddress.getLoopbackAddress(), SimulatorNetwork.port()).use { socket ->
@@ -57,6 +67,8 @@ object SimulatorHeadersTest {
                     writer.flush()
                     return Json.parse(reader.readLine()) as Map<*, *>
                 }
+                val delayed = get("/slow-throttle")
+                check(delayed["httpStatus"] == 429L && (delayed["bodyElapsedMs"] as Long) >= 1000L) { delayed }
                 val limits = mapOf("max" to 8, "rawMax" to 64, "values" to true, "formatPolicy" to 0)
                 check(get("/selection?text/plain", limits)["status"] == -7L)
                 check(get("/selection?application/vendor+json", limits)["status"] == -7L)

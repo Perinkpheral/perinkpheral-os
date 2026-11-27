@@ -213,9 +213,17 @@ static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *pa
           starts_with_server_setting(settings, parsed->url, &after_server))) {
         return false;
     }
+    const json_t *manual = json_get(poll, "manual");
+    if (manual != NULL && !json_is_bool(manual)) {
+        return false;
+    }
+    parsed->manual = json_is_true(manual);
+    parsed->every_s = 0;
     const json_t *every = json_get(poll, "every");
     parsed->every_key[0] = '\0';
-    if (json_is_string(every)) {
+    if (every == NULL && parsed->manual) {
+        /* A manual poll has no ordinary deadline. */
+    } else if (json_is_string(every)) {
         /* "{{key}}": the pace is the user's choice in that setting, and
          * its default - or a quarter of an hour - until one is made. */
         const char  *text = every->text;
@@ -246,7 +254,7 @@ static bool read_poll(const json_t *poll, const json_t *settings, app_poll_t *pa
         if (!is_found) {
             return false;
         }
-    } else if (!json_is_number(every) || every->number < APP_POLL_EVERY_MIN_S ||
+    } else if (!json_is_number(every) || !every->is_whole || every->number < APP_POLL_EVERY_MIN_S ||
                every->number > APP_POLL_EVERY_MAX_S) {
         return false;
     } else {
@@ -1057,6 +1065,7 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
     manifest->response_format = (uint8_t)format;
     manifest->poll_count = 0;
     manifest->poll_picks = 0;
+    manifest->manual_polls = 0;
     if (polls == NULL) {
         return APP_MANIFEST_OK;
     }
@@ -1080,6 +1089,9 @@ static app_manifest_result_t read_fields(const json_t *root, app_manifest_t *man
         manifest->poll_formats[manifest->poll_count] = parsed->response_format;
         if (parsed->pick_count > 0) {
             manifest->poll_picks |= (uint8_t)(1u << manifest->poll_count);
+        }
+        if (parsed->manual) {
+            manifest->manual_polls |= (uint8_t)(1u << manifest->poll_count);
         }
         strcpy(manifest->poll_every_key[manifest->poll_count], parsed->every_key);
         manifest->poll_every_s[manifest->poll_count++] = parsed->every_s;
@@ -1219,7 +1231,7 @@ const char *app_manifest_result_text(app_manifest_result_t result)
         return "Update the app.";
     case APP_MANIFEST_BAD_POLL:
         return "\"polls\" has more than 4 entries, one without an http(s) \"url\" and "
-               "an \"every\" of 10 seconds to a day, or with \"each\" of no list setting";
+               "an \"every\" of 10 seconds to a day (optional for \"manual\": true), or with \"each\" of no list setting";
     }
     return "?";
 }

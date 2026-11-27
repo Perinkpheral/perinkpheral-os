@@ -7,7 +7,9 @@ static void *request_calloc(size_t count, size_t size);
 static void *request_malloc(size_t size);
 #define calloc request_calloc
 #define malloc request_malloc
+#define time poller_test_time
 #include "../../main/poller_net.c"
+#undef time
 #undef calloc
 #undef malloc
 
@@ -20,6 +22,15 @@ static void *request_calloc(size_t count, size_t size)
 static void *request_malloc(size_t size)
 {
     return fail_list_allocation && size == HOST_LIST_BYTES ? NULL : malloc(size);
+}
+
+static time_t wall_time = 1795780800;
+static int clock_reads;
+time_t poller_test_time(time_t *result)
+{
+    clock_reads++;
+    if (result != NULL) *result = wall_time;
+    return wall_time;
 }
 
 static int response_status, read_failure, read_calls, cleanups, consumer_calls;
@@ -459,6 +470,35 @@ static void test_pick_mime_and_lengths(void)
     CHECK(delivered_kind == APP_DELIVERY_VALUES && delivered_status == HOST_FAILED_NO_ANSWER);
 }
 
+static void test_retry_dates_and_raw_ownership(void)
+{
+    reset();
+    wall_time = 1795780800;
+    clock_reads = 0;
+    request_t request = {0};
+    esp_http_client_event_t event = { .event_id = HTTP_EVENT_ON_HEADER, .user_data = &request,
+        .header_key = "Content-Type", .header_value = "application/json" };
+    CHECK(on_http_event(&event) == ESP_OK);
+    wall_time += 10;
+    event.header_key = "Retry-After";
+    event.header_value = "Fri, 27 Nov 2026 12:01:00 GMT";
+    CHECK(on_http_event(&event) == ESP_OK);
+    CHECK(request.response.retry_after == 60 && clock_reads == 1);
+    reset();
+    wall_time = 1795780800;
+    response_status = 429;
+    retry_header = "Fri, 27 Nov 2026 12:01:00 GMT";
+    CHECK(!poll_failure(false));
+    CHECK(cooldown_seconds == 60 && cooldown_calls == 1);
+    reset();
+    response_status = 429;
+    retry_header = "300";
+    poller_ask_t raw = { .number = HOST_REQUEST_FIRST, .method = HOST_HTTP_GET,
+        .url = "https://example.test/file" };
+    poller_net_request("probe", &raw);
+    CHECK(cooldown_calls == 0);
+}
+
 int main(void)
 {
     const poller_net_host_t host = { .deliver = deliver, .retry_after = record_retry_after };
@@ -467,6 +507,7 @@ int main(void)
     test_poll_memory_failures();
     test_poll_transport_failures();
     test_retry_after();
+    test_retry_dates_and_raw_ownership();
     test_headers_refuse_slow_body();
     test_unwanted_rest_is_not_read();
     test_successful_poll_delivery();

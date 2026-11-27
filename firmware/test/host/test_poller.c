@@ -674,6 +674,11 @@ static void test_retry_after_stops_list_round(void)
             CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
                   HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
             CHECK(run_pending_request(0) && raw_sent == 1);
+            CHECK(cooldown_left_ms(1) == 0);
+            CHECK(run_wanted_poll() && sent_item == 1 && requests_sent == 2);
+            CHECK(run_wanted_poll() && sent_item == 2 && requests_sent == 3);
+            CHECK(!run_wanted_poll());
+            continue;
         }
         CHECK(run_wanted_poll());
         CHECK(requests_sent == (raw ? 1 : 2));
@@ -706,6 +711,11 @@ static void test_list_round_stops_when_body_outlasts_retry_after(void)
             CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
                   HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
             CHECK(run_pending_request(0) && raw_sent == 1);
+            CHECK(cooldown_left_ms(1) == 0);
+            CHECK(run_wanted_poll() && sent_item == 1 && requests_sent == 2);
+            CHECK(run_wanted_poll() && sent_item == 2 && requests_sent == 3);
+            CHECK(!run_wanted_poll());
+            continue;
         }
         CHECK(run_wanted_poll() && requests_sent == 1);
         CHECK(!run_wanted_poll() && requests_sent == 1);
@@ -737,9 +747,10 @@ static void test_expired_retry_after_cancels_suspended_rounds(void)
 
     retry_after = 1;
     response_ms = 1500;
-    CHECK(request_queue_add(&s_queue, 1, "probe", HOST_REQUEST_FIRST,
-          HOST_HTTP_GET, "https://example.test", NULL, 0, NULL, 0, clock_ms) == REQUEST_QUEUE_ADDED);
-    CHECK(run_pending_request(0));
+    begin_answer_locked(1, true);
+    NET_HOST.retry_after(retry_after);
+    retry_after = 0;
+    clock_ms += response_ms;
     response_ms = 0;
 
     CHECK(poller_poll_now("probe", 0)); /* A newly requested round is still wanted. */
@@ -859,8 +870,73 @@ static void test_queued_request_memory_wait(void)
     }
 }
 
+static void test_manual_poll_triggers(void)
+{
+    for (int saving = 0; saving < 2; saving++) {
+        reset_poller();
+        saving_power = saving;
+        installed_apps[0].manual_polls = 1;
+        installed_apps[0].poll_every_s[0] = 0;
+        CHECK(schedule_installed() == 1);
+        CHECK(!deadlines_has(DEADLINE_POLL, 1, 0));
+        poller_hurry("probe");
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        CHECK(poller_set_interval("probe", 0, 60) == HOST_ERR_ARGUMENT);
+        CHECK(poller_set_interval("probe", 0, 0) == HOST_ERR_ARGUMENT);
+        CHECK(!poller_poll_now("probe", 10));
+        CHECK(s_polled_now_at_ms == -POLL_NOW_EVERY_MS);
+        CHECK(poller_poll_now("probe", 0));
+        CHECK(poller_poll_now("probe", 0));
+        CHECK(run_wanted_poll() && requests_sent == 1);
+        CHECK(!deadlines_has(DEADLINE_POLL, 1, 0));
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        /* Asked again inside the accepted-call window: exactly one deferred run. */
+        CHECK(poller_poll_now("probe", 0));
+        CHECK(poller_poll_now("probe", 0));
+        advance_to(999);
+        CHECK(!run_wanted_poll());
+        advance_to(1000);
+        retry_after = 120;
+        CHECK(run_wanted_poll() && requests_sent == 2);
+        CHECK(!deadlines_has(DEADLINE_POLL, 1, 0));
+        clock_ms = 2000;
+        CHECK(poller_poll_now("probe", 0));
+        CHECK(run_wanted_poll() && requests_sent == 2); /* deferred by server */
+        poller_hurry("probe");
+        poller_network_is_back();
+        advance_to(120999);
+        CHECK(!run_wanted_poll());
+        advance_to(121000);
+        transport_failure = true;
+        CHECK(run_wanted_poll() && requests_sent == 3);
+        CHECK(!deadlines_has(DEADLINE_POLL, 1, 0));
+        transport_failure = false;
+        poller_network_is_back();
+        CHECK(run_wanted_poll() && requests_sent == 4);
+        poller_network_is_back();
+        CHECK(!run_wanted_poll());
+        advance_to(1000000);
+        CHECK(!run_wanted_poll());
+    }
+}
+
+static void test_raw_response_does_not_throttle_polls(void)
+{
+    reset_poller();
+    CHECK(schedule_installed() == 1);
+    begin_answer_locked(1, false);
+    NET_HOST.retry_after(300);
+    CHECK(cooldown_left_ms(1) == 0);
+    advance_to(0);
+    CHECK(run_wanted_poll() && requests_sent == 1);
+}
+
 int main(void)
 {
+    test_manual_poll_triggers();
+    test_raw_response_does_not_throttle_polls();
     test_fetch_job_admission();
     test_delivery_rejection();
     test_queued_request_memory_wait();

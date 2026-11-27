@@ -176,6 +176,7 @@ object SimulatorNetwork {
             val response = chosen.send(request.build(), HttpResponse.BodyHandlers.ofInputStream())
             // The timeout bounds the request up to its headers; the body has the same time again, and a
             // server that sends a byte now and then is cut off when it is up, as the device does.
+            val headersReceivedNs = System.nanoTime()
             val stream = response.body()
             val isCut = java.util.concurrent.atomic.AtomicBoolean(false)
             val deadline = java.util.Timer(true)
@@ -215,7 +216,7 @@ object SimulatorNetwork {
             }
             val metadata = response.headers().map().filterKeys { it.lowercase() in KEPT_HEADERS }
                 .mapValues { it.value.firstOrNull().orEmpty() }
-            val answer = linkedMapOf<String, Any?>("status" to response.statusCode().toLong(), "headers" to kept, "headers_overflow" to headersOverflow,
+            val answer = linkedMapOf<String, Any?>("status" to response.statusCode().toLong(), "httpStatus" to response.statusCode().toLong(), "headers" to kept, "headers_overflow" to headersOverflow,
                 "mimeFormat" to mime, "metadata" to metadata)
             var content = try {
                 stream.use { it.readNBytes((most + 1).toInt()) }
@@ -225,6 +226,7 @@ object SimulatorNetwork {
                 ByteArray(0)
             } finally {
                 deadline.cancel()
+                answer["bodyElapsedMs"] = (System.nanoTime() - headersReceivedNs) / 1_000_000
             }
             if (isCut.get() || content.size > most) {
                 if (!isRefusal) return answer.apply { put("status", if (isCut.get()) TIMEOUT else TOO_LARGE) }

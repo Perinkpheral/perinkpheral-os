@@ -63,8 +63,31 @@ static void receive_address(wifi_plan_t *plan, int64_t now_ms)
     wifi_status_update(&network, plan->phase, false);
 }
 
+static void test_network_up_generation(void)
+{
+    wifi_status_t status = {0};
+    CHECK(wifi_status_update(&status, WIFI_PHASE_ONLINE, false));
+    CHECK(status.connection_generation == 1);
+    wifi_status_update(&status, WIFI_PHASE_ONLINE, true);
+    wifi_status_update(&status, WIFI_PHASE_CONNECTING, false);
+    wifi_status_update(&status, WIFI_PHASE_ONLINE, false);
+    CHECK(status.connection_generation == 1); /* deliberate radio cycling */
+    wifi_status_lost(&status);
+    wifi_status_update(&status, WIFI_PHASE_CONNECTING, false);
+    wifi_status_update(&status, WIFI_PHASE_ONLINE, false);
+    CHECK(status.connection_generation == 2); /* genuine recovery with radio awake */
+    wifi_status_update(&status, WIFI_PHASE_ONLINE, true);
+    wifi_status_update(&status, WIFI_PHASE_CONNECTING, false);
+    wifi_status_lost(&status); /* failed attempt after waking the radio */
+    wifi_status_update(&status, WIFI_PHASE_CONNECTING, true);
+    wifi_status_update(&status, WIFI_PHASE_CONNECTING, false);
+    wifi_status_update(&status, WIFI_PHASE_ONLINE, false);
+    CHECK(status.connection_generation == 3);
+}
+
 int main(void)
 {
+    test_network_up_generation();
     wifi_plan_t plan;
     begin_attempt(&plan, 0);
     status_start();

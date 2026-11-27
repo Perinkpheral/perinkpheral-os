@@ -41,6 +41,18 @@ object PollManifestTest {
                     if (message != null) check(message in error.message.orEmpty()) { error.message.orEmpty() }
                 }
             }
+            val manual = mapOf("url" to "https://example.test/manual", "manual" to true, "pick" to listOf("value"))
+            val manualMinimum = sdk.contract.string("HOST_SINCE_POLL_MANUAL")!!
+            accepted(manual)
+            accepted(get + ("manual" to true))
+            accepted(get + ("manual" to false))
+            for (value in listOf(null, 1L, "true", emptyList<String>())) refused(get + ("manual" to value))
+            refused(manual + ("every" to null))
+            refused(manual + ("every" to 9L))
+            refused(manual - "manual")
+            refused(manual + ("manual" to false))
+            check(sdk.manifestFeatures(manifest(manual)) == listOf("POLL_MANUAL"))
+            check(sdk.firmwareFor(sdk.manifestFeatures(manifest(manual))).first == manualMinimum)
             refused(get + ("format" to "auto"))
             manifest(get, "0.1.102")
             ManifestCheck(sdk).check(app)
@@ -112,6 +124,10 @@ object PollManifestTest {
                     return packed["firmware"] as String
                 }
                 val floor = sdk.firmwareFor(emptyList()).first
+                check(builtMinimum(manual, floor) == manualMinimum)
+                check(buildLines.any { "for manual polls" in it })
+                check(builtMinimum(get + ("manual" to true)) == manualMinimum)
+                check(builtMinimum(get + ("manual" to false)) == floor)
                 check(builtMinimum(get) == floor)
                 check(builtMinimum(get + ("method" to "GET")) == floor)
                 for (method in listOf("POST", "HEAD", "REPORT")) {
@@ -180,7 +196,7 @@ object PollManifestTest {
                         source.writeText(source.readText().replace("request != NOTE_REQUEST", "request != NOTE_REQUEST && request != 0"))
                     }
                     val report = AppCheck(sdk, wasi) {}.run(specimen, only = "network")
-                    check(report.failed.isEmpty()) { report.lines.toString() }
+                    check(report.failed.isEmpty()) { report.lines.joinToString("\n") { "${it.what}: ${it.details}" } }
                 }
             }
         } finally {
