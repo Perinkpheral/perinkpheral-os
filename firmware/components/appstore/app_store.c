@@ -512,12 +512,13 @@ static app_write_result_t package_file_check(const char *root, const char *name,
     return APP_WRITE_OK;
 }
 
-/* What a file of so many bytes takes of the partition: whole blocks. */
+/* What a file of so many bytes takes of the partition: whole blocks.
+ * Rounded without forming size + block, so any size up to
+ * LONG_MAX - (block - 1) stays representable. */
 static long taken_by(long size)
 {
     return size <= 0 ? 0
-                     : (size + MANIFEST_FILE_BLOCK_BYTES - 1) / MANIFEST_FILE_BLOCK_BYTES *
-                           MANIFEST_FILE_BLOCK_BYTES;
+                     : ((size - 1) / MANIFEST_FILE_BLOCK_BYTES + 1) * MANIFEST_FILE_BLOCK_BYTES;
 }
 
 /* An incomplete census cannot authorize a write against a quota. */

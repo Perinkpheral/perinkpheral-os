@@ -1,5 +1,5 @@
 CC      ?= cc
-CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined
+CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -fno-sanitize-recover=undefined
 # POSIX beside C11, as the device's newlib has it (strnlen): glibc hides it under -std=c11
 CFLAGS  += -D_DEFAULT_SOURCE
 COMP    := ../../components
