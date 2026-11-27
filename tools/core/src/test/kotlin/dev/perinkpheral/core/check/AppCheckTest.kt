@@ -75,8 +75,74 @@ object AppCheckTest {
         """.trimIndent())
     private val MANUAL_POLL = listOf("\"every\": 60" to "\"manual\": true")
     private val MANUAL_TRIGGER = mapOf("request_presses" to "u")
+    private val MANUAL_LOADING_EDITS = listOf(
+        "    ask_note();" to "    (void)ask_note;",
+        "static bool schedule_failed;" to "static bool loading;\nstatic bool schedule_failed;",
+        "void app_on_button(int32_t event)\n{" to """
+            void app_on_button(int32_t event)
+            {
+                if (event == BTN_UP_PRESSED) {
+                    loading = true;
+                    poll_run(0);
+                    screen_redraw(HOST_REDRAW_NORMAL);
+                    return;
+                }
+        """.trimIndent(),
+        "void app_on_picked(int32_t request, int32_t http_status)\n{" to """
+            void app_on_picked(int32_t request, int32_t http_status)
+            {
+                loading = false;
+                screen_redraw(HOST_REDRAW_NORMAL);
+        """.trimIndent(),
+        "void app_on_draw(void)\n{" to """
+            void app_on_draw(void)
+            {
+                if (loading) {
+                    gfx_draw_text(MARGIN, MARGIN, HOST_FONT_TEXT, "Loading", 7);
+                    return;
+                }
+        """.trimIndent())
+    private val MANUAL_QUESTION_EDITS = listOf(
+        "    ask_note();" to "    (void)ask_note;",
+        "static bool schedule_failed;" to "static bool confirming;\nstatic bool schedule_failed;",
+        "void app_on_button(int32_t event)\n{" to """
+            void app_on_button(int32_t event)
+            {
+                if (event == BTN_UP_PRESSED) {
+                    confirming = true;
+                    screen_redraw(HOST_REDRAW_QUESTION);
+                    return;
+                }
+                if (event == BTN_OK_PRESSED && confirming) {
+                    confirming = false;
+                    poll_run(0);
+                    screen_redraw(HOST_REDRAW_NORMAL);
+                    return;
+                }
+        """.trimIndent(),
+        "void app_on_back(void)\n{" to """
+            void app_on_back(void)
+            {
+                if (confirming) {
+                    confirming = false;
+                    screen_redraw(HOST_REDRAW_NORMAL);
+                    return;
+                }
+        """.trimIndent(),
+        "void app_on_draw(void)\n{" to """
+            void app_on_draw(void)
+            {
+                if (confirming) {
+                    gfx_draw_text(MARGIN, MARGIN, HOST_FONT_TEXT, "Refresh?", 8);
+                    return;
+                }
+        """.trimIndent())
 
     private val BREAKS = listOf(
+        Break("network", "a confirmed request reaches its broken answer handler",
+            MANUAL_QUESTION_EDITS + listOf("    rate_limit(http_status);" to
+                "    __builtin_trap();\n    rate_limit(http_status);"), "app_on_picked",
+            manifestEdits = MANUAL_POLL, checkPatch = mapOf("request_presses" to "UO")),
         Break("sessions", "a toggling request trigger must not conceal a lost navigation mode",
             MANUAL_TOGGLE_EDITS + listOf("    int32_t saved = session_set(&page, sizeof page);" to
                 "    int32_t resume_page = page & ~MANUAL_MODE;\n" +
@@ -409,6 +475,16 @@ object AppCheckTest {
         Break(capability, "a manual trigger toggles the view once, preserving navigation and response comparisons",
             MANUAL_TOGGLE_EDITS, "", manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER)
     } + listOf(
+        Break("network", "a declared request sequence draws its question before confirming",
+            MANUAL_QUESTION_EDITS, "", manifestEdits = MANUAL_POLL,
+            checkPatch = mapOf("request_presses" to "UO")),
+        Break("network", "a completed manual request reopens its retained session without another loading screen",
+            MANUAL_LOADING_EDITS, "", manifestEdits = MANUAL_POLL,
+            checkPatch = mapOf("request_presses" to "U")),
+        Break("network", "a completed manual request reopens from the store without another loading screen",
+            MANUAL_LOADING_EDITS + listOf("    int32_t saved = session_set(&page, sizeof page);" to
+                "    int32_t saved = HOST_OK;"), "", manifestEdits = MANUAL_POLL,
+            checkPatch = mapOf("request_presses" to "U")),
         Break("network", "requesting one manual poll never delivers its unrequested sibling",
             MANUAL_TOGGLE_EDITS + listOf("void app_on_picked(int32_t request, int32_t http_status)\n{" to
                 "void app_on_picked(int32_t request, int32_t http_status)\n{\n    if (request == 1) __builtin_trap();"), "",

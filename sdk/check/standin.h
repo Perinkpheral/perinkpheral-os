@@ -125,7 +125,7 @@ typedef struct {
     int32_t                  store_count;
     const standin_answer_t  *answers;
     int32_t                  answer_count;
-    const char              *request_presses; /* once per fresh foreground scene without a session, UODBuodb */
+    const char              *request_presses; /* once before answers or background preparation; draw between UODBuodb presses */
     const standin_mutation_t *mutations;
     int32_t                  mutation_count;
     const standin_pair_t    *exceptions;

@@ -17,8 +17,11 @@ also discovers and runs `test/*.c`, compiled with the stand-in and sanitizers.
 
 For button-triggered requests, declare `"request_presses": "U"` (short `UODB`, long
 `uodb`). The checker presses this sequence once per fresh foreground scene that
-starts without a retained session, including visits that prepare background work.
-It does not press it again on session restoration or before later response rounds:
+starts without a retained session and will receive answers or prepare background work.
+It draws the initial frame and every requested frame between presses, so a question
+is shown before OK confirms it. Restoration comparisons never inject this sequence,
+whether reopening a retained session or loading only from the store.
+It does not press it again before later response rounds:
 a trigger may navigate or toggle a mode. Session presence is checked before loading,
 so reserving session storage on focus does not suppress the initial trigger.
 With a declared trigger, response-invariant rounds replay previously requested manual
@@ -40,6 +43,8 @@ their IANA aliases use the city table first. Other IANA names known to the JDK u
 the current year's standard and daylight offsets and transition dates, converted
 to recurring month rules as on the device page. Without an annual transition pair,
 the current offset becomes a fixed rule (for example, `Pacific/Apia` is now UTC+13).
+Explicit POSIX syntax takes precedence over Java zone IDs: `UTC-3` and `<+03>-3`
+both mean UTC+03:00; `Etc/GMT-1` remains an IANA name meaning UTC+01:00.
 Fixed-offset zones and explicit POSIX month rules are also accepted. Lord Howe's
 inferred rule preserves its half-hour DST change.
 

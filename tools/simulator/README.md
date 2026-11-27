@@ -80,7 +80,9 @@ city table first. Other IANA names known to the JDK use the current year's stand
 and daylight offsets and transition dates, converted to recurring month rules as
 on the device page. Without an annual transition pair, the current offset becomes
 a fixed rule. These rules also apply to past dates; historical IANA changes are not
-used. Explicit POSIX month rules and fixed-offset zones are also accepted.
+used. Explicit POSIX syntax takes precedence over Java zone IDs: `UTC-3` and
+`<+03>-3` both mean UTC+03:00; `Etc/GMT-1` remains an IANA name meaning UTC+01:00.
+Explicit POSIX month rules and fixed-offset zones are also accepted.
 
 At Unix zero, macOS libc uses UTC+10:30 for the Lord Howe POSIX rule, while the
 native checker's recurring rules give UTC+11. Probes in 2000 are unaffected.
