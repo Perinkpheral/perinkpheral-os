@@ -309,7 +309,8 @@ ui_list_visible(list_ptr) / ui_list_first(list_ptr)  // Perinkpheral OS's list -
 ui_draw_list_row(list_ptr, index, label, label_len, value, value_len, icon)     // one row of it, with the scroll bar; a title may stand over a list and buttons under it
 ui_draw_notice(struct_ptr)                  // Perinkpheral OS's notice on the whole surface: two lines, an icon, what OK and BACK do
 ui_draw_text(x, y, style, str, len, max_width) / ui_draw_title(str, len)   // text in Perinkpheral OS's styles; the title of a page
-ui_draw_text_lines(x, y, style, str, len, width, max_lines)           // the same over several lines, broken at spaces, the last cut
+ui_draw_text_lines(x, y, style, str, len, width, max_lines)           // wraps to width, preferring spaces; overlong words split at UTF-8 character boundaries
+                                       // at most max_lines; the last line is cut with "..." if text remains
 ui_text_width(style, str, len) / ui_text_height(style)           // to centre and to stack; HOST_UI_MARGIN is Perinkpheral OS's 16 px
 ui_draw_icon(x, y, icon, size)              // a Perinkpheral OS icon at 22, 44 or 99 px
 ui_draw_button(x, y, name, name_len, action, action_len, mirrored) / ui_draw_actions(ok, ok_len, back, back_len)   // a button and what it does; the row along the bottom

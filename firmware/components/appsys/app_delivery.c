@@ -169,7 +169,9 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
         abandoned.rest_unwanted = app == NULL;
         if (app != NULL) {
             abandoned.rest_unwanted = !call(app, delivery);
-            note_piece(state, owner, delivery);
+            if (!delivery->headers_only || abandoned.rest_unwanted) {
+                note_piece(state, owner, delivery);
+            }
             /* On the screen there is nothing to ask for. */
             app_take_focus_request(app);
             /* Somebody has just saved its settings and is looking at the
@@ -226,6 +228,12 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
         state->in_background = owner;
     }
     abandoned.rest_unwanted = app == NULL || !call(app, delivery);
+    /* An accepted header probe calls no raw handler. The real FIRST piece
+     * starts the stream and keeps its receiving instance loaded. */
+    if (delivery->headers_only && !abandoned.rest_unwanted) {
+        end_background(state, wm, NULL, now_ms);
+        return abandoned;
+    }
     if (app == NULL && app_scene_needs_memory(owner) &&
         (delivery->kind == APP_DELIVERY_PIECE || delivery->kind == APP_DELIVERY_VALUES)) {
         abandoned = (app_abandoned_t){ .owner = owner, .request = delivery->request,

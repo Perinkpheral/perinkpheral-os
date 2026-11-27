@@ -3457,8 +3457,8 @@ Text in a style: <code>HOST_UI_TEXT</code>, <code>HOST_UI_TITLE</code>, <code>HO
 ui_draw_text_lines(x, y, style, text, length, width, max_lines)
 =
 
-Text wrapped at spaces to <code>width</code>, up to <code>max_lines</code> (1 - 8); the last line is shortened with "...". Returns the number of lines
-Текст с переносом по пробелам до <code>width</code>, не более <code>max_lines</code> строк (1 - 8); последняя строка сокращается с "...". Возвращает число строк
+Text wrapped to <code>width</code>, preferring spaces and splitting overlong words at UTF-8 character boundaries, up to <code>max_lines</code> (1 - 8); the last line is shortened with "..." if text remains. Returns the number of lines
+Текст с переносом до <code>width</code>, предпочтительно по пробелам; слишком длинные слова разделяются по границам символов UTF-8. Не более <code>max_lines</code> строк (1 - 8); последняя строка сокращается с "...", если текст остался. Возвращает число строк
 
 ui_text_width(style, text, length), ui_text_height(style)
 =

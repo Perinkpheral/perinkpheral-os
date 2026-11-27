@@ -104,8 +104,9 @@ HOST_IMPORT(ui_draw_notice, int32_t ui_draw_notice(const host_notice_t *notice))
 HOST_IMPORT(ui_draw_text, int32_t ui_draw_text(int32_t x, int32_t y, int32_t style, const char *text,
                                      int32_t length, int32_t max_width));
 
-/* ui_draw_text_lines: text wrapped at spaces to `width`, at most `max_lines`
- * lines (1..HOST_UI_LINES_MAX). The last line is cut with "..." if text
+/* ui_draw_text_lines: text wrapped to `width`, preferring spaces and splitting
+ * overlong words at UTF-8 character boundaries, at most `max_lines` lines
+ * (1..HOST_UI_LINES_MAX). The last line is cut with "..." if text
  * remains. Line height is ui_text_height() of the style. Returns the
  * number of lines drawn.
  *

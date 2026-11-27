@@ -1123,6 +1123,46 @@ static void test_question_survives_background_delivery(void)
     app_scene_destroy(settings);
 }
 
+static void test_background_raw_header_probe(void)
+{
+    const int requests[] = { 1, HOST_REQUEST_FIRST };
+    const int64_t first_piece_ms = 5 * 60 * 1000;
+    for (unsigned index = 0; index < sizeof requests / sizeof requests[0]; index++) {
+        start_on(&menu.scene);
+        host_answer_info_t response = { .status = 403 };
+        app_delivery_t headers = { .kind = APP_DELIVERY_PIECE, .request = requests[index],
+            .http_status = 403, .response = &response, .flags = HOST_DATA_FIRST,
+            .headers_only = true };
+        app_abandoned_t result = app_deliver(&state, &wm, probe, &headers, 0);
+        CHECK(result.owner == NULL && !result.rest_unwanted);
+        CHECK(wm.current == &menu.scene && !wm.suspended);
+        CHECK(state.in_background == NULL && !state.is_mid_answer);
+        CHECK(state.answer_owner == NULL && state.answer_instance == 0);
+        CHECK(app_scene_loaded_app(probe) == NULL);
+        CHECK(menu.left == 1 && menu.entered == 2);
+
+        app_delivery_t alarm = { .kind = APP_DELIVERY_ALARM, .request = 0 };
+        result = app_deliver(&state, &wm, probe, &alarm, 1);
+        CHECK(result.owner == NULL && !wm.suspended);
+        CHECK(state.answer_owner == NULL && state.answer_instance == 0);
+
+        uint8_t byte = 3;
+        app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = requests[index],
+            .http_status = 403, .response = &response, .data = &byte, .length = 1,
+            .flags = HOST_DATA_FIRST };
+        result = app_deliver(&state, &wm, probe, &piece, first_piece_ms);
+        CHECK(result.owner == NULL && !result.rest_unwanted);
+        CHECK(wm.suspended && state.in_background == probe && state.is_mid_answer);
+        CHECK(state.answer_owner == probe && state.answer_instance == app_scene_instance(probe));
+        CHECK(state.answer_instance != 0);
+        piece.flags = HOST_DATA_LAST;
+        result = app_deliver(&state, &wm, probe, &piece, first_piece_ms + 1);
+        CHECK(result.owner == NULL && !wm.suspended);
+        CHECK(state.in_background == NULL && !state.is_mid_answer);
+        CHECK(state.answer_owner == NULL && state.answer_instance == 0);
+    }
+}
+
 static void test_host_document_rejection(void)
 {
     start_on(&menu.scene);
@@ -1157,6 +1197,7 @@ static void test_host_document_rejection(void)
 int main(void)
 {
     install_probe();
+    test_background_raw_header_probe();
     test_host_document_rejection();
     test_manifest_ownership();
     test_missing_application_area();

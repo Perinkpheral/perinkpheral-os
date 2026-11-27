@@ -8,10 +8,23 @@ import dev.perinkpheral.core.build.Pictures
 import dev.perinkpheral.core.build.Sdk
 import dev.perinkpheral.core.build.Wasm
 import dev.perinkpheral.core.catalog.Catalog
+import dev.perinkpheral.cli.ContractTools
 import java.io.File
 import java.nio.file.Files
 
 object BuilderSafetyTest {
+    fun tool(root: File, destination: File): File {
+        fun quoted(value: String) = "'" + value.replace("'", "'\"'\"'") + "'"
+        val java = File(System.getProperty("java.home"), "bin/java").path
+        val classpath = System.getProperty("java.class.path").split(File.pathSeparator)
+            .joinToString(File.pathSeparator) { File(it).absolutePath }
+        destination.parentFile.mkdirs()
+        destination.writeText("#!/bin/sh\nexec ${quoted(java)} ${quoted("-Dperinkpheral.test.root=${root.path}")} -cp ${quoted(classpath)} " +
+            "dev.perinkpheral.core.BuilderSafetyTest \"\$@\"\n")
+        check(destination.setExecutable(true))
+        return destination
+    }
+
     private fun cmakeOnPath(path: String?): Boolean =
         !path.isNullOrEmpty() && path.split(File.pathSeparator).any {
             val cmake = File(it, "cmake")
@@ -25,6 +38,9 @@ object BuilderSafetyTest {
             when (args[0]) {
                 "flags" -> println((if (args[1] == "compile") BuildFlags.compile else BuildFlags.link).joinToString(";"))
                 "headers" -> AppBuilder(Sdk(root), File("unused")) {}.headers(File(args[1]), File(args[2]))
+                "build" -> AppBuilder(Sdk(root), File(System.getenv("WASI_SDK_PATH"))) {}.build(File(args[1]), File(args[3]))
+                "imports" -> ContractTools.imports(Sdk(root).contract, File(args[1]))
+                "every-call" -> ContractTools.everyCall(Sdk(root).contract, File(args[1]))
                 else -> error("unexpected test tool command")
             }
             return
@@ -259,7 +275,8 @@ object BuilderSafetyTest {
                     check(process.waitFor() == 0) { "${command.joinToString(" ")} failed:\n$output" }
                     return output
                 }
-                runMemoryTest("make", "test_app")
+                val memoryTool = tool(root, File(scratch, "memory-tool"))
+                runMemoryTest("make", "TOOLS=${memoryTool.path}", "test_app")
                 for ((dataBytes, expectedMemory) in listOf(1 to 9232L, 1025 to 10256L, 32768 to 41984L)) {
                     File(arenaSource, "main.c").writeText("""
                         /* SPDX-License-Identifier: MIT */
@@ -385,15 +402,7 @@ object BuilderSafetyTest {
                     for (name in listOf("lib", "host", "host_api.h")) {
                         File(root, "sdk/$name").copyRecursively(File(cmakeSdk, "sdk/$name"))
                     }
-                    fun quoted(text: String) = "'" + text.replace("'", "'\"'\"'") + "'"
-                    val testTool = File(cmakeSdk, "tools/perinkpheral")
-                    testTool.parentFile.mkdirs()
-                    val java = File(System.getProperty("java.home"), "bin/java").path
-                    val classpath = System.getProperty("java.class.path").split(File.pathSeparator)
-                        .joinToString(File.pathSeparator) { File(it).absolutePath }
-                    testTool.writeText("#!/bin/sh\nexec ${quoted(java)} ${quoted("-Dperinkpheral.test.root=${root.path}")} -cp ${quoted(classpath)} " +
-                        "dev.perinkpheral.core.BuilderSafetyTest \"\$@\"\n")
-                    check(testTool.setExecutable(true))
+                    tool(root, File(cmakeSdk, "tools/perinkpheral"))
                     File(cmakeSource, "CMakeLists.txt").writeText("""
                         cmake_minimum_required(VERSION 3.20)
                         include("${cmakeSdk.path}/sdk/cmake/perinkpheral.cmake")

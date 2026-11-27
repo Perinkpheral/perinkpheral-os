@@ -12,6 +12,11 @@ version = "0.1.0"
 
 kotlin {
     jvmToolchain(21)
+    // Reuse the CLI contract generators in native-test tool wrappers.
+    sourceSets.test {
+        kotlin.srcDir("../cli/src/main/kotlin")
+        kotlin.include("dev/perinkpheral/core/**", "dev/perinkpheral/cli/ContractTools.kt")
+    }
 }
 
 // Uses only JDK/Kotlin, including a local HTTP server for transport failure cases.

@@ -2,6 +2,7 @@
 package dev.perinkpheral.core
 
 import java.io.File
+import java.nio.file.Files
 
 /** Runs the application regressions in the real interpreter, without a device or network. */
 object AppsysTest {
@@ -10,7 +11,11 @@ object AppsysTest {
             .first { File(it, "sdk/host_api.h").isFile }
         check(!System.getenv("WASI_SDK_PATH").isNullOrEmpty()) { "WASI_SDK_PATH is required" }
         val host = File(root, "firmware/test/host")
-        run(host, "make", "test_app", "test_delivery")
+        val scratch = Files.createTempDirectory("perinkpheral-appsys-test").toFile()
+        try {
+            val tool = BuilderSafetyTest.tool(root, File(scratch, "tool"))
+            run(host, "make", "TOOLS=${tool.path}", "test_app", "test_delivery")
+        } finally { scratch.deleteRecursively() }
         for (test in listOf("test_app", "test_delivery")) {
             val output = run(host, File(host, test).path)
             check(Regex("(?m)^\\d+ checks, 0 failed$").containsMatchIn(output)) {
