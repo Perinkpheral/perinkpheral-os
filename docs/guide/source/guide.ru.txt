@@ -1324,8 +1324,8 @@ Capital height, px
 Line height, px
 Высота строки, пикс.
 
-Characters per 400 px
-Символов на 400 пикс.
+Digits per 400 px
+Цифр на 400 пикс.
 
 Typical use
 Типичное применение
@@ -2046,6 +2046,9 @@ A question that OK answers: removal, reset, anything that cannot be undone
 
 Settings changes and deliveries to that application for the next 30 seconds use the urgent refresh policy while it is on screen. Other data, timer, alarm and intent redraws use the normal data policy.
 Изменения настроек и доставки этому приложению в следующие 30 секунд используют срочную политику обновления, пока оно на экране. Остальные перерисовки по данным, таймеру, будильнику и событию используют обычную политику данных.
+
+Redraw requests made inside <code>app_on_draw()</code> are cleared when it returns and do not schedule another frame.
+Запросы перерисовки, сделанные внутри <code>app_on_draw()</code>, сбрасываются после его возврата и не планируют новый кадр.
 
 Redraw requests are unlimited.
 Число запросов перерисовки не ограничено.
@@ -3769,8 +3772,8 @@ Inside <code>app_on_picked()</code>: copies element <code>element</code> of path
 answer_item(void)
 =
 
-Inside <code>app_on_data()</code> and <code>app_on_picked()</code>: the item of the list a poll with <code>each</code> made this request for, from 0; -1 for any other response
-Внутри <code>app_on_data()</code> и <code>app_on_picked()</code>: пункт списка, для которого опрос с <code>each</code> сделал этот запрос, от 0; -1 для любого другого ответа
+Inside <code>app_on_data()</code>, <code>app_on_picked()</code> and <code>app_on_document()</code>: the zero-based list item index for a poll with <code>each</code>; -1 for any other response
+Внутри <code>app_on_data()</code>, <code>app_on_picked()</code> и <code>app_on_document()</code>: индекс пункта списка от 0 для опроса с <code>each</code>; -1 для любого другого ответа
 
 answer_info(response, capacity)
 =

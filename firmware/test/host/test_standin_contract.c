@@ -19,6 +19,12 @@ static void on_button(int32_t event)
     }
 }
 
+static void on_draw(void)
+{
+    CHECK(standin()->redraw_flags == 0);
+    screen_redraw(HOST_REDRAW_CLEAN);
+}
+
 static void test_package_files(void)
 {
     standin_reset();
@@ -80,7 +86,12 @@ static void test_redraw_flags(void)
     screen_redraw(HOST_REDRAW_SOON | HOST_REDRAW_CLEAN);
     screen_redraw(unknown_flag);
     CHECK(standin()->redraw_flags == (HOST_REDRAW_QUESTION | HOST_REDRAW_SOON | HOST_REDRAW_CLEAN));
+    standin_handlers.on_draw = on_draw;
+    int32_t redraws = standin()->redraws;
     standin_draw();
+    CHECK(standin()->redraws == redraws + 1);
+    CHECK(standin()->redraw_flags == 0);
+    screen_redraw(HOST_REDRAW_NORMAL);
     CHECK(standin()->redraw_flags == 0);
     screen_redraw(HOST_REDRAW_NO_BLINK);
     CHECK(standin()->redraw_flags == HOST_REDRAW_NO_BLINK);

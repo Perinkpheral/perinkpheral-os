@@ -2908,6 +2908,7 @@ uint64_t standin_draw(void)
     host->visible_failure = false;
     host->is_drawing = true;
     CALL(on_draw);
+    host->redraw_flags = 0;
     host->is_drawing = false;
     host->draws++;
     return host->picture;

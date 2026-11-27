@@ -497,10 +497,10 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <p>Measure text with <code>gfx_text_width()</code>, <code>gfx_font_height()</code>, <code>gfx_font_ascent()</code> and <code>gfx_font_cap_height()</code>.</p>
 <p>Each cell gives the value for Departure Mono, then for Jersey.</p>
 <table>
-  <tr><th style="width:24%">Constant</th><th>Capital height, px</th><th>Line height, px</th><th>Characters per 400 px</th><th style="width:34%">Typical use</th></tr>
+  <tr><th style="width:24%">Constant</th><th>Capital height, px</th><th>Line height, px</th><th>Digits per 400 px</th><th style="width:34%">Typical use</th></tr>
   <tr><td class="c">HOST_FONT_SMALL</td><td>8 / 10</td><td>15 / 21</td><td>57 / 50</td><td>Units, captions</td></tr>
   <tr><td class="c">HOST_FONT_TEXT</td><td>16 / 15</td><td>30 / 28</td><td>28 / 33</td><td>Body text; Perinkpheral OS's own text</td></tr>
-  <tr><td class="c">HOST_FONT_MEDIUM</td><td>24 / 25</td><td>45 / 43</td><td>19 / 21</td><td>Titles, secondary values</td></tr>
+  <tr><td class="c">HOST_FONT_MEDIUM</td><td>24 / 25</td><td>45 / 43</td><td>19 / 20</td><td>Titles, secondary values</td></tr>
   <tr><td class="c">HOST_FONT_LARGE</td><td>32 / 30</td><td>60 / 56</td><td>14 / 16</td><td>Notice lines</td></tr>
   <tr><td class="c">HOST_FONT_DISPLAY</td><td>48 / 50</td><td>90 / 86</td><td>9 / 10</td><td>The main value of a screen</td></tr>
   <tr><td class="c">HOST_FONT_HUGE</td><td>80 / 80</td><td>150 / 140</td><td>5 / 6</td><td>Clock: five digits fill the width</td></tr>
@@ -663,6 +663,7 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
   <tr><td class="c">HOST_REDRAW_QUESTION</td><td>OK reaches the application only when it is pressed after this frame is on the panel. Pending flags are combined with OR. Each consumed redraw with QUESTION starts a new question; one without it ends the question. NORMAL cannot clear a pending QUESTION</td><td>A question that OK answers: removal, reset, anything that cannot be undone</td></tr>
 </table>
 <p>Settings changes and deliveries to that application for the next 30 seconds use the urgent refresh policy while it is on screen. Other data, timer, alarm and intent redraws use the normal data policy.</p>
+<p>Redraw requests made inside <code>app_on_draw()</code> are cleared when it returns and do not schedule another frame.</p>
 <p>Redraw requests are unlimited.</p>
 </div>
 <p>Each refresh uses battery energy and wears the panel. Frequent changes also make the device distracting. See section 13 for guidelines.</p>
@@ -1336,7 +1337,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">answer_value(index, text, capacity)</td><td>Inside <code>app_on_picked()</code>: copies the value of path <code>index</code> as text without a terminator. Returns its length. A list path has no value</td></tr>
   <tr><td class="c">answer_count(index)</td><td>Inside <code>app_on_picked()</code>: the number of elements of list path <code>index</code>; 1 or 0 for any other path</td></tr>
   <tr><td class="c">answer_element(index, element, text, capacity)</td><td>Inside <code>app_on_picked()</code>: copies element <code>element</code> of path <code>index</code>, as <code>answer_value()</code> does</td></tr>
-  <tr><td class="c">answer_item(void)</td><td>Inside <code>app_on_data()</code> and <code>app_on_picked()</code>: the item of the list a poll with <code>each</code> made this request for, from 0; -1 for any other response</td></tr>
+  <tr><td class="c">answer_item(void)</td><td>Inside <code>app_on_data()</code>, <code>app_on_picked()</code> and <code>app_on_document()</code>: the zero-based list item index for a poll with <code>each</code>; -1 for any other response</td></tr>
   <tr><td class="c">answer_info(response, capacity)</td><td>Inside a data handler: copies the first min(capacity, sizeof(host_answer_info_t)) bytes and returns the byte count. Negative capacity or an invalid destination gives HOST_ERR_ARGUMENT; outside a data handler, HOST_ERR_NOT_FOUND. Capacity 0 writes nothing. Bytes beyond Perinkpheral OS's struct stay untouched. Zero the destination first if accepting a shorter struct. Fields: status, length, retry_after, content_type[48], etag[64], last_modified[32], location[128], link[192]</td></tr>
   <tr><td class="c">answer_header(name, name_length, occurrence, value, capacity)</td><td>Header value in a data handler, without NUL. Case-insensitive name; occurrence starts at 0. Returns length, HOST_ERR_ARGUMENT, HOST_ERR_NOT_FOUND or HOST_ERR_NO_SPACE. Requires firmware 0.1.51; capture limits and authentication state are described above.</td></tr>
 </table>
