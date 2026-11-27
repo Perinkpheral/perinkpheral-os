@@ -190,7 +190,7 @@
 <p>Global variables are kept until the application is unloaded. It is unloaded when it leaves the screen and after a background delivery ends. A streamed response keeps the same instance between chunks; it also handles intervening events for that application. Saving settings during a background poll invalidates that poll, drops its remaining pieces and delivers settings to a fresh instance. This exception does not apply to explicit HTTP requests.</p>
 <p>State is loaded in <code>app_on_load()</code> and saved in <code>app_on_terminate()</code>, the last call of every instance that was not stopped for a fault. A value that must survive a power loss is saved immediately after it changes.</p>
 <p>Use session memory for temporary UI state: the current page, selected row, unfinished edit or a packed game board. Up to 1024 bytes (<code>HOST_SESSION_MAX</code>) survive unloads while the application remains in the navigation stack; Perinkpheral OS allocates them on demand, and <code>session_set()</code> returns <code>HOST_ERR_NO_SPACE</code>, keeping the previous value, if it cannot. Firmware before 0.1.61 keeps 128 bytes: an application that keeps more sets <code>"firmware": "0.1.61"</code> in its manifest. It is saved in <code>app_on_blur()</code> and read in <code>app_on_focus()</code>, with <code>app_session_save()</code> and <code>app_session_load()</code>. It is cleared when the application leaves the stack, when it is opened again from the menu, and by a restart. An instance loaded for a background call can read it and cannot change it.</p>
-<p>Use <code>time_now()</code> for timestamps that must span restarts. Store <code>time_boot_id()</code> beside an uptime value to detect an earlier boot and discard that value. The boot id is a random nonzero 32-bit value; equality does not guarantee that no restart occurred.</p>
+<p>Measure elapsed time and countdowns with <code>time_uptime_ms()</code>, which includes sleep and is unaffected by clock corrections. Keep the reference and <code>time_boot_id()</code> in the store across application unloads. After a restart, discard the uptime reference and apply an explicit policy: reset, pause, or use a stored <code>time_now()</code> reference when the clock is known, accepting clock corrections. The boot id is a random nonzero 32-bit value; equality does not guarantee that no restart occurred.</p>
 <p>The session is attached after app_on_load() returns. Read it in app_on_focus() or a background delivery handler; session_set() in app_on_load() returns HOST_ERR_ARGUMENT.</p>
 <h2 id="model-screen">Navigation and refresh</h2>
 <p>Navigation is organized as a stack. The menu is at the bottom. An application opened from the menu is placed on top. A notification, a Perinkpheral OS question or an application that requested the screen is placed above the current screen.</p>
@@ -672,7 +672,7 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
 <p>The buttons are, in order: UP, OK, DOWN, BACK. Perinkpheral OS uses them the same way on every screen. Applications should keep these meanings.</p>
 <p>Each press produces two kinds of events. The raw events are <code>KEYDOWN</code> and <code>KEYUP</code>. The interpreted events are <code>PRESSED</code>, sent when a short press ends, and <code>LONG_PRESSED</code>, sent after 600 ms while the button is still held. A long press does not produce <code>PRESSED</code>.</p>
 <p>Most applications handle only <code>PRESSED</code> and <code>LONG_PRESSED</code>.</p>
-<p>The event value combines the button and the action. Each combination has a constant:</p>
+<p>The event value is <code>(button &lt;&lt; 4) | action</code>: buttons 1 - 4 occupy the high bits; the low four bits hold the action. <code>BTN_OF(event)</code> shifts right by 4; <code>BTN_ACTION_OF(event)</code> masks with 15. Current actions are KEYDOWN = 0, KEYUP = 1, PRESSED = 2 and LONG_PRESSED = 3. Ignore unrecognized actions. Each combination has a constant:</p>
 <pre>void app_on_button(int32_t event)
 {
     switch (event) {
@@ -967,12 +967,12 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
 </table>
 
 <p>HOST_ALARM_REPEATING_MAX is the device pool of 24 repeating alarms, shared by all applications. One application may take several slots; none are reserved per application. HOST_ALARM_COUNT limits each application to four alarm ids.</p>
-<p>first_in is 0 - 86400 independently of the repeating period. A late alarm does not replay every missed period: if the following occurrence is overdue, the next is scheduled one period from processing time.</p>
+<p>first_in is 0 - 86400 independently of the repeating period. The repeating phase is measured in uptime and is unaffected by clock corrections. A late alarm does not replay every missed period: if the following occurrence is overdue, the next is scheduled one period from processing time.</p>
 <h1 id="time">11. Time</h1>
 <ul>
-  <li><code>time_now()</code> returns Unix time in seconds. It returns 0 until the device has obtained the time. The application must handle this case.</li>
-  <li>Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time, <code>time_local_at()</code> converts any moment, and <code>time_from_local()</code> converts a local date and time back to Unix time, for example for <code>alarm_set_at()</code>.</li>
-  <li><code>time_text()</code> formats a moment as text in the device's language. Applications do not need their own names of days and months. Formats: "15:04", "Fri 13 Nov", "Friday", "Fri", "13 November", and a relative form: "15:04", "Tmrw 15:04", "Sat 15:04", "21 Nov".</li>
+  <li><code>time_now()</code> returns Unix time in seconds within <code>HOST_CLOCK_MIN</code> - <code>HOST_CLOCK_MAX</code> (2026-01-01 through 2100-01-01 UTC, inclusive). Outside that range the current clock is unknown: <code>time_now()</code> and <code>time_zone_offset()</code> return 0, and <code>time_local()</code> returns <code>HOST_ERR_NOT_FOUND</code> without changing its destination.</li>
+  <li>Display local time. Perinkpheral OS owns the time zone. <code>time_local()</code> returns the current local date and time. <code>time_local_at()</code> and <code>time_from_local()</code> convert moments from 1900-01-01 through 2100-01-01 UTC, inclusive, using the configured POSIX time-zone rules at that moment. This conversion range is available even while the current clock is unknown; zero denotes 1970-01-01 UTC.</li>
+  <li><code>time_text()</code> formats a moment from the conversion range in the device's language. Applications do not need their own names of days and months. Formats: "15:04", "Fri 13 Nov", "Friday", "Fri", "13 November", and a relative form: "15:04", "Tmrw 15:04", "Sat 15:04", "21 Nov". Relative styles show a date such as "21 Nov" while the current clock is unknown.</li>
   <li>To be called for time-zone changes and clock corrections of at least two seconds, declare the <code>time_changed</code> intent. Smaller corrections are not reported.</li>
 </ul>
 
@@ -1348,7 +1348,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">text_fill(pattern, pattern_length, arguments, count, text, capacity)</td><td>Replaces <code>{0}</code> .. <code>{3}</code> with <code>host_text_argument_t</code> values. Pattern, text arguments and filled result are each limited to HOST_TEXT_MAX bytes. The result is cut to capacity without a terminator; returns its byte length</td></tr>
   <tr><td class="c">void log_write(level, text, length)</td><td>Writes one log line of up to 200 bytes. Levels: <code>HOST_LOG_ERROR</code>, <code>HOST_LOG_WARN</code>, <code>HOST_LOG_INFO</code>, <code>HOST_LOG_DEBUG</code></td></tr>
 </table>
-<p>Time arguments to <code>time_local_at()</code>, <code>time_text()</code> and <code>alarm_set_at()</code> accept Unix seconds 1767225600 through 4102444800: 2026-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). Outside this range they return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged. <code>time_from_local()</code> applies the same range to the Unix moment after normalizing the local fields; an out-of-range result leaves its destination unchanged.</p>
+<p><code>time_local_at()</code> and <code>time_text()</code> accept Unix seconds -2208988800 through 4102444800: 1900-01-01 through 2100-01-01 UTC, inclusive (<code>HOST_TIME_MIN</code> through <code>HOST_TIME_MAX</code>). <code>time_from_local()</code> checks the same range after normalizing local fields. Negative seconds and zero are valid conversion arguments. <code>alarm_set_at()</code> and <code>sys_time_set()</code> accept the current-clock range instead: 1767225600 through 4102444800 (<code>HOST_CLOCK_MIN</code> through <code>HOST_CLOCK_MAX</code>). Out-of-range arguments return <code>HOST_ERR_ARGUMENT</code> and leave destinations unchanged.</p>
 <h1 id="ref-time">21. Time</h1>
 <table>
   <tr><th style="width:44%">Call</th><th>Description</th></tr>
@@ -1361,7 +1361,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">uint32_t time_boot_id(void)</td><td>Random nonzero 32-bit boot identifier. Store it with saved uptime and discard uptime if it differs. Equality does not guarantee that no restart occurred</td></tr>
   <tr><td class="c">timer_set(id, milliseconds)</td><td>One-shot timer, id 0 - 3. 0 ms cancels. A new call restarts it</td></tr>
   <tr><td class="c">alarm_set(id, seconds)</td><td>One-shot alarm, id 0 - 3. 0 s cancels</td></tr>
-  <tr><td class="c">alarm_set_at(id, int64_t unix_time)</td><td>One-shot alarm at Unix seconds HOST_TIME_MIN - HOST_TIME_MAX</td></tr>
+  <tr><td class="c">alarm_set_at(id, int64_t unix_time)</td><td>One-shot alarm at Unix seconds HOST_CLOCK_MIN - HOST_CLOCK_MAX</td></tr>
   <tr><td class="c">alarm_set_every(id, seconds, first_in)</td><td>Repeating alarm, period 60 - 86400 s. First call after <code>first_in</code> seconds, 0 - 86400 (0: one period). HOST_ALARM_REPEATING_MAX: 24 shared slots; one application may take several</td></tr>
 </table>
 

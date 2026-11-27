@@ -69,7 +69,7 @@ void net_time_set_automatic(bool automatic)
 
 bool net_time_set(int64_t unix_seconds)
 {
-    if (s_automatic || unix_seconds < HOST_TIME_MIN || unix_seconds > HOST_TIME_MAX) {
+    if (s_automatic || unix_seconds < HOST_CLOCK_MIN || unix_seconds > HOST_CLOCK_MAX) {
         return false;
     }
     struct timeval now = { .tv_sec = (time_t)unix_seconds };
@@ -102,7 +102,7 @@ void net_time_sync_now(void)
 int64_t net_time_now(void)
 {
     time_t now = time(NULL);
-    return now >= HOST_TIME_MIN && now <= HOST_TIME_MAX ? (int64_t)now : 0;
+    return now >= HOST_CLOCK_MIN && now <= HOST_CLOCK_MAX ? (int64_t)now : 0;
 }
 
 bool net_time_is_known(void)

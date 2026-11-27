@@ -297,7 +297,8 @@ static uint64_t show(void)
     }
     /* And another minute or day in the header's clock (status.c, header_differs): the window is
      * drawn again, the application's frame with it. The header is taken to show the clock. */
-    int64_t minute = host->now != 0 ? (host->now + host->zone_offset) / 60 : -1;
+    int64_t now = time_now();
+    int64_t minute = now != 0 ? (now + time_zone_offset()) / 60 : -1;
     is_new_header = is_new_header || minute != shown.minute;
     if (!shown.is_shown || host->redraws != shown.redraws || host->is_inverted != shown.is_inverted || is_new_header) {
         shown.picture = frame();

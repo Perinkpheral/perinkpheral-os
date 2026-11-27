@@ -9,12 +9,20 @@
 
 #include "base.h"
 
-/* Moments accepted by time_local_at(), time_text(), time_from_local() and
- * alarm_set_at(): 2026-01-01 through 2100-01-01, inclusive, in UTC.
+/* Moments accepted by time_local_at(), time_text() and time_from_local():
+ * 1900-01-01 through 2100-01-01, inclusive, in UTC. Unix seconds may be negative
+ * or zero; zero denotes 1970-01-01 for these explicit conversions.
  * Outside this range: HOST_ERR_ARGUMENT, with destinations unchanged.
  * time_from_local() checks the moment after normalizing the local fields. */
-#define HOST_TIME_MIN 1767225600LL
+#define HOST_TIME_MIN (-2208988800LL)
 #define HOST_TIME_MAX 4102444800LL
+
+/* Current-clock validity and alarm_set_at(): 2026-01-01 through 2100-01-01,
+ * inclusive, in UTC. A current clock outside this range is unknown. */
+#define HOST_CLOCK_MIN 1767225600LL
+#define HOST_CLOCK_MAX 4102444800LL
+#define HOST_SINCE_HOST_CLOCK_MIN "0.1.103"
+#define HOST_SINCE_HOST_CLOCK_MAX "0.1.103"
 
 /* ---- Alarms ---- */
 
@@ -27,7 +35,7 @@
  * alarm_set():    relative, `seconds` from now, at least 1. Independent
  *                 of clock changes. 0 cancels the alarm.
  * alarm_set_at(): absolute, at `unix_time` as counted by time_now().
- *                 Accepts HOST_TIME_MIN..HOST_TIME_MAX. Follows clock changes.
+ *                 Accepts HOST_CLOCK_MIN..HOST_CLOCK_MAX. Follows clock changes.
  * Both return HOST_OK; HOST_ERR_ARGUMENT for an invalid number or time;
  * HOST_ERR_NO_SPACE if the device cannot hold another alarm.
  *
@@ -42,6 +50,7 @@ HOST_IMPORT(alarm_set_at, int32_t alarm_set_at(int32_t id, int64_t unix_time));
  * cancels it or the alarm is set another way. The first call comes
  * `first_in` seconds from now; 0 means one full period. To align with the
  * minute, pass the seconds left in the current minute.
+ * The phase is measured in uptime and is unaffected by clock corrections.
  * Period: HOST_ALARM_EVERY_MIN to HOST_ALARM_EVERY_MAX seconds. Every
  * call loads the application when it is not on the screen. first_in is
  * 0..86400 independently of the period. A late alarm does not replay every
@@ -72,15 +81,17 @@ APP_EXPORT(app_on_timer, void app_on_timer(int32_t id));
 
 /* ---- Time ---- */
 
-/* Returns Unix time in seconds; 0 while the device does not know the time.
+/* Returns Unix time in seconds within HOST_CLOCK_MIN..HOST_CLOCK_MAX;
+ * 0 while the device does not know the time.
  *
- * To measure time (a countdown, a stopwatch), keep the start time in the
- * store and compute the rest on demand. The application is not loaded
- * most of the time and cannot count ticks.
- * The clock runs through device restarts and sleep, but not through a
- * power loss. It is 0 until the network or the user sets it for the first
- * time. Until then use time_uptime_ms(), which also runs through sleep
- * and starts from 0 at every restart. */
+ * Measure elapsed time and countdowns with time_uptime_ms(), paired with
+ * time_boot_id(). Uptime runs through sleep and is unaffected by wall-clock
+ * corrections. Keep the reference and boot ID in the store when they must
+ * survive application unloads; compute elapsed time on demand, without ticks.
+ * After a restart the uptime reference is invalid. Choose an explicit policy:
+ * reset or pause the measurement, or use a stored wall-clock reference when
+ * time_now() is known, accepting clock corrections. The wall clock runs through
+ * device restarts and sleep, but not through a power loss. */
 HOST_IMPORT(time_now, int64_t time_now(void));
 
 /* Returns the offset of local time from UTC in seconds, daylight saving
@@ -118,7 +129,8 @@ HOST_IMPORT(time_local_at, int32_t time_local_at(int64_t unix_time, host_local_t
  *   HOST_TIME_NEAR       relative: "15:04" today, "Tmrw 15:04",
  *                        "Sat 15:04" within a week, "21 Nov" beyond
  *   HOST_TIME_NEAR_DAY   relative, date only: "Today", "Tmrw", "Sat", "21 Nov"
- *   HOST_TIME_WEEKDAY_SHORT "Fri" */
+ *   HOST_TIME_WEEKDAY_SHORT "Fri"
+ * Relative styles use a date ("21 Nov") while the current clock is unknown. */
 #define HOST_TIME_CLOCK     0
 #define HOST_TIME_DATE      1
 #define HOST_TIME_WEEKDAY   2

@@ -54,12 +54,14 @@ APP_EXPORT(app_on_back, void app_on_back(void));
  *         }
  *     }
  *
- * BTN_OF() and BTN_ACTION_OF() split an event into its two parts.
+ * The button occupies the bits above the low four action bits:
+ * (button << 4) | action. BTN_OF() and BTN_ACTION_OF() split an event
+ * into its two parts. Applications ignore actions they do not recognize.
  * BTN_BACK_LONG_PRESSED is never delivered: a long press of BACK opens
  * Perinkpheral OS menu. */
-#define BTN_EVENT(button, action) ((button) << 2 | (action))
-#define BTN_OF(event)             ((event) >> 2)
-#define BTN_ACTION_OF(event)      ((event) & 3)
+#define BTN_EVENT(button, action) ((button) << 4 | (action))
+#define BTN_OF(event)             ((event) >> 4)
+#define BTN_ACTION_OF(event)      ((event) & 15)
 
 #define BTN_UP_KEYDOWN        BTN_EVENT(BTN_UP, BTN_KEYDOWN)
 #define BTN_UP_KEYUP          BTN_EVENT(BTN_UP, BTN_KEYUP)

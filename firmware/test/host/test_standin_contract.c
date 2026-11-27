@@ -60,6 +60,103 @@ static void test_long_back(void)
     CHECK(button_events[1] == BTN_BACK_KEYUP);
 }
 
+static void test_button_encoding(void)
+{
+    const int32_t events[][4] = {
+        { 16, 17, 18, 19 }, { 32, 33, 34, 35 },
+        { 48, 49, 50, 51 }, { 64, 65, 66, 67 },
+    };
+    standin_reset();
+    standin_handlers.on_button = on_button;
+    for (int32_t button = BTN_UP; button <= BTN_BACK; button++) {
+        for (int32_t action = 0; action < 16; action++) {
+            int32_t event = BTN_EVENT(button, action);
+            CHECK(event == button * 16 + action);
+            CHECK(BTN_OF(event) == button && BTN_ACTION_OF(event) == action);
+        }
+        button_count = 0;
+        standin_press(button);
+        CHECK(button_count == (button == BTN_BACK ? 2 : 3));
+        for (int32_t action = 0; action < button_count; action++) {
+            CHECK(button_events[action] == events[button - 1][action]);
+        }
+        button_count = 0;
+        standin_long_press(button);
+        CHECK(button_events[0] == events[button - 1][BTN_KEYDOWN]);
+        if (button != BTN_BACK) {
+            CHECK(button_events[1] == events[button - 1][BTN_LONG_PRESSED]);
+            CHECK(button_events[2] == events[button - 1][BTN_KEYUP]);
+        }
+    }
+}
+
+static void test_time_ranges(void)
+{
+    standin_reset();
+    standin()->zone_offset = 3600;
+    const int64_t moments[] = { HOST_TIME_MIN, -1, 0, 946684800, HOST_CLOCK_MIN - 1,
+                                HOST_CLOCK_MIN, HOST_TIME_MAX };
+    for (size_t index = 0; index < sizeof moments / sizeof moments[0]; index++) {
+        host_local_time_t parts;
+        int64_t restored = INT64_MIN;
+        char text[5];
+        CHECK(time_local_at(moments[index], &parts) == HOST_OK);
+        CHECK(time_from_local(&parts, &restored) == HOST_OK && restored == moments[index]);
+        CHECK(time_text(moments[index], HOST_TIME_CLOCK, text, sizeof text) == sizeof text);
+    }
+    CHECK(alarm_set_at(0, HOST_CLOCK_MIN - 1) == HOST_ERR_ARGUMENT);
+    CHECK(alarm_set_at(0, HOST_CLOCK_MAX + 1) == HOST_ERR_ARGUMENT);
+    CHECK(alarm_set_at(0, HOST_CLOCK_MIN) == HOST_OK);
+    CHECK(alarm_set_at(0, HOST_CLOCK_MAX) == HOST_OK);
+    const int64_t unknown[] = { INT64_MIN, HOST_TIME_MIN, -1, 0, HOST_CLOCK_MIN - 1,
+                                HOST_CLOCK_MAX + 1, INT64_MAX };
+    for (size_t index = 0; index < sizeof unknown / sizeof unknown[0]; index++) {
+        standin_clock(unknown[index]);
+        host_local_time_t parts = { .year = 12345 };
+        CHECK(time_now() == 0 && time_zone_offset() == 0);
+        CHECK(time_local(&parts) == HOST_ERR_NOT_FOUND && parts.year == 12345);
+        CHECK(standin()->now == unknown[index]); /* raw test clock is retained */
+    }
+    const int64_t known[] = { HOST_CLOCK_MIN, HOST_CLOCK_MAX };
+    for (size_t index = 0; index < sizeof known / sizeof known[0]; index++) {
+        standin_clock(known[index]);
+        host_local_time_t parts;
+        CHECK(time_now() == known[index] && time_zone_offset() == 3600);
+        CHECK(time_local(&parts) == HOST_OK);
+    }
+    /* Explicit 1970 conversions remain available with an unknown current clock. */
+    standin_clock(-1);
+    char text[16] = { 0 };
+    CHECK(time_text(0, HOST_TIME_NEAR, text, sizeof text) == 5 && memcmp(text, "1 Jan", 5) == 0);
+    CHECK(time_text(0, HOST_TIME_NEAR_DAY, text, sizeof text) == 5 && memcmp(text, "1 Jan", 5) == 0);
+    standin_clock(HOST_CLOCK_MAX);
+    standin_pass(1000);
+    CHECK(time_now() == 0 && standin()->now == HOST_CLOCK_MAX + 1 && time_uptime_ms() == 1000);
+    standin_clock(HOST_CLOCK_MIN - 1);
+    standin_pass(1000);
+    CHECK(time_now() == HOST_CLOCK_MIN);
+}
+
+static void test_recurring_phase(void)
+{
+    const int64_t corrections[] = { 30, -30, 86400, -86400 };
+    for (size_t index = 0; index < sizeof corrections / sizeof corrections[0]; index++) {
+        standin_reset();
+        CHECK(alarm_set_every(0, 60, 15) == HOST_OK);
+        standin_pass(20000);
+        standin_clock(time_now() + corrections[index]);
+        CHECK(standin_alarm_due(0));
+        standin_alarm(0);
+        CHECK(standin_alarm_left(0) == 55);
+        standin_pass(55000);
+        standin_alarm(0);
+        CHECK(standin_alarm_left(0) == 60);
+        standin_pass(180000);
+        standin_alarm(0);
+        CHECK(standin_alarm_left(0) == 60);
+    }
+}
+
 static void test_log_sanitization(void)
 {
     standin_reset();
@@ -124,6 +221,9 @@ int main(void)
 {
     test_package_files();
     test_long_back();
+    test_button_encoding();
+    test_time_ranges();
+    test_recurring_phase();
     test_log_sanitization();
     test_redraw_flags();
     test_notification_validation();

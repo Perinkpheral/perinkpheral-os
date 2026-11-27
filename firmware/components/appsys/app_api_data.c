@@ -388,7 +388,7 @@ HOST_FUNCTION(alarm_set_at)
     m3ApiGetArg(int32_t, id);
     m3ApiGetArg(int64_t, unix_time);
     app_t *app = APP_OF(runtime);
-    if (id < 0 || id >= HOST_ALARM_COUNT || unix_time < HOST_TIME_MIN || unix_time > HOST_TIME_MAX) {
+    if (id < 0 || id >= HOST_ALARM_COUNT || unix_time < HOST_CLOCK_MIN || unix_time > HOST_CLOCK_MAX) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     m3ApiReturn(app->services->alarm_set(app->name, id, unix_time, true) ? HOST_OK

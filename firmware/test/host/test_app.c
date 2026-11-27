@@ -373,6 +373,12 @@ static void test_buttons_and_redraw(void)
     app_button(app, 1, BTN_PRESSED);
     draw(app);
     CHECK(black_in_row(ROW_PRESSES) == 3); /* 2 + 1: the state lives in the module */
+    for (int action = 0; action < 16; action++) {
+        app_button(app, BTN_OK, action);
+        CHECK(!app_has_stopped(app));
+    }
+    draw(app);
+    CHECK(black_in_row(ROW_PRESSES) == 35);
     app_unload(app);
 }
 
@@ -891,7 +897,9 @@ static void test_color_and_local_time(void)
     CHECK(gfx_get(&surface, 18, ROW_LOCAL_TIME) && gfx_get(&surface, 20, ROW_LOCAL_TIME));
     CHECK(gfx_get(&surface, 22, ROW_LOCAL_TIME)); /* invalid moments leave destinations intact */
     CHECK(gfx_get(&surface, 24, ROW_LOCAL_TIME)); /* extreme normalized fields are refused */
-    CHECK(gfx_get(&surface, 26, ROW_LOCAL_TIME)); /* both bounds round-trip */
+    CHECK(gfx_get(&surface, 26, ROW_LOCAL_TIME)); /* bounds, historical dates and zero round-trip */
+    CHECK(gfx_get(&surface, 28, ROW_LOCAL_TIME)); /* explicit Unix epoch formats */
+    CHECK(gfx_get(&surface, 30, ROW_LOCAL_TIME)); /* zero denotes 1970, not unknown */
     const char *previous_zone = getenv("TZ");
     char *kept_zone = previous_zone != NULL ? strdup(previous_zone) : NULL;
     CHECK(setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1) == 0);
@@ -973,12 +981,12 @@ static void test_frozen_hello_state(void)
     CHECK(app_load("hello", 3, bytes, (size_t)size, 0, &SERVICES, &app) == APP_OK);
     draw(app);
     CHECK(!app_has_stopped(app));
-    app_button(app, BTN_UP, BTN_PRESSED);
+    /* This prerelease binary retains its stored state; button events require a rebuild. */
     app_terminate(app);
     CHECK(!app_has_stopped(app));
     uint8_t changed[4];
     CHECK(fake_kv_get("hello", "presses", changed, sizeof changed) == sizeof changed);
-    CHECK(changed[0] == 43 && changed[1] == 0 && changed[2] == 0 && changed[3] == 0);
+    CHECK(changed[0] == 42 && changed[1] == 0 && changed[2] == 0 && changed[3] == 0);
     app_unload(app);
     free(bytes);
 }
@@ -1377,8 +1385,15 @@ int main(int argc, char **argv)
     test_byte_page_memory();
     probe_bytes = frozen_probe_wasm;
     probe_size = sizeof frozen_probe_wasm;
-    test_probe_contract();
+    /* Frozen prerelease packages remain import/layout fixtures. Their button
+     * values and conversion range are replaced by the release contract. */
+    app_t *frozen = load_probe();
+    draw(frozen);
+    CHECK(!app_has_stopped(frozen));
+    app_unload(frozen);
     test_frozen_hello_state();
+    probe_bytes = probe_wasm;
+    probe_size = sizeof probe_wasm;
     test_host_calls_count_against_the_budget();
     test_bulk_memory_budget();
     REPORT();
