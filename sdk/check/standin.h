@@ -125,6 +125,7 @@ typedef struct {
     int32_t                  store_count;
     const standin_answer_t  *answers;
     int32_t                  answer_count;
+    const char              *request_presses; /* declared foreground request trigger, UODBuodb */
     const standin_mutation_t *mutations;
     int32_t                  mutation_count;
     const standin_pair_t    *exceptions;
@@ -242,6 +243,7 @@ typedef struct {
     char draw_text[STANDIN_DRAW_TEXT_BYTES]; /* visible text, in drawing order, separated by newlines */
     bool visible_failure; /* ui_draw_reason() drew an error */
     int32_t refuse_reads, refused_reads; /* HOST_ERR_FAILED: KV/file census/size/read failure */
+    int32_t refuse_restore_reads; /* KV/file size/read failure, independent of quota accounting */
     int32_t failed_read_bytes; /* file_read may copy this prefix before failing */
     int32_t refuse_intervals, refused_intervals; /* failed poll-interval persistence, no change */
     int32_t write_failure_mode; /* STANDIN_WRITE_*; controls mutation before refuse_writes */
@@ -260,6 +262,7 @@ typedef struct {
     uint8_t session[HOST_SESSION_MAX];
     int32_t session_length;
     bool    session_is_closed;
+    bool    is_closing_scene; /* retain the attachment through blur and termination without recursive closure */
     bool    inversion_was_set;
     bool    session_inverted; /* the screen's inversion, kept with the session */
 

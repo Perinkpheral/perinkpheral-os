@@ -32,9 +32,9 @@ object SimButtonsTimeTest {
                     char text[8];
                     if (time_now() != 0 || time_zone_offset() != 0 ||
                         time_local(&parts) != HOST_ERR_NOT_FOUND ||
-                        time_local_at(-2208988800LL, &parts) != HOST_OK ||
-                        parts.year != 1900 || parts.hour != 1 ||
-                        time_from_local(&parts, &moment) != HOST_OK || moment != -2208988800LL ||
+                        time_local_at(HOST_TIME_MIN, &parts) != HOST_OK || parts.hour != 1 ||
+                        time_from_local(&parts, &moment) != HOST_OK || moment != HOST_TIME_MIN ||
+                        time_local_at(HOST_TIME_MIN - 1, &parts) != HOST_ERR_ARGUMENT ||
                         time_local_at(0, &parts) != HOST_OK || parts.year != 1970 || parts.hour != 1 ||
                         time_from_local(&parts, &moment) != HOST_OK || moment != 0 ||
                         time_text(0, HOST_TIME_CLOCK, text, 5) != 5 || text[1] != '1' ||
@@ -62,7 +62,7 @@ object SimButtonsTimeTest {
             """.trimIndent())
             val scenarios = File(scratch, "scenarios").apply { mkdirs() }
             File(scenarios, "scenario.json").writeText(Json.write(mapOf(
-                "app" to app.path, "at" to -2208988800L, "tz" to "Etc/GMT-1",
+                "app" to app.path, "at" to -1L, "tz" to "Etc/GMT-1",
                 "steps" to listOf("shot initial", "press 1 2L 3 4", "shot pressed"))))
             for ((name, x) in listOf("initial" to 0, "pressed" to 1)) {
                 val expected = BufferedImage(400, 300, BufferedImage.TYPE_BYTE_BINARY)
@@ -73,6 +73,23 @@ object SimButtonsTimeTest {
             val wasi = File(System.getenv("WASI_SDK_PATH") ?: error("WASI_SDK_PATH is required"))
             val failures = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scenarios, false, workers = 1)
             check(failures.isEmpty()) { failures.joinToString("\n") }
+            File(app, "probe.c").writeText("""
+                /* SPDX-License-Identifier: MIT */
+                #include "host_api.h"
+                void app_on_load(void)
+                {
+                    host_local_time_t parts;
+                    int64_t moment;
+                    if (time_local_at(953553600LL, &parts) != HOST_OK || parts.hour != 8 ||
+                        time_from_local(&parts, &moment) != HOST_OK || moment != 953553600LL) __builtin_trap();
+                }
+                void app_on_draw(void) { gfx_draw_rect(0, 0, 1, 1, HOST_RECT_FILLED); }
+            """.trimIndent())
+            File(scenarios, "scenario.json").writeText(Json.write(mapOf(
+                "app" to app.path, "at" to 1795780800L, "tz" to "America/New_York",
+                "steps" to listOf("shot initial"))))
+            val recurring = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scenarios, false, workers = 1)
+            check(recurring.isEmpty()) { recurring.joinToString("\n") }
         } finally {
             scratch.deleteRecursively()
         }

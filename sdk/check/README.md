@@ -15,6 +15,17 @@ Put application-specific inputs in `test/check.json`: `at`, `tz`, `store` and
 `mocks`. Mocks may be an object or a JSON filename relative to that file. The command
 also discovers and runs `test/*.c`, compiled with the stand-in and sanitizers.
 
+For button-triggered requests, declare `"request_presses": "U"` (short `UODB`, long
+`uodb`). The checker presses this sequence before foreground response rounds and
+when preparing a foreground visit for background delivery. A network check with
+manual polls requires at least one delivered manual response; no delivery is a
+coverage failure, with a request to supply the trigger.
+
+Named `tz` values in native checks and simulator scenarios resolve to the Settings
+city table's recurring POSIX rules, including past dates, rather than IANA history.
+City names, their listed IANA aliases, fixed-offset zones and explicit POSIX month
+rules are accepted. Lord Howe uses `LHST-10:30LHDT-11,M10.1.0,M4.1.0` for clock probes.
+
 Mock responses may include `"headers": {"ETag": "v1", "Set-Cookie": ["a=1", "b=2"]}`.
 String values are single fields; arrays preserve repeated fields in order. Names are
 case-insensitive HTTP tokens. `answer_header()` uses the firmware's storage and lookup:
@@ -66,8 +77,8 @@ defect of the checks:
   simulator's pictures hold them). Ink bounds and QR module geometry are approximations;
   they do not establish actual placement or QR capacity.
 - Standard presses deliver KEYDOWN/KEYUP/PRESSED or KEYDOWN/LONG_PRESSED/KEYUP
-  before drawing. The checks do not render between these events. Refresh timing,
-  question gating and focus-request acceptance are not modeled.
+  before drawing. The checks do not render between these events. Refresh timing
+  and focus-request acceptance are not modeled.
 - Native pointers are checked only where explicit stand-in validation exists.
   The stand-in does not validate wasm linear-memory offsets, retained-buffer
   ownership or interpreter execution budgets. ASan/UBSan complement the real
@@ -76,7 +87,7 @@ defect of the checks:
   can retain one instance across streamed chunks and interleave settings or
   alarms into it; those sequences require interpreter/simulator tests.
 - The header is taken to show the clock, so a frame is drawn again every minute.
-- Time-zone rules cover the full 1900-2100 conversion range. Current-clock queries
+- Time-zone rules cover the full supported calendar-conversion range. Current-clock queries
   report unknown outside the separate 2026-2100 clock range; the raw test clock
   remains available to the harness.
 - Mock headers describe the final response: no automatic headers, transfer decoding or
@@ -100,6 +111,9 @@ when it printed successful results for every requested capability.
 
 `standin()->refuse_reads` injects `HOST_ERR_FAILED` into KV/file reads and quota
 accounting. `failed_read_bytes` permits a file read to copy a prefix before failure.
+`refuse_restore_reads` fails KV reads and file size/read calls independently of
+writes and quota accounting. The failed-restore check uses it during loading, so
+destructive deletion or replacement after an unreadable restore remains observable.
 `refuse_writes` combines with `write_failure_mode`: `STANDIN_WRITE_REFUSE` fails
 before mutation, `STANDIN_WRITE_COMMIT` commits then fails, and
 `STANDIN_WRITE_PARTIAL` copies half a file write (at least one byte) then fails.
@@ -109,6 +123,9 @@ owned by other applications; replacing an existing repeating alarm needs no new
 slot. `standin_prepare_update()` removes the old package's ownership before the
 replacement loads; its load/update callbacks may establish new ownership.
 Lifecycle-marker read/write refusals leave install/update notification pending.
+Scene closure keeps session writes available through blur and termination, then
+discards the session. Inversion changes request a normal redraw with the same
+QUESTION bookkeeping as firmware, preserving pending flags.
 
 ## Failure-path checks
 
@@ -120,7 +137,7 @@ prove every possible input or button sequence. A coverage note identifies missin
 | --- | --- |
 | `sessions` | Refuse session allocation during blur; retained resume state or a diagnostic absent from the healthy run is required. |
 | `store` | Inject failed restore reads and require durable data to remain unchanged. Exercise writes that commit then fail and partial file writes, as well as failures before mutation. Refuse the last press of each standard navigation path and all 64 pairs of short/long presses, with both NO_SPACE and FAILED. Refuse response saves as well. Unload immediately and compare the shown picture, unless it displayed an error. Test 50 identical answers at a fixed clock and three more a minute apart, including Cache-Control: max-age=60. |
-| `timers` | Refuse shared repeating slots independently of ordinary alarms and fail interval persistence without changing it. Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The app must recover the healthy schedule or display or log failure. A repeating alarm must still be scheduled at its original interval. A one-shot alarm may be pending or already delivered. Log diagnostics are compared before recovery against the healthy run. |
+| `timers` | Refuse shared repeating slots independently of ordinary alarms and fail interval persistence without changing it. Refuse alarm allocation, then allow it during 60 seconds of timer callbacks. The app must recover the healthy schedule or display or log failure. A repeating alarm must still be scheduled at its original interval after allocation recovery. Package replacement must restore recurring alarms; their background intervals may differ from the foreground schedule. One-shot alarms for canceled requests need not survive replacement; otherwise a one-shot alarm may be pending or already delivered. Log diagnostics are compared before recovery against the healthy run. |
 | `notices` | Reach alarms/timers through the standard paths; compare accepted counts with queue rejection followed by acceptance and with writes refused immediately after acceptance. Retry for 60 seconds, then unload/replay; also deliver alarms into fresh background instances. No due notice reached is a coverage note. |
 | `network` | Reject raw-request admission with NO_SPACE/FAILED, then permit retries. Derive malformed responses from good JSON mocks, compare the good/normal failed-response pictures and reloaded cache; observe new HTTP/poll requests during Retry-After, including lifecycle changes and chains of two refusals, with both 120- and 300-second deadlines. |
 | `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |

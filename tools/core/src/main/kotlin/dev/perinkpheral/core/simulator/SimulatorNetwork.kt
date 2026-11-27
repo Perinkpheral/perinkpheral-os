@@ -28,7 +28,9 @@ import javax.net.ssl.SSLHandshakeException
  *
  * Request:  {"method", "url", "headers": {name: value}, "body": base64, "max": bytes,
  *            "timeout": seconds, "trust": [files of certificate authorities the application
- *            trusts beside the computer's own]}
+ *            trusts beside the computer's own], "headerEvents": optional boolean}
+ * With headerEvents, a flushed {"event":"headers"} line precedes the completed answer.
+ * The simulator captures its own clocks at that event, independently of body duration.
  * Answer:   {"status": HTTP status, or a HOST_FAILED_* code, "headers": {name: [values]}, "headers_overflow": boolean,
  *            "metadata": {name: firstValue}, "body": base64, "next": the absolute address a redirect leads to}
  */
@@ -122,7 +124,10 @@ object SimulatorNetwork {
             while (true) {
                 val line = reader.readLine() ?: break
                 val answer = try {
-                    fetch(Json.parse(line) as Map<*, *>)
+                    fetch(Json.parse(line) as Map<*, *>) {
+                        writer.write("{\"event\":\"headers\"}\n")
+                        writer.flush()
+                    }
                 } catch (error: Exception) {
                     // An answer for every request, whatever went wrong; and what went wrong said.
                     System.err.println("simulator network: ${error.javaClass.simpleName}: ${error.message}")
@@ -138,7 +143,7 @@ object SimulatorNetwork {
     private val JSON_SUFFIX = Regex("[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+\\+json")
     private val XML_SUFFIX = Regex("[a-z0-9!#$%&'*+.^_`|~-]+/[a-z0-9!#$%&'*+.^_`|~-]+\\+xml")
 
-    private fun fetch(asked: Map<*, *>): Map<String, Any?> {
+    private fun fetch(asked: Map<*, *>, headersReceived: () -> Unit): Map<String, Any?> {
         val method = asked["method"] as String
         val url = URI.create(asked["url"] as String)
         val body = Base64.getDecoder().decode((asked["body"] as? String).orEmpty())
@@ -176,6 +181,7 @@ object SimulatorNetwork {
             // The timeout bounds the request up to its headers; the body has the same time again, and a
             // server that sends a byte now and then is cut off when it is up, as the device does.
             val headersReceivedNs = System.nanoTime()
+            if (asked["headerEvents"] == true) headersReceived()
             val stream = response.body()
             val isCut = java.util.concurrent.atomic.AtomicBoolean(false)
             val deadline = java.util.Timer(true)

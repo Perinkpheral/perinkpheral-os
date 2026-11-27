@@ -4,6 +4,7 @@
 #include "app_ui.h"
 #include "app_alloc.h"
 #include "app_state.h"
+#include <unistd.h>
 
 APP_ALLOC_ARENA(64);
 static const char *const hosts[] = { "example.test" };
@@ -326,6 +327,10 @@ static void save_on_blur(void)
 
 static void terminate_count(void)
 {
+    char saved[9];
+    CHECK(session_get(saved, sizeof saved) == sizeof saved);
+    CHECK(memcmp(saved, "old scene", sizeof saved) == 0);
+    CHECK(session_set("termination", 11) == HOST_OK);
     terminate_calls++;
 }
 
@@ -359,7 +364,7 @@ static void test_scene_exit_boundaries(void)
         CHECK(button_count == (exit_action == BTN_PRESSED ? 3 : exit_action == BTN_KEYDOWN ? 1 : 2));
         CHECK(standin()->is_leaving && !standin()->is_loaded);
         CHECK(standin()->session_length == 0 && !standin()->session_inverted);
-        CHECK(blur_result == HOST_ERR_ARGUMENT && terminate_calls == 1);
+        CHECK(blur_result == HOST_OK && terminate_calls == 1);
         standin_timer(0); standin_press(BTN_OK); standin_draw();
         CHECK(terminate_calls == 1);
     }
@@ -367,7 +372,7 @@ static void test_scene_exit_boundaries(void)
     standin_handlers = (standin_handlers_t){ .on_timer = exit_on_timer, .on_blur = save_on_blur };
     standin_load(); standin_focus();
     standin_timer(0);
-    CHECK(standin()->is_leaving && !standin()->is_loaded && blur_result == HOST_ERR_ARGUMENT);
+    CHECK(standin()->is_leaving && !standin()->is_loaded && blur_result == HOST_OK);
 }
 
 static void test_load_time_inversion(void)
@@ -517,6 +522,15 @@ static void test_storage_failures(void)
     CHECK(app_state_load("state", &state, sizeof state - 1, 1) == HOST_ERR_NOT_FOUND);
     CHECK(app_state_load("state", &state, 1, 1) == HOST_ERR_ARGUMENT);
     CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_OK);
+    standin()->refuse_restore_reads = HOST_ERR_FAILED;
+    CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_ERR_FAILED);
+    CHECK(kv_set("state", 5, NULL, 0) == HOST_OK);
+    CHECK(kv_set("state", 5, &state, sizeof state) == HOST_OK);
+    CHECK(file_write("restore", 7, 0, "saved", 5) == HOST_OK);
+    CHECK(file_size("restore", 7) == HOST_ERR_FAILED);
+    CHECK(file_read("restore", 7, 0, &state, sizeof state) == HOST_ERR_FAILED);
+    CHECK(file_write("restore", 7, 0, NULL, 0) == HOST_OK);
+    standin()->refuse_restore_reads = HOST_OK;
     standin()->refuse_reads = HOST_ERR_FAILED;
     CHECK(app_state_load("state", &state, sizeof state, 1) == HOST_ERR_FAILED);
     CHECK(kv_get("absent", 6, &state, sizeof state) == HOST_ERR_FAILED);
@@ -560,6 +574,63 @@ static void test_storage_failures(void)
     standin()->refuse_requests = HOST_OK;
     CHECK(http_send(16, HOST_HTTP_GET, url, sizeof url - 1, NULL, 0, NULL, 0) == HOST_OK);
     CHECK(standin()->request_count == 1);
+}
+
+static void invert_question_on_button(int32_t event)
+{
+    on_button(event);
+    if (event == BTN_UP_PRESSED) screen_set_inverted(1);
+}
+
+static void test_inversion_question(void)
+{
+    standin_reset();
+    standin_handlers = (standin_handlers_t){ .on_button = invert_question_on_button };
+    standin_load(); standin_focus();
+    screen_redraw(HOST_REDRAW_QUESTION | HOST_REDRAW_CLEAN);
+    screen_set_inverted(1);
+    CHECK((standin()->redraw_flags & (HOST_REDRAW_QUESTION | HOST_REDRAW_CLEAN)) ==
+          (HOST_REDRAW_QUESTION | HOST_REDRAW_CLEAN));
+    standin_draw();
+    CHECK(standin()->question != 0);
+    screen_set_inverted(1);
+    standin_button_event(BTN_DOWN, BTN_PRESSED);
+    CHECK(standin()->question != 0); /* unchanged inversion requests no redraw */
+    screen_set_inverted(0);
+    screen_redraw(HOST_REDRAW_QUESTION);
+    standin_draw();
+    standin_button_event(BTN_UP, BTN_PRESSED);
+    CHECK(standin()->question == 0 && standin()->is_inverted);
+    button_count = 0;
+    standin_button_event(BTN_OK, BTN_KEYDOWN);
+    CHECK(button_count == 1);
+}
+
+static void test_counted_headers_and_multiline(void)
+{
+    standin_reset();
+    char text[64] = "OK";
+    CHECK(header_set_text(HOST_HEADER_LEFT, text, sizeof text) == HOST_OK);
+    CHECK_STR(standin()->header_text[HOST_HEADER_LEFT], "OK");
+    CHECK(header_set_status(HOST_HEADER_RIGHT, HOST_ICON_CLOCK, text, sizeof text) == HOST_OK);
+    CHECK_STR(standin()->status_text[HOST_HEADER_RIGHT], "OK");
+    memset(text, 'x', sizeof text);
+    CHECK(header_set_text(HOST_HEADER_LEFT, text, sizeof text) == HOST_ERR_ARGUMENT);
+    CHECK(header_set_status(HOST_HEADER_RIGHT, HOST_ICON_CLOCK, text, sizeof text) == HOST_ERR_ARGUMENT);
+    CHECK(header_set_text(HOST_HEADER_LEFT, text, -1) == HOST_ERR_ARGUMENT);
+    CHECK(header_set_status(HOST_HEADER_RIGHT, HOST_ICON_CLOCK, NULL, 1) == HOST_ERR_ARGUMENT);
+    char word[161];
+    for (int index = 0; index < 40; index++) memcpy(word + index * 4, "\xF0\x9F\x98\x80", 4);
+    word[160] = '\0';
+    standin()->is_drawing = true;
+    alarm(3);
+    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, word, 160, 400, 4) == 2);
+    alarm(0);
+    char spaces[203];
+    memset(spaces, ' ', sizeof spaces);
+    spaces[0] = 'a'; spaces[201] = 'b'; spaces[202] = '\0';
+    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, spaces, 202, 400, 4) == 2);
+    standin()->is_drawing = false;
 }
 
 static void test_shared_alarms(void)
@@ -642,6 +713,8 @@ int main(void)
     test_scene_exit_boundaries();
     test_load_time_inversion();
     test_question_press_boundaries();
+    test_inversion_question();
+    test_counted_headers_and_multiline();
     test_notification_retention();
     test_effective_header();
     test_geometry_and_chart_validation();

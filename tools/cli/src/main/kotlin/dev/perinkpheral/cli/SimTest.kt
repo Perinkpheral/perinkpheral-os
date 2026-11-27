@@ -3,6 +3,7 @@ package dev.perinkpheral.cli
 
 import dev.perinkpheral.core.BuildError
 import dev.perinkpheral.core.Json
+import dev.perinkpheral.core.DeviceTimeZones
 import dev.perinkpheral.core.app.Applications
 import dev.perinkpheral.core.build.AppBuilder
 import dev.perinkpheral.core.device.Bmp
@@ -26,7 +27,7 @@ import javax.imageio.ImageIO
  *     {
  *       "app": "apps/weather",              the application, from where the tests are run
  *       "at": 1794832200,                    the clock's start, Unix seconds
- *       "tz": "Europe/Moscow",               the computer's zone for the run
+ *       "tz": "Europe/Moscow",               the device's recurring POSIX rules for this name
  *       "font": "departure", "language": "en", "clock": false, "glyphs": "glyphs",
  *       "serial": true,                      run while no other scenario does; absent: among others
  *       "store": { "lat": "59.93" },         the application's store before it starts
@@ -155,7 +156,7 @@ class SimTest(private val root: File, private val builder: () -> AppBuilder) {
                 else -> if (scenario.containsKey("mocks")) throw BuildError("\"mocks\" must be an object or the name of a file")
             }
             val builderOfProcess = ProcessBuilder(command).redirectErrorStream(true).redirectOutput(File(state, "sim.log"))
-            builderOfProcess.environment()["TZ"] = scenario["tz"] as? String ?: "UTC"
+            builderOfProcess.environment()["TZ"] = DeviceTimeZones(root).posix(scenario["tz"] as? String ?: "UTC")
             val process = builderOfProcess.start()
             simulators += process
             try {

@@ -1,6 +1,37 @@
 /* SPDX-License-Identifier: MIT */
 #include <stdbool.h>
 #include <time.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <sys/types.h>
+
+static bool refuse_job_allocation, refuse_body_template;
+static void (*before_read_line)(void);
+
+static void *test_calloc(size_t count, size_t size)
+{
+    if (refuse_job_allocation) {
+        refuse_job_allocation = false;
+        return NULL;
+    }
+    return calloc(count, size);
+}
+
+static char *test_strdup(const char *text)
+{
+    if (refuse_body_template) {
+        refuse_body_template = false;
+        return NULL;
+    }
+    return strdup(text);
+}
+
+static ssize_t test_getline(char **line, size_t *capacity, FILE *stream)
+{
+    if (before_read_line != NULL) before_read_line();
+    return getline(line, capacity, stream);
+}
 
 static bool fixed_wall_clock;
 static time_t wall_clock;
@@ -17,7 +48,13 @@ static time_t test_wall_time(time_t *out)
 
 #define main simulator_main
 #define time test_wall_time
+#define calloc test_calloc
+#define strdup test_strdup
+#define getline test_getline
 #include "sim.c"
+#undef getline
+#undef strdup
+#undef calloc
 #undef time
 #undef main
 #include <assert.h>
@@ -223,12 +260,52 @@ static void test_preparation_memory_failure(void)
     }
 }
 
+static void test_empty_and_long_list(void)
+{
+    s_manifest_json = strdup("{\"polls\":[{\"url\":\"http://example.test/fixed\",\"each\":\"items\",\"every\":60},"
+        "{\"url\":\"http://example.test/{{items}}\",\"each\":\"items\",\"prefix\":\"x:\",\"every\":60}],"
+        "\"settings\":[{\"key\":\"items\",\"title\":\"Items\",\"type\":\"list\"}]}");
+    int items = 0;
+    for (int empty = 0; empty < 2; empty++) {
+        if (empty) set_value("items", "");
+        job_t *job = start_poll(0, 0, &items);
+        assert(job != NULL);
+        prepare_job(job);
+        assert(job->status == 0 && strcmp(job->url, "http://example.test/fixed") == 0);
+        free_job(job);
+        refuse_job_allocation = true;
+        assert(start_poll(0, 0, &items) == NULL && !refuse_job_allocation);
+        refuse_body_template = true;
+        job = start_poll(0, 0, &items);
+        assert(job != NULL && !refuse_body_template);
+        prepare_job(job);
+        assert(job->status == HOST_FAILED_NO_MEMORY);
+        free_job(job);
+    }
+    char list[128];
+    memset(list, 'a', sizeof list);
+    list[0] = 'x'; list[1] = ':'; list[sizeof list - 1] = '\0';
+    set_value("items", list);
+    job_t *job = start_poll(1, 0, &items);
+    assert(job != NULL && items == 1);
+    prepare_job(job);
+    assert(job->status == 0 && strlen(job->each_value) == APP_LIST_ITEM_MAX - 2);
+    assert(strlen(job->url) == strlen("http://example.test/") + APP_LIST_ITEM_MAX - 2);
+    free_job(job);
+    char path[PATH_BYTES];
+    store_path(path, "probe", "items");
+    assert(remove(path) == 0);
+    free(s_manifest_json);
+    s_manifest_json = NULL;
+}
+
 static void test_content_lengths(void)
 {
     s_fetcher_in = tmpfile();
     s_fetcher_out = tmpfile();
     assert(s_fetcher_in != NULL && s_fetcher_out != NULL);
-    const char *lengths[] = { "0", "2147483647", "2147483648", "4294967296", "9223372036854775807" };
+    const char *lengths[] = { "0", "2147483647", "2147483648", "4294967296", "9223372036854775807",
+        "00000000000000000000000000000000123", "123junk", "-1" };
     for (size_t index = 0; index < sizeof lengths / sizeof lengths[0]; index++) {
         assert(fprintf(s_fetcher_out, "{\"status\":200,\"headers\":{\"content-length\":\"%s\"},\"body\":\"\"}\n", lengths[index]) > 0);
     }
@@ -239,12 +316,70 @@ static void test_content_lengths(void)
         char next[APP_URL_MAX + 1];
         exchange(&job, next, sizeof next);
         assert(job.status == 200);
-        assert(job.response.length == (index == 0 ? 0 : index == 1 ? INT32_MAX : -1));
+        int32_t expected = index == 0 ? 0 : index == 1 ? INT32_MAX : index == 5 ? 123 : -1;
+        assert(job.response.length == expected);
         free(job.answer);
+        char mock_text[256];
+        snprintf(mock_text, sizeof mock_text, "{\"headers\":{\"CONTENT-LENGTH\":\"%s\"},\"body\":\"\"}", lengths[index]);
+        json_t *mock = json_parse(mock_text);
+        job = (job_t){ .method = HOST_HTTP_HEAD };
+        answer_from_mock(&job, mock);
+        assert(job.response.length == expected);
+        free(job.answer);
+        json_free(mock);
     }
+    json_t *mock = json_parse("{\"body\":\"abc\"}");
+    job_t absent = {0};
+    answer_from_mock(&absent, mock);
+    assert(absent.response.length == -1);
+    free(absent.answer); json_free(mock);
     fclose(s_fetcher_in);
     fclose(s_fetcher_out);
     s_fetcher_in = s_fetcher_out = NULL;
+}
+
+static int timestamp_reads;
+static bool forward_during_body;
+
+static void change_clock_during_body(void)
+{
+    if (++timestamp_reads == 2) {
+        if (forward_during_body) s_forward_ms += 3600000;
+        else s_clock_offset_s -= 10000;
+    }
+}
+
+static void test_header_timestamps(void)
+{
+    for (int forward = 0; forward < 2; forward++) {
+        fixed_wall_clock = true;
+        wall_clock = 1795780800;
+        s_clock_offset_s = s_forward_ms = 0;
+        forward_during_body = forward;
+        timestamp_reads = 0;
+        s_fetcher_in = tmpfile(); s_fetcher_out = tmpfile();
+        assert(s_fetcher_in != NULL && s_fetcher_out != NULL);
+        reply(s_fetcher_out, "{\"event\":\"headers\"}");
+        reply(s_fetcher_out, "{\"status\":200,\"headers\":{\"Retry-After\":\"Fri, 27 Nov 2026 12:05:00 GMT\"},\"body\":\"\"}");
+        rewind(s_fetcher_out);
+        job_t job = { .is_poll = true, .item = -1 };
+        snprintf(job.url, sizeof job.url, "http://example.test/slow");
+        int64_t before = monotonic_ms();
+        char next[APP_URL_MAX + 1];
+        before_read_line = change_clock_during_body;
+        exchange(&job, next, sizeof next);
+        before_read_line = NULL;
+        assert(job.status == 200 && job.response.retry_after == 300);
+        assert(job.response_at_ms >= before && job.response_at_ms < before + 1000);
+        s_poll_cooldown_until_ms = 0;
+        hand_over(&job);
+        assert(forward ? s_poll_cooldown_until_ms <= monotonic_ms() : s_poll_cooldown_until_ms > monotonic_ms());
+        free(job.answer);
+        fclose(s_fetcher_in); fclose(s_fetcher_out);
+        s_fetcher_in = s_fetcher_out = NULL;
+    }
+    fixed_wall_clock = false;
+    s_clock_offset_s = s_forward_ms = s_poll_cooldown_until_ms = 0;
 }
 
 static void take_poll_deadlines(void)
@@ -367,6 +502,27 @@ static void test_poll_scheduling(void)
     free_job(job);
     assert(next_poll_job() == NULL);
     s_network_generation = 0;
+    /* A broken response body cannot turn an HTTP refusal into a reconnect retry. */
+    const int http_statuses[] = { 0, 200, 404, 503 };
+    for (size_t index = 0; index < sizeof http_statuses / sizeof http_statuses[0]; index++) {
+        s_forward_ms += 1001;
+        take_poll_deadlines();
+        assert(services_poll_now("probe", 0));
+        job = next_poll_job();
+        assert(job != NULL);
+        job->status = HOST_FAILED_NO_ANSWER;
+        job->response.status = http_statuses[index];
+        finish_poll(job); free_job(job);
+        poll_schedule_network_is_back(&s_poll_schedule);
+        job = next_poll_job();
+        if (http_statuses[index] == 0 || http_statuses[index] == 200) {
+            assert(job != NULL);
+            job->status = 200;
+            finish_poll(job); free_job(job);
+        } else {
+            assert(job == NULL);
+        }
+    }
     /* An expired delay still terminates the active list round. */
     assert(services_poll_now("probe", 1));
     s_forward_ms += 1001;
@@ -463,6 +619,18 @@ static void test_forward_arguments(void)
 static void test_storage_failures(const char *state)
 {
     char bytes[16], path[PATH_BYTES], folder[PATH_BYTES];
+    s_manifest_json = strdup("{\"settings\":[{\"key\":\"server\",\"type\":\"url\",\"title\":\"Server\"},"
+        "{\"key\":\"login\",\"type\":\"link\",\"title\":\"Login\"}]}");
+    const char *users_keys[] = { "server", "login" };
+    for (size_t index = 0; index < sizeof users_keys / sizeof users_keys[0]; index++) {
+        set_value(users_keys[index], "http://example.test");
+        assert(kv_set("probe", users_keys[index], NULL, 0) == HOST_ERR_ARGUMENT);
+        assert(kv_get("probe", users_keys[index], bytes, sizeof bytes) == HOST_ERR_NO_SPACE);
+        assert(kv_store("probe", users_keys[index], NULL, 0, false) == HOST_ERR_ARGUMENT);
+        store_path(path, "probe", users_keys[index]);
+        assert(remove(path) == 0);
+    }
+    free(s_manifest_json); s_manifest_json = NULL;
     assert(kv_get("probe", "absent", bytes, sizeof bytes) == HOST_ERR_NOT_FOUND);
     snprintf(folder, sizeof folder, "%s/store/probe", state);
     make_folders(folder);
@@ -514,6 +682,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_empty_and_long_list();
     test_time_and_recurrence();
     test_poll_scheduling();
     test_question_and_long_back();
@@ -523,6 +692,7 @@ int main(void)
     test_network_icon();
     test_mocks(state);
     test_content_lengths();
+    test_header_timestamps();
     test_preparation_memory_failure();
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["
                              "{\"key\":\"server\",\"type\":\"url\"},"

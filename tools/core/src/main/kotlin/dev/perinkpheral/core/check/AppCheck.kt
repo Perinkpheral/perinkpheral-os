@@ -13,7 +13,7 @@ import java.nio.file.Files
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.time.ZoneId
+import dev.perinkpheral.core.DeviceTimeZones
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -360,8 +360,14 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
                 appendLine("};")
             }
             val at = kept["at"] as? Long ?: 0L
+            val requestPresses = kept["request_presses"]?.let {
+                if (it !is String || it.isEmpty() || it.any { key -> key !in "UODBuodb" })
+                    throw BuildError("request_presses must be nonempty presses using UODBuodb")
+                it
+            }
             // Explicit conversions cover the whole contract range, independently of the test clock.
-            val rules = (kept["tz"] as? String)?.let { ZoneId.of(it).rules }
+            val deviceZones = DeviceTimeZones(sdk.root)
+            val rules = (kept["tz"] as? String)?.let { deviceZones.rules(it) }
             val from = Instant.ofEpochSecond(sdk.contract.number("HOST_TIME_MIN"))
             val until = Instant.ofEpochSecond(sdk.contract.number("HOST_TIME_MAX") + 1)
             val zone = rules?.getOffset(from)?.totalSeconds ?: 0
@@ -393,7 +399,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             val zoneFrom = Instant.ofEpochSecond(minOf(from.epochSecond, probeValues.minOfOrNull { minOf(it.now, it.event) } ?: from.epochSecond))
             val zoneUntil = Instant.ofEpochSecond(maxOf(until.epochSecond, (probeValues.maxOfOrNull { maxOf(it.now, it.event) } ?: 0) + SECONDS_A_YEAR))
             val profiles = zoneNames.map { name ->
-                val profileRules = ZoneId.of(name).rules
+                val profileRules = deviceZones.rules(name)
                 val transitions = generateSequence(profileRules.nextTransition(zoneFrom)) { profileRules.nextTransition(it.instant) }
                     .takeWhile { it.instant < zoneUntil }.toList()
                 Triple(name, profileRules.getOffset(zoneFrom).totalSeconds, transitions)
@@ -430,6 +436,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (certificates.isNotEmpty()) appendLine("    .certificates = CERTIFICATES, .certificate_count = ${certificates.size},")
             if (store.isNotEmpty()) appendLine("    .store = STORE, .store_count = ${store.size},")
             if (answers.isNotEmpty()) appendLine("    .answers = ANSWERS, .answer_count = ${answers.size},")
+            if (requestPresses != null) appendLine("    .request_presses = ${text(requestPresses)},")
             if (changes.isNotEmpty()) appendLine("    .zone_changes = ZONE, .zone_change_count = ${changes.size},")
             if (exceptions.isNotEmpty()) appendLine("    .exceptions = EXCEPTIONS, .exception_count = ${exceptions.size},")
             if (failures.isNotEmpty()) appendLine("    .failure_text = FAILURE_TEXT, .failure_text_count = ${failures.size},")
