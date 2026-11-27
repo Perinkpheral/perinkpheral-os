@@ -4,6 +4,13 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.1.103
+
+- Document-only consumers reject non-2xx responses after headers, without downloading the body.
+- The UI kit splits overlong words at UTF-8 character boundaries.
+- `tools/perinkpheral stress-run` provides manual device stress tests. `--allow-remembered-change` is parsed as a Boolean flag without consuming the next option; it permits workloads that cannot restore the remembered application.
+- First-flash applications use catalog commit `661b523`.
+
 ## 0.1.102
 
 - A streamed answer that no application takes any more is no longer read to its end. An answer kept downloading for up to 300 s, and other polls, catalog reads and installs waited behind it, when the application had been left with a button, had stopped, or read only a document that had already failed or been refused. Found by the stress run of 2026-11-27 (docs/testing/stress-2026-11-27.md): an endless answer held the connection for 307 s, now 1.7 s.
@@ -72,7 +79,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.92
 
-- An application's poll that the server refuses keeps its HTTP status: 401 with a login page, 404 or 503 reach `app_on_picked()` and `answer_info()` as they are, with values only when the body is whole JSON. Before, any body that was not JSON became HOST_FAILED_NO_ANSWER, so an application could not tell an expired login from a lost network (the Keenetic application never logged in again). A success (2xx) whose body is not JSON is still HOST_FAILED_NO_ANSWER. The simulator and the SDK's stand-in host do the same.
+- Non-2xx picked responses retain their HTTP status, with values only when the complete response passes the picker's structural checks. These checks do not validate the full JSON grammar. A 2xx response that fails them returns `HOST_FAILED_NO_ANSWER`; size and timeout failures retain their specific errors. Previously, non-JSON refusal bodies also became `HOST_FAILED_NO_ANSWER`, preventing applications from distinguishing HTTP refusals from transport failures. The simulator and the SDK's stand-in host use the same behavior.
 
 ## 0.1.91
 
@@ -316,7 +323,7 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
   any time before UP or DOWN switches applications; releasing it after a switch does nothing.
 - In the menu BACK with UP or DOWN no longer opens an application.
 - An application left with BACK and UP or DOWN is as it was when it is switched back to.
-  A short press of BACK still opens the menu.
+  A short BACK calls `app_on_back` when the application exports it; otherwise it returns to the menu.
 - The header shows a time set by hand, or a changed time zone, at once.
 
 ## 0.1.63
@@ -457,7 +464,9 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 - ABI 3 is the first frozen application contract. ABI 2 packages are refused with
   "Update the app." Reinstall the rebuilt catalog applications; their patch versions rise.
-  Firmware and ABI versions remain independent; future firmware preserves ABI 3.
+  Firmware and ABI versions are independent. Before the first public release,
+  authorized ABI 3 changes may break existing packages; compatibility with
+  pre-release builds is not guaranteed.
 - Queued destinations are authorized again before sending, from the same application KV
   view that fills their headers. A settings change cannot send new credentials to a stale
   destination. Disallowed queued requests fail instead of moving to another server.
@@ -555,8 +564,9 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
   "Custom" takes a POSIX string. Detect finds the browser's city by its zone's name.
 - Firmware is a section of its own: what is installed, OTA with a newer release's notes on the
   screen, and Custom firmware. Device keeps what the device is, and restart and reset.
-- New defaults: fast refresh on, the clock in the header on, and no full refresh but when the
-  screen changes hands. A device keeps what was saved on it.
+- New defaults enable fast refresh and the header clock and disable full refreshes
+  based on the partial-refresh count. Initial, screen-switch, keep-alive and
+  explicitly requested cleaning refreshes remain full. Saved settings are retained.
 - An application may say what it does: `description` in its manifest, a line of up to 95
   characters, translated as its title is. The catalog shows it with the title in the page's
   language, and so does what an application is; every official application has one, in
@@ -608,8 +618,9 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
   the image against the last build of `main`.
 - Every push to `main` is a release, its version raised by itself.
 - The web flasher writes any release, for release or for debugging.
-- The tools are all Java: the project has no Python of its own. `tools/perinkpheral console`
-  reads the device's console over USB.
+- The firmware and SDK tools use Kotlin on Java 21 or later. This release removed
+  their Python implementations. `tools/perinkpheral console` reads the device's
+  console over USB.
 
 ## 0.1.13 - 2026-11-17
 
@@ -631,9 +642,9 @@ the previous release. Notes appear on GitHub, in the flasher and on the device's
 
 ## 0.1.9 to 0.1.11 - 2026-11-16
 
-- The menu's order is yours: a long press of OK takes a row, UP and DOWN move it, OK keeps the
-  order, BACK puts it back. Settings and About move too, and the page shows its tiles in the same
-  order.
+- Menu rows can be reordered. Hold OK to select a row, use UP or DOWN to move it,
+  press OK to save, or BACK to cancel. Settings and About can also be moved; the
+  device page uses the same order.
 
 ## 0.1.8 - 2026-11-16
 

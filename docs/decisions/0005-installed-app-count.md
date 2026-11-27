@@ -2,7 +2,10 @@
 
 Date: 2026-11-24
 
-Status: rejected
+Status: rejected. The 144 KiB sizing in the evidence below is historical.
+[0011](0011-page-32k.md) subsequently established a shared 112 KiB application area,
+with linear memory sized to need up to 64 KiB and interpreter allocations using
+the remaining capacity. Background delivery still swaps instances.
 
 ## Context
 

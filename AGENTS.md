@@ -127,8 +127,9 @@ build builds the system applications of `firmware/system` this way; `sdk/apps`
 holds the SDK's sample, which no firmware image carries.
 
 Publish applications to a user-owned public GitHub repository:
-`tools/perinkpheral publish apps --repo owner/repository`. The repository must
-already exist and `gh auth login` must have write access. This replaces only
+`tools/perinkpheral publish <application-folder> --repo owner/repository`.
+Use the directory containing the applications. The repository must already exist
+and `gh auth login` must have write access. This replaces only
 `catalog/` on its default branch; include every application to keep published.
 The printed repository URL can be added under Catalog > Sources on the device page.
 
@@ -154,8 +155,9 @@ checks translation coverage. Rebuild and visually review its pictures with the
 scripts described in `docs/manual/README.md`. PDFs are local outputs, not committed.
 
 `check-generated` compares the committed fonts, icon table, marks, spelling table,
-city table and guide screens with fresh output. Text files compare by bytes; PNGs
-compare by pixels. It also checks the page's embedded mark and wordmark. The
+city table, map land data and guide screens with fresh output. The map check requires
+the cached source, network access, or `--source <geojson>` containing the pinned source.
+Text files compare by bytes; PNGs compare by pixels. It also checks the page's embedded mark and wordmark. The
 sources are `docs/guide/source/guide.html` and `docs/guide/source/guide.ru.txt`;
 translated HTML is an ignored intermediate in the same folder. PDFs are generated
 in `docs/guide/` locally and are not committed. Rebuild both after an edit. `guide-units missing ru` prints missing
@@ -177,8 +179,9 @@ For glyph sheets in a shell without a graphics session, set
 Network development tools: `tools/perinkpheral`
 with `PERINKPHERAL_HOST` set to the device's address (the second page of About
 shows it).
-Screen capture, injected presses, opening/running apps and USB control require a
-development build. Status, log and firmware OTA also work in release builds.
+Injected presses, opening/running applications and USB control require a
+development build. Network screen capture, status, log and firmware OTA also work
+in release builds.
 
 - `shot out.png` saves the frame the panel shows;
 - `press 3 3 2 --shot out.png` presses buttons (`1`-`4` short, `1L`-`4L`
@@ -206,8 +209,8 @@ tools/perinkpheral stress-run --out <empty-directory> --host <device> \
 `--host` defaults to `PERINKPHERAL_HOST`. `--bench` is inferred only with one
 unambiguous LAN address. `--axes`, `--serial` and `--quick` are optional. A, B and G
 work on release builds; C-F require development tools and wasi-sdk. C-F and B's
-install part require a captured, restorable remembered application or
-`--allow-remembered-change`; current firmware does not expose the remembered name.
+install part require a captured, restorable remembered application or the Boolean
+flag `--allow-remembered-change`; current firmware does not expose the remembered name.
 The runner owns its hostile HTTP server and builds `tools/stress/apps` with the application builder.
 It records `steps.jsonl`, optional `serial.log`, a cleanup inventory and `report.md`;
 an axis failure, interruption or cleanup error exits 1. Ctrl-C waits for cleanup.
@@ -278,8 +281,8 @@ project need `WASI_SDK_PATH` in the environment supplied to CMake (CLion: Settin
 Build, CMake, Environment). The firmware project also accepts
 `-DWASI_SDK_PATH=<sdk-directory>` and can discover an installed SDK.
 
-- **An application, or a folder of them.** `tools/perinkpheral new` writes a `CMakeLists.txt` into the
-  application; the perinkpheral-apps repository has one for all of its own. The code is
+- **An application, or a folder of them.** `tools/perinkpheral new <directory> --author "Your name"` creates an application
+  containing a `CMakeLists.txt`; the perinkpheral-apps repository has one for all of its own. The code is
   understood with the SDK's headers, `strings.h` and `pictures.h`, and every application has
   build targets: `<name>` (the code compiled), `<name>-package` (the package, with the build's
   report), `<name>-run` (build, upload, restart the device and open it) and `<name>-serve` (the
@@ -321,16 +324,19 @@ Code:
   includes the declarations split by subject in `sdk/host/*.h`. Applications include
   the umbrella only; a declaration may move between those files without an ABI change.
   An import has three firmware integration points: the appropriate
-  subject header, its `HOST_FUNCTION` in the `appsys/app_api_<area>.c` of its kind (the table
+  subject header, its `HOST_FUNCTION` in the `firmware/components/appsys/app_api_<area>.c` of its kind (the table
   that links it is made from the header), and a case in
-  `test/host/apps/probe` with its check in `test_app.c`. Also implement its native stand-in in
+  `firmware/test/host/apps/probe` with its check in `firmware/test/host/test_app.c`. Also implement its native stand-in in
   `sdk/check/standin.c` for capability checks and record the addition with
   `tools/perinkpheral contract snapshot`. An export
-  Perinkpheral OS calls is added to the header and called in `appsys/app.c`, whose
+  Perinkpheral OS calls is added to the header and called in `firmware/components/appsys/app.c`, whose
   count of them stops the build until it is. ABI 3 is held as frozen:
   changing an existing signature, meaning, privilege, layout or constant
-  requires a new ABI, not just a firmware version - or, until the first public
-  release, the owner's word and `tools/perinkpheral contract snapshot --unfrozen`.
+  requires a new ABI, not just a firmware version. Exceptions are growth of
+  `HOST_ICON_COUNT` through contiguous appended icon IDs and extension of
+  `host_answer_info_t` after its unchanged prefix, preserving alignment. Until the first
+  public release, the owner may authorize other ABI 3 changes, recorded with
+  `tools/perinkpheral contract snapshot --unfrozen`.
   Record every added call with `contract snapshot`: the check refuses an unrecorded one. Commands use subject
   then verb (`kv_get`, `gfx_draw_text`); queries name the subject and what
   is asked (`gfx_width`, `time_now`); events are `app_on_<what happened>`
@@ -341,19 +347,20 @@ Code:
   every offset and length against the module's memory before using it.
   Keep them free of ESP-IDF; what they need from the device comes in as
   `app_services_t`.
-- `components/wasm3/wasm3` is upstream v0.9.0 with two local changes,
-  described in `components/wasm3/README.md`: loops yield, so that an
+- `firmware/components/wasm3/wasm3` is upstream v0.9.0 with two local changes,
+  described in `firmware/components/wasm3/README.md`: loops yield, so that an
   application stuck in one can be stopped, and its memory comes from
   the application area. Configure the interpreter
   from the component's `CMakeLists.txt`; do not edit it further.
-- `managed_components/` is downloaded; do not edit it.
+- The generated `managed_components/` directories inside the firmware and recovery
+  projects are downloaded; do not edit them.
 - `gfx_text_sq_ex()` draws the square font: `scale` is the stroke in
   pixels and the gap is a quarter wider, rounded, so scale 5 gives the 27 px
   square of the logo.
 
 Display:
 
-- `components/epd/epd.c` follows Waveshare's `epd4in2_V2` command sequence
+- `firmware/components/epd/epd.c` follows Waveshare's `epd4in2_V2` command sequence
   with the adaptations recorded in `hardware/README.md`. Preserve these three measured constraints
   (details in `hardware/README.md`):
   - CS is toggled per byte by GPIO. CS held low over a block of data
@@ -361,8 +368,8 @@ Display:
     and the image fades to grey.
   - The bytes are clocked out by hand (`tx()` in `epd.c`), not by the
     SPI driver: mode 0, at least 75 ns to each half of the clock, CS
-    high between bytes. Do not shorten the waits: the controller asks
-    for 25 ns and nobody here has an oscilloscope.
+    high between bytes. Preserve the twelve-NOP delays, which provide at least 75 ns per
+    clock half-cycle at 160 MHz.
   - Every BUSY wait is bounded (init 1 s, full 4 s, partial 3 s). A
     refresh that times out cuts the controller with a hardware reset and
     sleeps it; the waits of an init go on to the next command. After deep
@@ -378,7 +385,8 @@ Display:
   partial updates compare against. `epd.c` sleeps the panel at the end
   of a full show, mode 1 so that RAM is kept; after a partial one a
   deadline of the main event loop does it 1.5 s later (`display_rest()`), and
-  another makes the 24 h keep-alive refresh (`display_keepalive()`).
+  another schedules the keep-alive refresh at `refresh_keepalive_h`, configurable
+  from 1 to 168 hours and defaulting to 24 hours (`display_keepalive()`).
 
 Board and system:
 
@@ -386,7 +394,7 @@ Board and system:
   console is on USB-JTAG (`sdkconfig.defaults`). The efuse that
   silences the ROM boot log is irreversible: do not touch it.
 - IOMUX SPI2 on the C6 is CS0 = GPIO16 and MISO = GPIO2, which are our
-  BUSY and button 3. We are on the GPIO matrix, so it does not matter.
+  BUSY and button 3. The panel uses software SPI through GPIO; SPI2's IOMUX assignments do not apply.
 - `CONFIG_FREERTOS_HZ=1000`. At the default 100 Hz `pdMS_TO_TICKS(5)`
   is zero and the button task starves everything else; the boot log
   then stops right after the button pins are reported.
@@ -400,7 +408,7 @@ Board and system:
 ## A device that does not answer
 
 In the main firmware, hold buttons 1 and 4 (UP and BACK) together for ten seconds: the device restarts, whatever
-its tasks are doing. It is counted in interrupts (`components/input/buttons.c`). When the
+its tasks are doing. It is counted in interrupts (`firmware/components/input/buttons.c`). When the
 screen still answers, Settings has Restart.
 To select recovery at the next reset, keep BACK held for the bootloader's three-second
 entry window. Recovery itself reads only OK and BACK; it does not run the main

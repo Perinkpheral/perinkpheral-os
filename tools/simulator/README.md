@@ -38,7 +38,7 @@ Beyond the device's API:
 |---|---|
 | `POST /api/sim/background` | the application leaves the screen; from then on it is loaded only for what comes to it, as on the device |
 | `POST /api/sim/foreground` | the application takes the screen again |
-| `POST /api/sim/intent?kind=started\|time_changed\|network_up` | the news, delivered if the manifest asks for it |
+| `POST /api/sim/intent?kind=started\|time_changed\|network_up\|installed\|updated` | started, time_changed and network_up require the corresponding manifest subscription; installed and updated deliver lifecycle callbacks without an intent subscription |
 | `POST /api/sim/alarm?id=N` | alarm N comes now |
 | `POST /api/sim/forward?seconds=N` | the clock and every deadline move on |
 

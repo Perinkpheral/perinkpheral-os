@@ -15,8 +15,9 @@ tools/perinkpheral stress-run --out <empty-directory> --host <device> \
     --bench <computer-LAN-address> --axes a,b,c,d,e,f,g --serial <port> --quick
 ```
 
-`--host` defaults to `PERINKPHERAL_HOST`. The other options are optional. Without
-`--bench`, exactly one LAN IPv4 address must be available. The hostile server binds
+`--out` is required. `--host` defaults to `PERINKPHERAL_HOST`. The remaining options
+are optional. When an enabled C-F workload needs the bench server, omitting
+`--bench` requires exactly one eligible LAN IPv4 address. The hostile server binds
 that address on an automatically selected port; the device must be able to reach it.
 Java 21 is required. C-F build their bench packages with wasi-sdk, through the same
 builder as `run`. B generates a Latin glyph pack locally with a separate bench name.
@@ -25,7 +26,7 @@ No packages or glyph packs are downloaded by the computer.
 | Axis | Quick | Full |
 |---|---|---|
 | A: web server | 4 and 12 parallel GETs, 2 screenshots, 4 slow clients, 6 idle sockets; one client per oversized header, URI and body case | GETs 4/8/12/16/24/32/48/64; screenshots 1/2/4/6/8/12; slow clients 4/8/12/16/24; idle sockets 6/12/16/24/32; malformed clients 1/4/8, declared 1 GB bodies 1/4 |
-| B: host memory | Two 5 s levels: catalog/install/glyph/page workers 1/1/1/2 and 2/2/2/4 | Seven 150 s levels: each heavy operation alone, 1/1/1/0, 2/2/2/2, 4/4/4/8, 8/8/8/16 |
+| B: Perinkpheral OS memory | Two 5 s levels: catalog/install/glyph/page workers 1/1/1/2 and 2/2/2/4 | Seven 150 s levels: each heavy operation alone, 1/1/1/0, 2/2/2/2, 4/4/4/8, 8/8/8/16 |
 | C: hostile polls | Eight cases: pick oversized/nesting/lying length; document oversized/endless; XML 65 attributes; raw 5 MB/endless; 1.5 s hold after observed request | All 51 cases; ordinary holds 30 s, trickle/stall 70 s, endless 90 s, 4/5 MB streams 120 s; document abandonment and long-BACK stream release timing |
 | D: application faults | All 12 modes/cases, 1.5 s observation each | Same cases, 60 s each: queue refill, stalled queue, file/KV quota, 1 ms timers/redraw, recursion, bad pointer, endless handler/data handler, 62.2 KB memory (builder report: 8.0 KB stack and 54.2 KB data) |
 | E: navigation | Open, UP/DOWN and mixed actions; gaps 200/0 ms, 1.5 s per level | Same actions; gaps 2000/1000/500/200/50/0 ms, 120 s per level; fixed seed |
@@ -97,9 +98,10 @@ that remains unreachable can prevent it. Unfinished cleanup is reported as failu
 with the inventory retained for manual recovery. SIGKILL and power loss cannot run
 process cleanup.
 
-Outputs are `steps.jsonl`, optional `serial.log`, `cleanup.json`, `initial-status.json`,
-`initial-screen.bmp` and `report.md`. The initial screen is the last frame shown by
-the panel, read from `/api/screen` before mutations.
+Outputs include `steps.jsonl`, `initial-status.json`, `initial-screen.bmp` and
+`report.md`; `serial.log` requires `--serial`, and `cleanup.json` is created when
+temporary applications or a glyph pack require cleanup. The initial screen is the
+last frame shown by the panel, read from `/api/screen` before mutations.
 Use a new empty output directory per run; keep it private because it contains device
 and application settings. The exit code is 1 for an axis failure, interruption or
 cleanup error, otherwise 0. Skipped coverage is listed in the report. Console capture

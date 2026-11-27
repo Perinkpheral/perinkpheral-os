@@ -36,8 +36,8 @@ its screens with `app_nav`.
 - No change before the release; `app_nav` stays the recommended helper and
   remains optional.
 - The manager will need a design that keeps ABI 3 frozen: additive calls with
-  `HOST_SINCE_` stamps, or a library-only change if the stack needs no new host
-  support.
+  `HOST_SINCE_` stamps, or a library-only change if the stack needs no new
+  Perinkpheral OS support.
 
 ## Reopen when
 

@@ -7,11 +7,11 @@ Perinkpheral OS supports the explicit set `{3}`;
 ABI 2 has no adapter and receives "Update the app."
 
 `WASI_SDK_PATH=<wasi-sdk> tools/perinkpheral contract snapshot` creates or extends
-`3.txt` and `3/fixtures.txt`. It refuses to replace a recorded entry. `contract check`
-rejects changed, removed or unrecorded entries, except that `HOST_ICON_COUNT` may grow
-when contiguous icon IDs are appended, and runs with the host tests in CI.
-Record additions with `contract snapshot` before running the check.
-Existing icon IDs remain fixed. Actual
+`3.txt` and `3/fixtures.txt`. Recorded contract entries remain unchanged except for
+contiguous icon additions that increase `HOST_ICON_COUNT`, and appended
+`host_answer_info_t` fields that preserve the recorded prefix and alignment.
+Record additions with `contract snapshot`; `contract check` also rejects unrecorded
+entries and runs with the host tests in CI. Existing icon IDs remain fixed. Actual
 Wasm types are also checked during every application build. Compiler measurements
 use wasm32 C11, independently of the native host's pointer width.
 

@@ -2,16 +2,17 @@
 
 Date: 2026-11-24
 
-Status: accepted
+Status: accepted historically. Memory sizing and its reopening criteria were
+superseded by [0011](0011-page-32k.md) on 2026-11-27; the memory guards remain applicable.
 
-## Context
+## Context (historical)
 
 The ESP32-C6 has 512 KiB SRAM and no PSRAM. One application instance runs at a
 time. Its fixed 64 KiB WebAssembly linear memory is separate from interpreter
 working memory. The former 64 KiB interpreter budget did not cover all exercised
 application paths. Increasing the startup reservation reduces system/TLS heap.
 
-## Decision
+## Decision (historical)
 
 Reserve 80 KiB for interpreter allocations and retain the 64 KiB linear-memory
 contract: 144 KiB total, 147,456 bytes, allocated at startup and reset on unload.
@@ -103,7 +104,7 @@ Release qualification requires the exact candidate's
 full queues, reservation checks across boots and recovery handoff. Host checks
 and historical low-water samples do not establish multi-day fragmentation safety.
 
-## Reopen when
+## Reopen when (historical)
 
 Measured application paths fail within 80 KiB, the candidate cannot retain stable
 system-heap/contiguous-block headroom, or endurance/load tests show allocation

@@ -81,6 +81,7 @@ Open each, wait for its data, press every button it uses.
 | calendar | | | | |
 | clock | | | | |
 | donut | | | | |
+| earthquakes | | | | |
 | ha | | | | |
 | iss | | | | |
 | keenetic | | | | |
@@ -89,7 +90,7 @@ Open each, wait for its data, press every button it uses.
 | metals | | | | |
 | pomodoro | | | | |
 | rates | | | | |
-| status | | | | |
+| space-launch | | | | |
 | stocks | | | | |
 | stopwatch | | | | |
 | sun | | | | |
