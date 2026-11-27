@@ -74,9 +74,9 @@ class StressRun(
     private var restartRequested = false
     private var backDown = false
     private var removedListFull = false
+    private var retainedStores = false
+    private var recordingFailed = false
     private var originalGlyphs: Map<String, Long>? = null
-    private var originalOpen: String? = null
-    private var originalLast: String? = null
     private var cleanupDeadline: Long? = null
     private var cleanupWallDeadline = 0L
     private val cleanupRequests = Executors.newVirtualThreadPerTaskExecutor()
@@ -108,19 +108,21 @@ class StressRun(
             require(initial["mode"] != "recovery") { "stress-run requires main firmware" }
             previous = initial
             previousAt = sampledAt
+            File(directory, "initial-status.json").writeText(Json.pretty(initial) + "\n")
+            val screen = successful(request("/api/screen"))
+            File(directory, "initial-screen.bmp").writeBytes(screen.body)
             settings = json("/api/settings") as? Map<*, *> ?: error("invalid settings")
             require(settings!!["time_auto"] is Boolean) { "settings has no time_auto" }
             originalApps = apps()
             val removed = json("/api/apps/removed") as List<*>
             removedListFull = removed.size >= REMOVED_LISTED_MAX
+            retainedStores = removed.isNotEmpty()
             protectedNames = originalApps.map { it["name"].toString() }.toSet() + removed.map { it.toString() }
             originalGlyphs = glyphInventory(json("/api/glyphs") as Map<*, *>)
-            originalOpen = (initial["current_app"] ?: settings!!["current_app"]) as? String
-            originalLast = (settings!!["last_app"] ?: initial["last_app"]) as? String
             note(mapOf("event" to "start", "options" to mapOf("axes" to options.axes.map { it.toString() }, "quick" to options.quick),
                 "host" to client.host, "status" to initial, "settings" to settings,
-                "apps" to originalApps, "glyphs" to originalGlyphs))
-            if (initial["dev_tools"] == true && options.axes.any { it in "cdef" }) {
+                "apps" to originalApps, "glyphs" to originalGlyphs, "screen_headers" to screen.headers))
+            if (initial["dev_tools"] == true && !removedListFull && options.axes.any { it in "ef" || it in "cd" && !retainedStores }) {
                 val address = options.bench ?: benchAddress()
                 server = StressServer(address) { note(mapOf("event" to "hostile_hit") + it) }
                 benchUrl = "http://$address:${server!!.port}"
@@ -130,6 +132,14 @@ class StressRun(
                 checkCancelled()
                 if (axis in "cdef" && initial["dev_tools"] != true) {
                     skip(axis, "dev_tools is absent or false; requires /api/dev")
+                    continue
+                }
+                if (axis in "cdef" && removedListFull) {
+                    skip(axis, "retained-store list is full; unlisted names may be protected")
+                    continue
+                }
+                if (axis in "cd" && retainedStores) {
+                    skip(axis, "retained stores exist; application settings and KV writes may evict them")
                     continue
                 }
                 try {
@@ -150,12 +160,7 @@ class StressRun(
                     fail(axis, "setup", error.message ?: error.javaClass.simpleName)
                 } finally {
                     server?.clear()
-                    cleanup {
-                        restoreClock()
-                        releaseBack()
-                        if (axis in "cdef") removeBench()
-                        checkCleanupObservation()
-                    }
+                    cleanup(::restoreClock, ::releaseBack, { if (axis in "cdef") removeBench() }, { checkCleanupObservation() })
                 }
             }
         } catch (_: InterruptedException) {
@@ -168,17 +173,8 @@ class StressRun(
         } finally {
             Thread.interrupted()
             try {
-                cleanup {
-                    restoreClock()
-                    releaseBack()
-                    server?.close()
-                    removeBench()
-                    removeGlyph()
-                    restoreApplication()
-                    verifyGlyphs()
-                    verifyOriginalApps()
-                    checkCleanupObservation()
-                }
+                cleanup(::restoreClock, ::releaseBack, { server?.close() }, ::removeBench, ::removeGlyph,
+                    ::verifyGlyphs, ::verifyOriginalApps, { checkCleanupObservation() })
             } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
             try {
                 serial?.close()
@@ -196,7 +192,12 @@ class StressRun(
     }
 
     @Synchronized private fun note(value: Map<String, Any?>) {
-        File(directory, "steps.jsonl").appendText(Json.write(mapOf("at" to Instant.now().toString()) + value) + "\n")
+        if (recordingFailed) return
+        try { File(directory, "steps.jsonl").appendText(Json.write(mapOf("at" to Instant.now().toString()) + value) + "\n") }
+        catch (error: Exception) {
+            recordingFailed = true
+            cleanupErrors += "Recording steps.jsonl: ${error.message}"
+        }
     }
     private fun checkCancelled() { if (cancelled.get() || Thread.currentThread().isInterrupted) throw InterruptedException("cancelled") }
     private fun pause(ms: Long) { checkCancelled(); timing.sleep((ms * timing.scale).toLong()); checkCancelled() }
@@ -204,7 +205,7 @@ class StressRun(
     private fun request(path: String, method: String = "GET", body: ByteArray? = null,
                         type: String = "application/json", timeout: Int = 10_000): DeviceClient.Answer {
         if (method == "POST" && (path.startsWith("/api/dev/run?") || path == "/api/restart")) restartRequested = true
-        if (cleanupDeadline == null) return try { client.raw(path, method, timeout, body, type) }
+        if (cleanupDeadline == null) return try { checkCancelled(); client.raw(path, method, timeout, body, type) }
         catch (error: IOException) { throw IOException("$method $path: ${error.message}", error) }
         val left = cleanupRemaining()
         val task = cleanupRequests.submit<DeviceClient.Answer> { client.raw(path, method, minOf(timeout.toLong(), left).toInt().coerceAtLeast(1), body, type) }
@@ -220,15 +221,20 @@ class StressRun(
         val sample = json("/api/status") as? Map<*, *> ?: throw IOException("invalid status")
         sampledAt = timing.now()
         require(sample["uptime_s"] is Number && sample["failed_allocations"] is Number && sample["reset_reason"] is Number) { "status lacks uptime_s, failed_allocations or reset_reason" }
-        return sample
+        val log = successful(request("/api/log"))
+        val boot = log.headers.entries.firstOrNull { it.key.equals("X-Log-Boot", ignoreCase = true) }?.value
+        require(!boot.isNullOrBlank()) { "log lacks X-Log-Boot" }
+        return sample + ("log_boot" to boot)
     }
     private fun apps(): List<Map<*, *>> = (json("/api/apps") as List<*>).map { it as Map<*, *> }
-    private fun waitBack(): Map<*, *> {
+    private fun waitBack(restartedFrom: String? = null): Map<*, *> {
         val deadline = timing.now() + timing.recoveryMs
         var error: Exception
         do {
             try {
                 val sample = status()
+                if (restartedFrom != null && sample["log_boot"] == restartedFrom)
+                    throw IOException("requested restart did not change X-Log-Boot")
                 successful(request("/", timeout = 3000))
                 return sample
             } catch (failure: Exception) { error = failure }
@@ -286,9 +292,9 @@ class StressRun(
         var interrupted = false
         try { detail = action() } catch (error: InterruptedException) { interrupted = true; Thread.interrupted()
         } catch (error: Exception) { actionError = error.message ?: error.toString() }
-        val after = try { if (interrupted) status() else waitBack() } catch (error: InterruptedException) { throw error
-        } catch (error: Exception) { mapOf("error" to error.message) }
         val expectedRestart = restart && restartRequested
+        val after = try { if (interrupted) status() else waitBack(if (expectedRestart) before["log_boot"] as? String else null) } catch (error: InterruptedException) { throw error
+        } catch (error: Exception) { mapOf("error" to error.message) }
         val failures = observe(after, expectedRestart).toMutableList()
         val lines = observedConsole
         actionError?.let { failures += it }
@@ -405,7 +411,11 @@ class StressRun(
     }
 
     private fun own(name: String) {
+        require(!removedListFull) { "retained-store list is full; unlisted names may be protected" }
         require(name !in protectedNames) { "$name is installed or has a retained store; refusing to replace it" }
+        require(name in owned || (originalApps.map { it["name"].toString() }.toSet() + owned).size < INSTALLED_APPS_MAX) {
+            "no remaining application slots"
+        }
         owned += name
         File(directory, "cleanup.json").writeText(Json.pretty(mapOf("apps" to owned.toList(),
             "glyph" to if (glyphOwned) glyphName else null, "time_auto" to settings?.get("time_auto"))) + "\n")
@@ -414,8 +424,9 @@ class StressRun(
     private fun installer(): Map<*, *>? {
         if (installChecked) return installEntry
         installChecked = true
-        if (removedListFull) {
-            coverage('b', "install part skipped: retained-store list is full; unlisted names may be protected")
+        if (retainedStores) {
+            coverage('b', if (removedListFull) "install part skipped: retained-store list is full; unlisted names may be protected"
+                else "install part skipped: retained stores exist; application handlers may evict them")
             source()
             return null
         }
@@ -528,6 +539,7 @@ class StressRun(
         step(axis, "install $kind", restart = true) { upload(kind, kind); restartInto(kind); "installed" }
     }
     private fun configure(name: String, mode: String = "idle", url: String = benchUrl) {
+        require(!retainedStores) { "retained stores exist; refusing application settings writes" }
         post("/api/apps/settings?app=${encode(name)}", mapOf("server" to url, "mode" to mode))
     }
     private fun open(name: String) { post("/api/dev/open?app=${encode(name)}") }
@@ -586,7 +598,7 @@ class StressRun(
             if (path == "raw") { pause(8000); press(4, "long") }
             val releasedAt = timing.now()
             val next = server!!.hits.size
-            served(path, "ok", next, 400_000)
+            served(path, "ok", next, CONNECTION_RELEASE_MS)
             val gap = timing.now() - releasedAt
             server!!.clear()
             mapOf("next_request_after_ms" to gap)
@@ -634,7 +646,7 @@ class StressRun(
                     when (action) {
                         "open" -> open(names[index++ % names.size])
                         "held" -> chord()
-                        else -> press(if (random.nextBoolean()) 1 else 3)
+                        else -> { open("stress"); press(if (random.nextBoolean()) 1 else 3) }
                     }
                     count++; pause(gap)
                 } while (timing.now() < deadline)
@@ -646,22 +658,31 @@ class StressRun(
         packed("stress")
         packed("stressbig")
         var refused = false
-        val limit = if (options.quick) 3 else 24
+        val slots = (INSTALLED_APPS_MAX - (apps().map { it["name"].toString() }.toSet() + owned).size).coerceAtLeast(0)
+        val limit = minOf(if (options.quick) 3 else INSTALLED_APPS_MAX, slots)
         for (index in 1..limit) {
             val name = "sbig%02d".format(index)
             require(name !in protectedNames) { "$name is installed or has a retained store" }
             step('f', "42 KB module $index", restart = true) {
                 try { upload(name, "stressbig") } catch (error: IOException) {
-                    if (!error.message.orEmpty().contains("HTTP 400") && !error.message.orEmpty().contains("HTTP 409")) throw error
+                    val sample = status()
+                    val total = (sample["storage_total"] as? Number)?.toLong() ?: 0L
+                    val used = (sample["storage_used"] as? Number)?.toLong() ?: -1L
+                    val message = error.message.orEmpty()
+                    val storageRefused = message == "HTTP 500: the file could not be stored" ||
+                        message == "HTTP 400: not an application's name, or the storage refused"
+                    if (!storageRefused || sample["storage_ok"] != true || used !in 0..total ||
+                        total <= 0 || total - used >= File(packed("stressbig"), "app.wasm").length()) throw error
                     refused = true
-                    note(mapOf("axis" to "f", "event" to "storage_refusal", "app" to name, "response" to error.message))
+                    note(mapOf("axis" to "f", "event" to "storage_refusal", "app" to name, "response" to error.message,
+                        "storage_total" to total, "storage_used" to used))
                 }
                 if (!refused) { restartInto(name); open(name) }
                 mapOf("refused" to refused, "status" to status())
             }
             if (refused) break
         }
-        if (!refused) coverage('f', "${if (options.quick) "quick cap" else "application cap"} reached without an upload refusal")
+        if (!refused) coverage('f', "${if (limit == slots) "application slot cap" else "quick cap"} reached without an upload refusal")
     }
     private fun clock() {
         val unix = Instant.now().epochSecond
@@ -673,7 +694,7 @@ class StressRun(
             for (jump in jumps) step('g', "clock unix=$jump") {
                 post("/api/clock", mapOf("unix" to jump)); pause(if (options.quick) 500 else 20_000); "saved"
             }
-        } finally { cleanup { restoreClock() } }
+        } finally { cleanup(::restoreClock) }
         repeat(if (options.quick) 2 else 8) { index ->
             step('g', "restart ${index + 1}", restart = true) { post("/api/restart"); pause(3000); waitBack() }
         }
@@ -689,13 +710,13 @@ class StressRun(
         } else coverage('g', "restart during catalog skipped: source 0 unavailable")
     }
 
-    private fun cleanup(action: () -> Unit) {
+    private fun cleanup(vararg actions: () -> Unit) {
         if (Thread.interrupted()) cancelled.set(true)
         if (cleanupDeadline == null) {
             cleanupDeadline = timing.now() + timing.cleanupMs
             cleanupWallDeadline = System.nanoTime() / 1_000_000 + timing.cleanupMs
         }
-        try { action() } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
+        try { for (action in actions) try { action() } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" } }
         finally { if (!cancelled.get()) cleanupDeadline = null }
     }
     private fun cleanupRemaining(): Long {
@@ -712,11 +733,6 @@ class StressRun(
             post("/api/dev/button?button=4&press=up")
             backDown = false
         }
-    }
-    private fun restoreApplication() {
-        val name = originalOpen ?: originalLast
-        if (!changedApps || name.isNullOrEmpty()) return
-        cleanupAttempt("restore original application") { open(name) }
     }
     private fun glyphInventory(state: Map<*, *>): Map<String, Long> =
         (state["packs"] as List<*>).associate {
@@ -742,7 +758,7 @@ class StressRun(
                 last = error
                 Thread.interrupted()
                 if (cleanupDeadline != null && runCatching { cleanupRemaining() }.isFailure) return@repeat
-                cleanupSleep(1000)
+                runCatching { cleanupSleep(1000) }
             }
         }
         cleanupErrors += "$label: ${last?.message}"
@@ -860,8 +876,9 @@ class StressRun(
             if (cleanupErrors.isNotEmpty()) append("## Cleanup and run errors\n\n" + cleanupErrors.joinToString("\n") { "- $it" } + "\n\n")
             append("Steps and HTTP outcomes: `steps.jsonl`. Cleanup inventory: `cleanup.json`.\n")
             append(if (options.serial == null) "USB console was not observed.\n" else "${serial?.diagnostic ?: "console not captured"}\n")
-            if (changedApps && originalOpen == null && originalLast == null)
-                append("The API exposes neither the open nor the remembered application. The device will start into the menu or the default application.\n")
+            append("Initial status: `initial-status.json`. Initial panel frame: `initial-screen.bmp`.\n")
+            if (changedApps)
+                append("The API exposes neither the open nor the remembered application. The device will start into the menu or the default application. The owner should open their application once.\n")
             append("This run does not qualify endurance, power loss, physical buttons, panel timing or TLS with two roots.\n")
         }
         File(directory, "report.md").writeText(text)
@@ -876,6 +893,8 @@ class StressRun(
     companion object {
         private const val REMOVED_LISTED_MAX = 16
         private const val GLYPH_FACES_MAX = 12
+        private const val INSTALLED_APPS_MAX = 24 // LAUNCHER_INSTALLED_MAX
+        private const val CONNECTION_RELEASE_MS = 120_000L // Below the streamed response's 300 s timeout.
         private const val UPTIME_SLACK_S = 2L
         private val BENCH_NAMES = setOf("stress", "stressfat", "stressdoc", "stressbig")
         /** A reset, a panic or an abort fails a step. The task watchdog only prints in both builds
@@ -888,6 +907,12 @@ class StressRun(
             fun number(sample: Map<*, *>, key: String) = (sample[key] as? Number)?.toLong() ?: 0L
             if (after["error"] != null) failures += after["error"].toString()
             val reset = number(after, "reset_reason")
+            val oldBoot = before["log_boot"] as? String
+            val newBoot = after["log_boot"] as? String
+            if (requestedRestart && (oldBoot.isNullOrEmpty() || newBoot.isNullOrEmpty() || oldBoot == newBoot))
+                failures += "requested restart did not change X-Log-Boot"
+            if (!requestedRestart && oldBoot != null && newBoot != null && oldBoot != newBoot)
+                failures += "X-Log-Boot changed: restart"
             if (requestedRestart && reset != 3L) failures += "requested restart has reset_reason $reset, expected 3"
             if (reset != number(before, "reset_reason")) {
                 if (!requestedRestart || reset in 4L..7L || reset == 9L) failures += "reset_reason changed to $reset: restart"

@@ -9,6 +9,21 @@ import java.net.SocketTimeoutException
 /** Socket tests intentionally bypass an HTTP client's framing repairs. */
 object StressServerTest {
     @JvmStatic fun main(args: Array<String>) {
+        val accepted = java.util.concurrent.CountDownLatch(1)
+        val dispatch = java.util.concurrent.CountDownLatch(1)
+        StressServer("127.0.0.1").use { server ->
+            server.beforeDispatch = {
+                accepted.countDown()
+                // Shutdown interrupts the accept worker before dispatch resumes.
+                try { dispatch.await() } catch (_: InterruptedException) { dispatch.await() }
+            }
+            Socket("127.0.0.1", server.port).use { socket ->
+                socket.soTimeout = 2000
+                check(accepted.await(2, java.util.concurrent.TimeUnit.SECONDS))
+                try { server.close() } finally { dispatch.countDown() }
+                check(socket.getInputStream().read() == -1) { "socket accepted during shutdown stayed open" }
+            }
+        }
         StressServer("127.0.0.1").use { server ->
             check(StressServer.POLL_CASES.size == 51)
             for (case in StressServer.CASES) {

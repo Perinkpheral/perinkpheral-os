@@ -9,6 +9,7 @@ import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import kotlin.random.Random
 
 /** Deliberately malformed HTTP/1.1 responses. Each connection snapshots its path's case. */
@@ -17,6 +18,9 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
     private val workers = Executors.newVirtualThreadPerTaskExecutor()
     private val sockets = ConcurrentHashMap.newKeySet<Socket>()
     private val cases = ConcurrentHashMap<String, String>()
+    private val lifecycle = Any()
+    private var closed = false
+    internal var beforeDispatch: () -> Unit = {}
     val hits = CopyOnWriteArrayList<Pair<String, String>>()
     val port: Int get() = listener.localPort
 
@@ -24,13 +28,22 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
         workers.submit {
             while (!listener.isClosed) {
                 val socket = try { listener.accept() } catch (_: java.io.IOException) { break }
-                sockets += socket
-                workers.submit {
-                    try { socket.use { serve(it) } } catch (_: java.io.IOException) {
-                        // The client may stop reading at any byte, including a chunk header.
-                    } catch (_: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                    } finally { sockets -= socket }
+                beforeDispatch()
+                synchronized(lifecycle) {
+                    if (closed) { socket.close(); return@submit }
+                    sockets += socket
+                    try {
+                        workers.submit {
+                            try { socket.use { serve(it) } } catch (_: java.io.IOException) {
+                                // The client may stop reading at any byte, including a chunk header.
+                            } catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                            } finally { sockets -= socket }
+                        }
+                    } catch (_: RejectedExecutionException) {
+                        socket.close()
+                        sockets -= socket
+                    }
                 }
             }
         }
@@ -90,10 +103,12 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
         output.write("0\r\n\r\n".toByteArray())
     }
 
-    override fun close() {
+    override fun close() = synchronized(lifecycle) {
+        closed = true
         listener.close()
         clear()
         workers.shutdownNow()
+        Unit
     }
 
     companion object {
