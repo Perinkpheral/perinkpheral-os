@@ -73,6 +73,7 @@ TESTS   += test_recovery_screen
 TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_m3_area test_web_memory
+TESTS   += test_standin_text
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
@@ -206,6 +207,10 @@ test_notice_queue: test_notice_queue.c tinytest.h $(UI)/notice_queue.c $(UI)/inc
 test_scenes: test_scenes.c tinytest.h $(UI)/kit.c $(MAIN)/header.c $(MAIN)/header.h $(MAIN)/menu_order.c $(MAIN)/menu_order.h $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(MAIN)/scenes.h $(MAIN)/screens.h $(UI)/include/scene.h $(GFX_DEPS)
 	$(CC) $(CFLAGS) -I$(MAIN) -I$(SDK) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts $(QR_INCS) -o $@ test_scenes.c \
 		$(MAIN)/header.c $(MAIN)/menu_order.c $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR_SRCS)
+
+STANDIN_SRCS := $(SDK)/check/standin.c $(filter-out $(SDK_LIB)/app_alloc.c $(SDK_LIB)/app_runtime.c,$(wildcard $(SDK_LIB)/*.c)) $(MAP)/map_geo.c $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/document_reader.c $(APPSYS)/json_document.c
+test_standin_text: test_standin_text.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
+	$(CC) $(CFLAGS) -D_DARWIN_C_SOURCE -Wno-attributes '-DHOST_IMPORT(name,...)=__VA_ARGS__' '-DAPP_EXPORT(name,...)=__VA_ARGS__' $(MANIFEST_FLAGS) -I$(SDK)/check -I$(MAP)/include -o $@ test_standin_text.c $(STANDIN_SRCS) -lm
 
 # The interpreter is upstream code: built once, without our warnings, and
 # limited to one page of memory exactly as on the device.
@@ -376,5 +381,6 @@ test_catalog_stream: test_catalog_stream.c tinytest.h $(APPSTORE)/catalog_stream
 
 # Compile the real route tables, dispatcher, status and glyph handler. Discard
 # unrelated hardware paths, as test_host_events does for host.c.
-test_web_memory: test_web_memory.c tinytest.h $(MAIN)/web_server.c $(MAIN)/web_apps.c $(MAIN)/memory.c $(APPSTORE)/json_tree.c $(WORDS)/words.c $(COMP)/wasm3/m3_area.h $(wildcard $(MAIN)/*.h route_stubs/*.h route_stubs/*/*.h memory_stubs/*.h install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h)
-	$(CC) $(CFLAGS) -O2 -Dasm=__asm__ -ffunction-sections -fdata-sections -DCONFIG_LWIP_MAX_SOCKETS=12 $(MANIFEST_FLAGS) -Iroute_stubs -Imemory_stubs -Iinstall_stubs -Ipersistence_stubs -I$(COMP)/wasm3 -I$(APPCONF)/include -I$(DEADLINES)/include -I$(NET)/include -I$(UI)/include -I$(GFX)/include -I$(MAIN) -o $@ test_web_memory.c $(MAIN)/memory.c $(APPSTORE)/json_tree.c $(WORDS)/words.c $(HOST_TEST_LDFLAGS)
+WEB_POLLER_SRCS := $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/catalog.c $(MANIFEST_SRCS)
+test_web_memory: test_web_memory.c tinytest.h $(MAIN)/web_server.c $(MAIN)/web_apps.c $(MAIN)/poller.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(COMP)/wasm3/m3_area.h $(wildcard $(MAIN)/*.h route_stubs/*.h route_stubs/*/*.h memory_stubs/*.h install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h poller_stubs/freertos/*.h)
+	$(CC) $(CFLAGS) -O2 -Dasm=__asm__ -pthread -ffunction-sections -fdata-sections -DCONFIG_LWIP_MAX_SOCKETS=12 $(MANIFEST_FLAGS) -Ipoller_stubs -Iroute_stubs -Imemory_stubs -Iinstall_stubs -Ipersistence_stubs -I$(COMP)/wasm3 -I$(APPCONF)/include -I$(DEADLINES)/include -I$(NET)/include -I$(UI)/include -I$(GFX)/include -I$(MAIN) -o $@ test_web_memory.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(HOST_TEST_LDFLAGS) -lm

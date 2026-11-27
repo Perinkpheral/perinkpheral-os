@@ -2313,7 +2313,34 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
         while (text[end] != '\0' && text[end] != ' ' && end < KIT_TEXT_BUFFER - 1) {
             end++;
         }
+        while (end > 0 && is_utf8_tail(text[end])) {
+            end--;
+        }
         if (text_width(font, text, end) > width && fits > 0) {
+            break;
+        }
+        if (text_width(font, text, end) > width) {
+            int32_t boundary = end;
+            while (boundary > 0) {
+                boundary--;
+                while (boundary > 0 && is_utf8_tail(text[boundary])) {
+                    boundary--;
+                }
+                if (boundary > 0 && text_width(font, text, boundary) <= width) {
+                    end = boundary;
+                    break;
+                }
+            }
+            if (boundary == 0) {
+                end = 1;
+                while (text[end] != '\0' && is_utf8_tail(text[end])) {
+                    end++;
+                }
+            }
+            fits = after = end;
+            while (text[after] == ' ') {
+                after++;
+            }
             break;
         }
         fits = end;

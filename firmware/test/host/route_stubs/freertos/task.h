@@ -1,6 +1,4 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
-#include "../../install_stubs/freertos/FreeRTOS.h"
-#define pdPASS 1
+#include "../../poller_stubs/freertos/task.h"
 void vTaskDelete(void *task);
-int xTaskCreate(void (*task)(void *), const char *name, unsigned stack, void *argument, unsigned priority, void *handle);

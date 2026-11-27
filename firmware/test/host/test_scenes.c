@@ -236,6 +236,12 @@ static void test_text_lines(void)
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "", 400, 4) == 0);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "   ", 400, 4) == 0);
     CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "wordwordwordword word", word + 4, 5) == 5);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "wordwordword", word, 8) == 3);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "word wordwordword", word, 8) == 4);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "   wordwordword   ", word, 8) == 3);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "ééé", 1, 8) == 3);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "€€€", 1, 8) == 3);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, "😀😀😀", 1, 8) == 3);
     static uint8_t expected[sizeof frame];
     gfx_t reference;
     gfx_init(&reference, expected, 400, 300);
@@ -244,8 +250,8 @@ static void test_text_lines(void)
     for (int family = GFX_FAMILY_DEPARTURE_MONO; family <= GFX_FAMILY_JERSEY; family++) {
         gfx_font_use(family);
         for (int sample = 0; sample < 2; sample++) {
-            memset(frame, 0, sizeof frame);
-            memset(expected, 0, sizeof expected);
+            gfx_clear(&g, false);
+            gfx_clear(&reference, false);
             int width = gfx_text_font_width(kit_font(KIT_TEXT), parts[sample][0]);
             CHECK(kit_text_lines(&g, 0, 0, KIT_TEXT, texts[sample], width, 3) == 3);
             for (int row = 0; row < 3; row++)
