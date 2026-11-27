@@ -275,39 +275,48 @@ static int32_t kv_get(const char *app_name, const char *key, void *value, int32_
     store_path(path, app_name, key);
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
-        return default_of(key, value, capacity);
+        return errno == ENOENT ? default_of(key, value, capacity) : HOST_ERR_FAILED;
     }
-    fseek(file, 0, SEEK_END);
-    long length = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    if (length > capacity) {
-        fclose(file);
-        return HOST_ERR_NO_SPACE;
+    int32_t result = HOST_ERR_FAILED;
+    if (fseek(file, 0, SEEK_END) == 0) {
+        long length = ftell(file);
+        if (length > capacity) {
+            result = HOST_ERR_NO_SPACE;
+        } else if (length >= 0 && fseek(file, 0, SEEK_SET) == 0) {
+            size_t read = fread(value, 1, (size_t)length, file);
+            if (read == (size_t)length && !ferror(file)) result = (int32_t)read;
+        }
     }
-    size_t read = fread(value, 1, (size_t)length, file);
-    fclose(file);
-    return (int32_t)read;
+    return fclose(file) == 0 ? result : HOST_ERR_FAILED;
 }
 
-static int32_t stored_bytes(const char *app_name, const char *except_path)
+static bool stored_bytes(const char *app_name, const char *except_path, int32_t *bytes)
 {
     char folder[PATH_BYTES];
     snprintf(folder, sizeof folder, "%s/store/%s", s_options.state, app_name);
     DIR *directory = opendir(folder);
+    if (directory == NULL) return false;
     int32_t total = 0;
-    struct dirent *entry;
-    while (directory != NULL && (entry = readdir(directory)) != NULL) {
+    bool complete = false;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            complete = errno == 0;
+            break;
+        }
         char path[PATH_BYTES];
         struct stat found;
         snprintf(path, sizeof path, "%s/%s", folder, entry->d_name);
-        if (entry->d_name[0] != '.' && strcmp(path, except_path) != 0 && stat(path, &found) == 0) {
-            total += taken_by((int32_t)found.st_size);
-        }
+        if (entry->d_name[0] == '.' || strcmp(path, except_path) == 0) continue;
+        if (stat(path, &found) != 0 || !S_ISREG(found.st_mode) ||
+            found.st_size < 0 || found.st_size > HOST_KV_VALUE_MAX) break;
+        total += taken_by((int32_t)found.st_size);
+        if (total > HOST_KV_TOTAL_MAX) break;
     }
-    if (directory != NULL) {
-        closedir(directory);
-    }
-    return total;
+    if (closedir(directory) != 0) complete = false;
+    if (complete) *bytes = total;
+    return complete;
 }
 
 /* `is_users`: written as the page writes a setting, which may set the server; the application may not. */
@@ -316,19 +325,20 @@ static int32_t kv_store(const char *app_name, const char *key, const void *value
     char path[PATH_BYTES], folder[PATH_BYTES];
     store_path(path, app_name, key);
     if (length == 0 && !is_users) {
-        remove(path);
-        return HOST_OK;
+        return remove(path) == 0 || errno == ENOENT ? HOST_OK : HOST_ERR_FAILED;
     }
     if (!is_users && s_manifest_json != NULL && app_manifest_is_server_setting(s_manifest_json, key)) {
         say('W', "sim", "%s: \"%s\" is the user's to set", app_name, key);
         return HOST_ERR_ARGUMENT;
     }
-    if (stored_bytes(app_name, path) + taken_by(length) > HOST_KV_TOTAL_MAX) {
+    snprintf(folder, sizeof folder, "%s/store/%s", s_options.state, app_name);
+    make_folders(folder);
+    int32_t used;
+    if (!stored_bytes(app_name, path, &used)) return HOST_ERR_FAILED;
+    if (used + taken_by(length) > HOST_KV_TOTAL_MAX) {
         say('W', "sim", "%s: \"%s\" is over what an application may keep", app_name, key);
         return HOST_ERR_NO_SPACE;
     }
-    snprintf(folder, sizeof folder, "%s/store/%s", s_options.state, app_name);
-    make_folders(folder);
     FILE *file = fopen(path, "wb");
     if (file == NULL) {
         return HOST_ERR_FAILED;
@@ -1293,14 +1303,16 @@ static void show_notices(void)
 static int32_t services_file_size(const char *app_name, const char *file)
 {
     long size = app_store_file_size(s_options.apps, app_name, file);
-    return size < 0 ? HOST_ERR_NOT_FOUND : (int32_t)size;
+    return size == APP_FILE_NOT_FOUND ? HOST_ERR_NOT_FOUND
+           : size < 0 ? HOST_ERR_FAILED : (int32_t)size;
 }
 
 static int32_t services_file_read(const char *app_name, const char *file, int32_t offset, void *bytes,
                                   int32_t capacity)
 {
     long read = app_store_read_file(s_options.apps, app_name, file, offset, bytes, (size_t)capacity);
-    return read < 0 ? HOST_ERR_NOT_FOUND : (int32_t)read;
+    return read == APP_FILE_NOT_FOUND ? HOST_ERR_NOT_FOUND
+           : read < 0 ? HOST_ERR_FAILED : (int32_t)read;
 }
 
 static int32_t services_file_write(const char *app_name, const char *file, int32_t offset,
@@ -1487,14 +1499,38 @@ typedef struct {
     uint32_t id;
 } seen_version_t;
 
-static void note_loaded_version(void *context)
+static bool note_loaded_version(void *context)
 {
     const seen_version_t *version = context;
-    FILE *file = fopen(version->path, "wb");
-    if (file != NULL) {
-        fwrite(&version->id, sizeof version->id, 1, file);
-        fclose(file);
+    char incoming[PATH_BYTES + sizeof ".new"];
+    snprintf(incoming, sizeof incoming, "%s.new", version->path);
+    FILE *file = fopen(incoming, "wb");
+    if (file == NULL) {
+        return false;
     }
+    bool written = fwrite(&version->id, sizeof version->id, 1, file) == 1;
+    bool closed = fclose(file) == 0;
+    if (!written || !closed || rename(incoming, version->path) != 0) {
+        remove(incoming);
+        return false;
+    }
+    return true;
+}
+
+static bool read_seen_version(const char *path, uint32_t *seen)
+{
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        if (errno != ENOENT) return false;
+        *seen = 0;
+        return true;
+    }
+    uint32_t stored;
+    bool read = fread(&stored, sizeof stored, 1, file) == 1 &&
+                fgetc(file) == EOF && !ferror(file);
+    if (fclose(file) != 0 || !read) return false;
+    *seen = stored;
+    return true;
 }
 
 static void tell_new_version(void)
@@ -1514,14 +1550,8 @@ static void tell_new_version(void)
         id = (id ^ (uint8_t)*at) * 16777619u;
     }
     snprintf(path, sizeof path, "%s/seen", s_options.state);
-    uint32_t seen = 0;
-    file = fopen(path, "rb");
-    if (file != NULL) {
-        if (fread(&seen, sizeof seen, 1, file) != 1) {
-            seen = 0;
-        }
-        fclose(file);
-    }
+    uint32_t seen;
+    if (!read_seen_version(path, &seen)) return;
     if (seen == id) {
         return;
     }

@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  */
+#include <stddef.h>
+
 #include "app_state.h"
 #include "manifest_limits.h"
 
@@ -11,10 +13,16 @@
 
 #define SETTING_TEXT_MAX 256 /* the longest value a setting may have, and its end */
 
-bool app_state_load(const char *key, void *state, int32_t size, int32_t version)
+int32_t app_state_load(const char *key, void *state, int32_t size, int32_t version)
 {
-    return kv_get(key, app_text_length(key), state, size) == size &&
-           *(const int32_t *)state == version;
+    if (state == NULL || size < (int32_t)sizeof(int32_t)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    int32_t length = kv_get(key, app_text_length(key), state, size);
+    if (length < 0 && length != HOST_ERR_NO_SPACE) {
+        return length;
+    }
+    return length == size && *(const int32_t *)state == version ? HOST_OK : HOST_ERR_NOT_FOUND;
 }
 
 bool app_state_save(const char *key, const void *state, int32_t size)

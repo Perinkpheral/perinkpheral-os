@@ -100,7 +100,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
     private fun hostObjects(into: File): Host {
         into.mkdirs()
         // The module's own C library and its arena in the module's data are the device's:
-        // this computer has a C library, and the stand-in host has the arena.
+        // this computer has a C library; the stand-in resets the declared arena between loads.
         val library = sdk.library.listFiles().orEmpty()
             .filter { it.isFile && it.name.endsWith(".c") && it.name !in DEVICE_ONLY }.sortedBy { it.path }
         fun compiled(source: File): File {

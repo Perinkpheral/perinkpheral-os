@@ -77,6 +77,10 @@ HOST_SYSTEM_IMPORT(sys_logo_height, int32_t sys_logo_height(int32_t scale));
  *                      range is 0..50; 255 is also accepted.
  * All reads copy without NUL; insufficient capacity and errors copy nothing.
  * Capacity 0 can read an empty value. Each set is checked as one change.
+ * Keys and set values must contain no NUL within the supplied length;
+ * an embedded NUL returns HOST_ERR_ARGUMENT, including a trailing NUL. The
+ * length excludes the C-string terminator. Empty set values remain valid
+ * where the setting permits them.
  *
  * Open keys (text limits are UTF-8 bytes, excluding NUL; numeric values
  * are decimal text; ranges are inclusive). Unless stated otherwise a

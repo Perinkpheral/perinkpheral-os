@@ -75,7 +75,7 @@ TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_m3_area test_web_memory
 TESTS   += test_standin_text
 TESTS   += test_standin_contract
-TESTS   += test_app_storage test_app_kv
+TESTS   += test_app_storage test_app_kv test_app_store_faults test_app_host_files
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
 TESTS   += test_app_update_policy
@@ -210,7 +210,7 @@ test_scenes: test_scenes.c tinytest.h $(UI)/kit.c $(MAIN)/header.c $(MAIN)/heade
 		$(MAIN)/header.c $(MAIN)/menu_order.c $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR_SRCS)
 
 STANDIN_SRCS := $(SDK)/check/standin.c $(filter-out $(SDK_LIB)/app_alloc.c $(SDK_LIB)/app_runtime.c,$(wildcard $(SDK_LIB)/*.c)) $(MAP)/map_geo.c $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/document_reader.c $(APPSYS)/json_document.c
-test_standin_text test_standin_contract: %: %.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
+test_standin_text test_standin_contract: %: %.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h) $(wildcard $(SDK_LIB)/*.h)
 	$(CC) $(CFLAGS) -D_DARWIN_C_SOURCE -Wno-attributes '-DHOST_IMPORT(name,...)=__VA_ARGS__' '-DAPP_EXPORT(name,...)=__VA_ARGS__' $(MANIFEST_FLAGS) -I$(SDK)/check -I$(MAP)/include -o $@ $< $(STANDIN_SRCS) -lm
 
 # The interpreter is upstream code: built once, without our warnings, and
@@ -235,6 +235,12 @@ c_bytes = od -An -v -tx1 $(1) | sed -e 's/\([0-9a-f][0-9a-f]\)/0x\1,/g'
 
 build/probe/app.wasm: apps/probe/probe.c apps/probe/manifest.json $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(wildcard $(SDK)/lib/*) $(TOOLS)
 	$(MKAPP) apps/probe --out build/probe
+
+build/system-probe/app.wasm: apps/system-probe/probe.c apps/system-probe/manifest.json $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(TOOLS)
+	$(MKAPP) apps/system-probe --out build/system-probe
+
+build/system_probe_wasm.h: build/system-probe/app.wasm
+	(echo "static const unsigned char system_probe_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@
 
 build/settings/app.wasm: $(SETTINGS_APP)/settings.c $(SETTINGS_APP)/manifest.json $(SETTINGS_APP)/cities.h $(wildcard $(SETTINGS_APP)/strings/*.json $(SDK)/host/*.h $(SDK_LIB)/*) $(SDK)/host_api.h $(TOOLS)
 	$(MKAPP) $(SETTINGS_APP) --out build/settings
@@ -300,7 +306,7 @@ build/frozen_probe_wasm.h: ../../../sdk/abi/3/probe/app.wasm
 	@mkdir -p build
 	(echo "static const unsigned char frozen_probe_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@
 
-test_app: test_app.c tinytest.h build/document_wasm.h build/budget_wasm.h build/memory_wasm.h build/frozen_probe_wasm.h build/host_imports.inc build/probe_wasm.h build/every_call_wasm.h build/wrongret_wasm.h build/wrongarg_wasm.h $(APP_SRCS) $(APPSYS)/app_internal.h $(APPSYS)/include/app.h $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(WASM3_OBJS)
+test_app: build/system_probe_wasm.h test_app.c tinytest.h build/document_wasm.h build/budget_wasm.h build/memory_wasm.h build/frozen_probe_wasm.h build/host_imports.inc build/probe_wasm.h build/every_call_wasm.h build/wrongret_wasm.h build/wrongarg_wasm.h $(APP_SRCS) $(APPSYS)/app_internal.h $(APPSYS)/include/app.h $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(WASM3_OBJS)
 	$(CC) $(CFLAGS) -Ibuild -I$(APPSYS)/include -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) -I$(SDK) -I$(SDK_LIB) \
 		-Dd_m3MaxLinearMemoryPages=1 $(QR_INCS) -o $@ test_app.c $(APP_SRCS) $(SDK_LIB)/json_pick.c $(UI)/list.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR)/qrcodegen/qrcodegen.c $(WASM3_OBJS)
 
@@ -358,6 +364,12 @@ test_delivery: test_delivery.c tinytest.h $(MAIN)/host_apps.c build/document/app
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -Inet_stubs -Ipoller_stubs -Iinstall_stubs -Imemory_stubs -Ipersistence_stubs -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -Ibuild -I$(MAIN) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -I$(UI)/include -I$(GFX)/include -I$(GFX)/fonts -I$(MAP)/include -I$(WASM3) \
 		-Dd_m3MaxLinearMemoryPages=1 -Dd_m3ApplicationArea -I$(COMP)/wasm3 $(QR_INCS) -o $@ test_delivery.c $(MAIN)/host_apps.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
 		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) $(HOST_TEST_LDFLAGS) -lm
+
+test_app_host_files: test_app_host_files.c tinytest.h $(MAIN)/app_host.c $(APPSTORE)/include/app_store.h
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -ffunction-sections -fdata-sections -D_DARWIN_C_SOURCE -Ipersistence_stubs -Iinstall_stubs -Imemory_stubs -Iroute_stubs -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_app_host_files.c $(HOST_TEST_LDFLAGS)
+
+test_app_store_faults: test_app_store_faults.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
+	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store_faults.c $(MANIFEST_SRCS) -lm
 
 test_app_store: test_app_store.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store.c \

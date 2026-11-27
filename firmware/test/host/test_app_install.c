@@ -13,7 +13,7 @@ static char test_root[sizeof "/tmp/perink-install-XXXXXX"];
 static app_manifest_t present;
 static bool has_present, mutex_taken, marker, fail_commit, is_host;
 static bool change_id, change_source, turn_off, mismatch, interrupt_body, reject_body;
-static bool last_retryable, id_conflict;
+static bool last_retryable, id_conflict, fail_census;
 static int network_error, downloads, opens, commits, radio_holds, approved_authorities;
 static appconf_t config;
 static char source_text[CATALOG_SOURCES_TEXT_MAX];
@@ -60,13 +60,14 @@ long app_store_file_size(const char *root, const char *name, const char *file) {
     (void)root; (void)name; char path[APP_STORE_PATH_MAX]; file_path(path, file); struct stat found;
     return stat(path, &found) == 0 ? (long)found.st_size : -1;
 }
-long app_store_files_bytes(const char *root, const char *name) {
+bool app_store_files_bytes(const char *root, const char *name, long *bytes) {
     char folder[APP_STORE_PATH_MAX]; snprintf(folder, sizeof folder, "%s/test", test_root);
     DIR *directory = opendir(folder); struct dirent *entry; long taken = 0;
     while (directory != NULL && (entry = readdir(directory)) != NULL)
         if (is_data_file(entry->d_name)) taken += bytes_in_blocks((double)app_store_file_size(root, name, entry->d_name));
     if (directory != NULL) closedir(directory);
-    return taken;
+    *bytes = taken;
+    return !fail_census;
 }
 void power_hold_radio(void) { radio_holds++; }
 void power_release_radio(void) { radio_holds--; }
@@ -214,7 +215,7 @@ int main(void) {
     CHECK_STR(run(false), "Invalid catalog entry."); CHECK(downloads == 0 && commits == 0); data_name = "root.pem"; cleanup();
     /* An update keeps the files it does not replace, and a writer's quota counts them. */
     static const char WRITER[] = "{\"name\":\"test\",\"title\":\"Test\",\"version\":\"1.1.0\",\"abi\":3,\"writes_files\":true}";
-    static char kept[HOST_FILES_WRITER_MAX - 2 * MANIFEST_FILE_BLOCK_BYTES + 2]; /* a byte past six blocks */
+    static char kept[HOST_FILES_WRITER_MAX - MANIFEST_FILE_BLOCK_BYTES + 2]; /* a byte past seven blocks */
     memset(kept, 'k', sizeof kept - 1);
     reset(OLD); new_manifest = WRITER; new_certificate = "data"; data_name = "new.dat"; put_file("old.dat", kept);
     CHECK_STR(run(false), "Not enough storage."); CHECK(commits == 0); cleanup();
@@ -224,9 +225,17 @@ int main(void) {
     reset(OLD); new_manifest = WRITER; new_certificate = "data"; data_name = "new.dat"; put_file("old.dat", kept);
     CHECK(run(false) == NULL); CHECK(commits == 1); cleanup();
     /* What the application writes while the package is downloaded counts at the commit. */
-    kept[sizeof kept - 2] = 'k'; /* six blocks and a byte again */
+    kept[sizeof kept - 2] = 'k'; /* seven blocks and a byte again */
     reset(OLD); new_manifest = WRITER; new_certificate = "data"; written_meanwhile = kept;
     CHECK_STR(run(false), "Not enough storage."); CHECK(commits == 0); written_meanwhile = NULL; data_name = "root.pem"; cleanup();
+    reset(OLD); new_manifest = WRITER; fail_census = true;
+    CHECK_STR(run(false), "Storage error."); CHECK(commits == 0); fail_census = false; cleanup();
+    /* A full data reservation is valid beside the independently charged manifest. */
+    reset(NULL); new_manifest = WRITER; new_certificate = "data"; data_name = "new.dat";
+    char full[HOST_FILES_WRITER_MAX - MANIFEST_FILE_BLOCK_BYTES + 1];
+    memset(full, 'f', sizeof full - 1); full[sizeof full - 1] = '\0';
+    put_file("kept.dat", full);
+    CHECK(run(false) == NULL); CHECK(commits == 1); cleanup(); data_name = "root.pem";
     CHECK(app_install_network_is_retryable(503)); CHECK(app_install_network_is_retryable(HOST_FAILED_TIMEOUT)); CHECK(!app_install_network_is_retryable(404)); CHECK(!app_install_network_is_retryable(HOST_FAILED_NOT_TRUSTED));
     REPORT();
 }

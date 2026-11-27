@@ -334,9 +334,10 @@ static void test_off_the_screen(void)
     CHECK(app_scene_app(probe) == NULL && state.in_background == NULL);
 }
 
-static void count_delivery(void *context)
+static bool count_delivery(void *context)
 {
     (*(int *)context)++;
+    return true;
 }
 
 static void test_foreground_stream_interrupted_by_another_owner(void)
@@ -841,10 +842,13 @@ static void test_scene_state_lifetime(void)
     copy_file("../../../sdk/abi/3/probe/app.wasm", path);
 }
 
-static void count_notification(void *context)
+static bool refuse_consumption;
+static bool count_notification(void *context)
 {
+    if (refuse_consumption) return false;
     int *count = context;
     (*count)++;
+    return true;
 }
 
 static void test_notification_consumption(void)
@@ -860,6 +864,17 @@ static void test_notification_consumption(void)
     app_deliver(&state, &wm, probe, &notification, 0);
     CHECK(consumed == 0);
     CHECK(rename(unavailable, module) == 0);
+    refuse_consumption = true;
+    notification.kind = APP_DELIVERY_UPDATED; /* this callback traps if incorrectly called */
+    app_deliver(&state, &wm, probe, &notification, 0);
+    CHECK(consumed == 0 && app_scene_app(probe) == NULL);
+    CHECK(wm.current == &menu.scene && !wm.suspended);
+    start_on(probe);
+    app_deliver(&state, &wm, probe, &notification, 0);
+    CHECK(consumed == 0 && app_scene_app(probe) != NULL && !app_has_stopped(app_scene_app(probe)));
+    start_on(&menu.scene);
+    refuse_consumption = false;
+    notification.kind = APP_DELIVERY_INSTALLED;
     app_deliver(&state, &wm, probe, &notification, 0);
     CHECK(consumed == 1);
     /* A background trap must restore the foreground instead of opening an error scene. */

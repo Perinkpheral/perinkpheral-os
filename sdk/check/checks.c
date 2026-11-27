@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "standin.h"
+#include "manifest_limits.h"
 
 /* Made by the tools: the application's handlers into standin_handlers. */
 extern void standin_subject_handlers(void);
@@ -214,6 +215,8 @@ typedef struct {
     int64_t        alarms_late_ms; /* so much after their time */
     clock_change_t clock;
     int32_t        response_refusal; /* a HOST_ERR_* applied during the answer callbacks */
+    int32_t        write_failure_mode; /* STANDIN_WRITE_* */
+    int32_t        load_read_refusal; /* failed restore, storage available again after load */
     int32_t        refuse_after_press; /* 1-based: a refusal of writes begins before this press */
     bool           retry_events;
     int32_t        retry_round;   /* 1-based: allow a foreground retry timer before answering */
@@ -245,7 +248,8 @@ enum {
     MARK_ONESHOT_COVERAGE,
     MARK_RESPONSE_REFUSALS,
     MARK_ALARM_PERIOD, /* one mark per alarm ID, zero for a schedule that does not repeat */
-    MARK_COUNT = MARK_ALARM_PERIOD + HOST_ALARM_COUNT
+    MARK_POLL_INTERVAL = MARK_ALARM_PERIOD + HOST_ALARM_COUNT,
+    MARK_COUNT = MARK_POLL_INTERVAL + MANIFEST_POLLS_MAX
 };
 
 _Static_assert(MARK_COUNT <= STANDIN_MARKS, "too many scene marks");
@@ -445,7 +449,7 @@ typedef struct {
 static void give(const delivery_t *delivery)
 {
     if (delivery->is_updated) {
-        standin_updated_as_loaded();
+        /* standin_load() consumed the pending update before this delivery. */
     } else if (delivery->intent != 0) {
         standin_intent(delivery->intent);
     } else if (delivery->alarm >= 0) {
@@ -589,13 +593,17 @@ static void scene_run(void *context)
     memset(host->marks, 0, sizeof host->marks);
     host->note_count = 0;
 
-    if (!is_away) {
-        standin_load();
-    }
     if (scene->is_updated) {
         host->marks[MARK_ALARMS_BEFORE] = standin_alarms();
-        /* host_apps.c: the old version's alarms are removed before the new one is loaded. */
-        memset(host->alarms, 0, sizeof host->alarms);
+        standin_prepare_update();
+    }
+    host->write_failure_mode = scene->write_failure_mode;
+    if (!is_away) {
+        int32_t previous = host->refuse_reads;
+        host->refuse_reads = scene->load_read_refusal;
+        standin_load();
+        host->refuse_reads = previous;
+    } else if (scene->is_updated) {
         hand(&(delivery_t){ .alarm = -1, .is_updated = true });
     }
     if (scene->intent != 0) {
@@ -679,6 +687,9 @@ static void scene_run(void *context)
         bool warned_before_recovery = visible_failure();
         host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
         host->refuse_alarms = HOST_OK;
+        host->external_repeating_alarms = 0;
+        host->refuse_requests = HOST_OK;
+        host->refuse_intervals = HOST_OK;
         host->refuse_notices = HOST_OK;
         host->refuse_receipts = false;
         host->refuse_writes = HOST_OK;
@@ -719,6 +730,9 @@ static void scene_run(void *context)
         } else if (alarm->kind != STANDIN_ALARM_NONE) {
             host->marks[MARK_ONESHOT_COVERAGE] |= 1u << id;
         }
+    }
+    for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+        host->marks[MARK_POLL_INTERVAL + poll] = (uint64_t)host->poll_interval[poll];
     }
     if (!scene->recover_alarms && !scene->retry_events) {
         host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
@@ -1102,13 +1116,13 @@ static void check_button_refusal(void);
 
 static void check_elapsed_answers(void);
 
-static void check_response_refusal(int32_t refusal)
+static void check_response_refusal(int32_t refusal, int32_t mode)
 {
     if (!has_polls_or_requests || excepted("store.response")) {
         return;
     }
     standin_reset();
-    scene_t answered = { .has_data = true, .response_refusal = refusal };
+    scene_t answered = { .has_data = true, .response_refusal = refusal, .write_failure_mode = mode };
     if (!play(&answered) || mark(MARK_LEFT) || mark(MARK_RESPONSE_REFUSALS) == 0) {
         return;
     }
@@ -1119,6 +1133,40 @@ static void check_response_refusal(int32_t refusal)
                "response-save: writes answered %d: after unload the picture silently reverts "
                "(no visible failure; declare failure_text for custom copy)", refusal);
     }
+}
+
+static uint64_t storage_fingerprint(void)
+{
+    const standin_t *host = standin();
+    uint64_t hash = 14695981039346656037ULL;
+    for (int32_t index = 0; index < STANDIN_STORE_VALUES; index++) {
+        const standin_value_t *value = &host->values[index];
+        if (!value->is_stored) continue;
+        for (size_t at = 0; at < strlen(value->key); at++) hash = (hash ^ (uint8_t)value->key[at]) * 1099511628211ULL;
+        hash = (hash ^ (uint32_t)value->length) * 1099511628211ULL;
+        for (int32_t at = 0; at < value->length; at++) hash = (hash ^ value->value[at]) * 1099511628211ULL;
+    }
+    for (int32_t index = 0; index < STANDIN_FILES; index++) {
+        const standin_stored_file_t *file = &host->files[index];
+        if (!file->is_stored) continue;
+        for (size_t at = 0; at < strlen(file->name); at++) hash = (hash ^ (uint8_t)file->name[at]) * 1099511628211ULL;
+        hash = (hash ^ (uint32_t)file->size) * 1099511628211ULL;
+        for (int32_t at = 0; at < file->size; at++) hash = (hash ^ file->bytes[at]) * 1099511628211ULL;
+    }
+    return hash;
+}
+
+static void check_failed_restore(void)
+{
+    standin_reset();
+    scene_t seeded = { .has_data = has_polls_or_requests, .presses = "OO" };
+    if (!play(&seeded)) return;
+    standin_forget_session();
+    uint64_t stored = storage_fingerprint();
+    scene_t failed = { .load_read_refusal = HOST_ERR_FAILED };
+    if (!play(&failed) || standin()->refused_reads == 0) return;
+    expect(STORE, storage_fingerprint() == stored,
+           "restore-read: unreadable durable state was replaced after a failed restore");
 }
 
 static void check_store(void)
@@ -1136,8 +1184,11 @@ static void check_store(void)
     check_refused(HOST_ERR_NO_SPACE);
     check_refused(HOST_ERR_FAILED);
     check_button_refusal();
-    check_response_refusal(HOST_ERR_NO_SPACE);
-    check_response_refusal(HOST_ERR_FAILED);
+    check_response_refusal(HOST_ERR_NO_SPACE, STANDIN_WRITE_REFUSE);
+    check_response_refusal(HOST_ERR_FAILED, STANDIN_WRITE_REFUSE);
+    check_response_refusal(HOST_ERR_FAILED, STANDIN_WRITE_COMMIT);
+    check_response_refusal(HOST_ERR_FAILED, STANDIN_WRITE_PARTIAL);
+    check_failed_restore();
 }
 
 /* ---- Timers and alarms ---- */
@@ -1285,12 +1336,30 @@ static void check_timers(void)
 static void check_responses(void);
 static void check_backoff(void);
 
+static void check_request_admission(void)
+{
+    const int32_t errors[] = { HOST_ERR_NO_SPACE, HOST_ERR_FAILED };
+    for (size_t index = 0; index < sizeof errors / sizeof errors[0]; index++) {
+        standin_reset();
+        standin()->refuse_requests = errors[index];
+        scene_t refused = { .has_data = has_polls_or_requests, .retry_events = true };
+        if (!play(&refused) || standin()->refused_requests == 0 || mark(MARK_LEFT)) continue;
+        bool warned = mark(MARK_VISIBLE_FAILURE) != 0;
+        int32_t sent = standin()->sends;
+        /* A later foreground visit is another permitted retry opportunity. */
+        if (!play(&ON_SCREEN)) continue;
+        expect(NETWORK, warned || standin()->sends > sent || standin()->request_count > 0,
+               "request-admission: http_send answered %d and no request was retried after admission recovered", errors[index]);
+    }
+}
+
 static void check_network(void)
 {
     checking = NETWORK;
     bool deferred_recovery = excepted("network.recovery");
     check_responses();
     check_backoff();
+    check_request_admission();
     standin_reset();
     scene_t whole = { .rounds = { { ROUND_WHOLE, 0, 0 } } };
     if (!play(&whole)) {
@@ -1550,11 +1619,13 @@ static void check_button_refusal(void)
         if (*way == '\0') {
             continue;
         }
-        for (int refusal = 0; refusal < 2; refusal++) {
+        for (int refusal = 0; refusal < 4; refusal++) {
+            if (path >= WAY_COUNT && refusal >= 2) continue;
             standin_reset();
             scene_t used = { .has_data = has_polls_or_requests, .presses = way,
                             .refuse_after_press = (int32_t)strlen(way),
-                            .refusal = refusal == 0 ? HOST_ERR_NO_SPACE : HOST_ERR_FAILED };
+                            .refusal = refusal == 0 ? HOST_ERR_NO_SPACE : HOST_ERR_FAILED,
+                            .write_failure_mode = refusal < 2 ? STANDIN_WRITE_REFUSE : refusal - 1 };
             if (!play(&used) || mark(MARK_LEFT) || standin()->refused_writes == 0) {
                 continue;
             }
@@ -1575,6 +1646,7 @@ static void check_alarm_refusal(void)
     if (excepted("timers.refusal")) {
         return;
     }
+    for (int kind = 0; kind < 3; kind++) {
     for (int way = 0; way < WAY_COUNT; way++) {
         standin_reset();
         scene_t used = { .has_data = has_polls_or_requests, .presses = WAYS[way], .recover_alarms = true };
@@ -1586,19 +1658,29 @@ static void check_alarm_refusal(void)
         for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
             periods[id] = mark(MARK_ALARM_PERIOD + id);
         }
+        uint64_t intervals[MANIFEST_POLLS_MAX];
+        for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+            intervals[poll] = mark(MARK_POLL_INTERVAL + poll);
+        }
         uint64_t diagnostics = mark(MARK_DIAGNOSTICS);
         standin_reset();
-        standin()->refuse_alarms = HOST_ERR_NO_SPACE;
-        if (!play(&used) || standin()->refused_alarms == 0 || mark(MARK_LEFT)) {
+        standin()->refuse_alarms = kind == 0 ? HOST_ERR_NO_SPACE : HOST_OK;
+        standin()->external_repeating_alarms = kind == 1 ? HOST_ALARM_REPEATING_MAX : 0;
+        standin()->refuse_intervals = kind == 2 ? HOST_ERR_FAILED : HOST_OK;
+        if (!play(&used) || (standin()->refused_alarms == 0 && standin()->refused_intervals == 0) || mark(MARK_LEFT)) {
             continue;
         }
         bool recovered = (mark(MARK_ONESHOT_COVERAGE) & one_shots) == one_shots;
         for (int32_t id = 0; id < HOST_ALARM_COUNT; id++) {
             recovered = recovered && (periods[id] == 0 || mark(MARK_ALARM_PERIOD + id) == periods[id]);
         }
+        for (int32_t poll = 0; poll < standin_subject.poll_count && kind == 2; poll++) {
+            recovered = recovered && mark(MARK_POLL_INTERVAL + poll) == intervals[poll];
+        }
         expect(TIMERS, mark(MARK_VISIBLE_FAILURE) || mark(MARK_DIAGNOSTICS) != diagnostics || recovered,
                "alarm-refusal: buttons %s, alarm_set* answered HOST_ERR_NO_SPACE: schedule lost after 60 seconds "
                "of timer retries, with no failure diagnostic", WAYS[way]);
+    }
     }
 }
 

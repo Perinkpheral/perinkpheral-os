@@ -220,10 +220,10 @@ void host_ring_alarm(uint32_t app_id, int alarm_number)
     }
 }
 
-static void note_loaded_version(void *context)
+static bool note_loaded_version(void *context)
 {
     const app_manifest_t *app = context;
-    app_kv_set_seen_id(app->name, app->id);
+    return app != NULL && app_kv_set_seen_id(app->name, app->id);
 }
 
 /* An application that has not run here before, or ran as another version,
@@ -239,8 +239,8 @@ static void tell_new_versions(void)
     } news[LAUNCHER_INSTALLED_MAX];
     int told = 0;
     for (int i = 0; i < count && told < LAUNCHER_INSTALLED_MAX; i++) {
-        uint32_t seen = app_kv_seen_id(installed[i].name);
-        if (seen != installed[i].id) {
+        uint32_t seen;
+        if (app_kv_seen_id(installed[i].name, &seen) && seen != installed[i].id) {
             strcpy(news[told].name, installed[i].name);
             news[told].id = installed[i].id;
             news[told++].is_update = seen != 0;

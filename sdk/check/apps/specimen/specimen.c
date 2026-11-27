@@ -27,6 +27,7 @@
 static const char NOTE_URL[] = "https://example.test/note";
 
 static bool schedule_failed;
+static bool button_storage_failed;
 static int32_t page;                /* the session */
 static int32_t count;               /* the store, "count" */
 static char row_name[HOST_VALUE_MAX + 1];
@@ -168,7 +169,9 @@ void app_on_button(int32_t event)
         page = 1;
     } else {
         count++;
-        if (kv_set("count", 5, &count, sizeof count) != HOST_OK) {
+        int32_t saved = kv_set("count", 5, &count, sizeof count);
+        button_storage_failed = saved == HOST_ERR_FAILED;
+        if (saved != HOST_OK) {
             count--;
         }
     }
@@ -235,7 +238,7 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
 void app_on_draw(void)
 {
     int32_t line_height = gfx_font_height(HOST_FONT_TEXT);
-    if (value_is_unsaved || note_is_unsaved || row_is_unsaved) {
+    if (button_storage_failed || value_is_unsaved || note_is_unsaved || row_is_unsaved) {
         gfx_draw_text(MARGIN, 200, HOST_FONT_SMALL, "Storage error.", 14);
     }
     if (schedule_failed) {

@@ -173,6 +173,12 @@ extern standin_handlers_t standin_handlers;
 #define STANDIN_URL_BYTES    512
 #define STANDIN_DRAW_TEXT_BYTES 8192
 
+/* Injected writes either fail before mutation, commit then fail, or copy a
+ * prefix of a file write then fail. KV always retains a complete old/new value. */
+#define STANDIN_WRITE_REFUSE  0
+#define STANDIN_WRITE_COMMIT  1
+#define STANDIN_WRITE_PARTIAL 2
+
 #define STANDIN_ALARM_NONE  0
 #define STANDIN_ALARM_IN    1 /* alarm_set: by the uptime */
 #define STANDIN_ALARM_AT    2 /* alarm_set_at: by the clock */
@@ -222,6 +228,7 @@ typedef struct {
     standin_stored_file_t files[STANDIN_FILES];
     int32_t refuse_notices, refused_notices, notice_attempts;
     int32_t refuse_alarms, refused_alarms, alarm_attempts;
+    int32_t external_repeating_alarms; /* 0..HOST_ALARM_REPEATING_MAX slots owned by other applications */
     bool refuse_receipts; /* refuse writes only after an accepted notification */
     int32_t active_zone; /* 0: configured zone; otherwise subject.zones[index - 1] */
     int32_t mutation_deliveries;
@@ -232,6 +239,10 @@ typedef struct {
     int32_t early_requests;
     char draw_text[STANDIN_DRAW_TEXT_BYTES]; /* visible text, in drawing order, separated by newlines */
     bool visible_failure; /* ui_draw_reason() drew an error */
+    int32_t refuse_reads, refused_reads; /* HOST_ERR_FAILED: KV/file census/size/read failure */
+    int32_t failed_read_bytes; /* file_read may copy this prefix before failing */
+    int32_t refuse_intervals, refused_intervals; /* failed poll-interval persistence, no change */
+    int32_t write_failure_mode; /* STANDIN_WRITE_*; controls mutation before refuse_writes */
     int32_t refuse_writes;   /* a HOST_ERR_*: every write of the store and the files answers it */
     int32_t store_writes;    /* kv_set calls the store took */
     int32_t store_changes;   /* those that changed what it holds: the device's store writes the flash
@@ -249,7 +260,8 @@ typedef struct {
     bool    session_inverted; /* the screen's inversion, kept with the session */
 
     /* Where the instance is. */
-    bool is_new; /* installed and never loaded: its first load is told app_on_installed() */
+    bool is_new, is_update_pending; /* consumed before the corresponding callback */
+    int32_t refuse_lifecycle_reads, refuse_lifecycle_writes; /* leave notification pending */
     bool is_loaded, is_loading, is_on_screen, is_session_writable, is_drawing, is_delivering;
     const char *handler; /* the one running, for what is said of a fault */
 
@@ -274,6 +286,7 @@ typedef struct {
     standin_request_t requests[HOST_HTTP_PENDING_MAX];
     int32_t request_count;
     int32_t refuse_requests; /* a HOST_ERR_*: http_send answers it */
+    int32_t refused_requests; /* injected admission failures */
     char    refused_request[STANDIN_NOTE_BYTES]; /* the first request the device refuses for what it asks */
     int32_t handler_requests, handler_request_bytes; /* queued since the handler began */
     int32_t sends;
@@ -313,7 +326,9 @@ int32_t standin_refused_sessions(void);
 bool standin_session_failure_reported(void);
 void standin_forget_session(void);         /* the application left the stack */
 
-/* A value as a setting is saved; NULL forgets it. */
+/* Raw fixture injection: no validation of setting type, writable ownership,
+ * printable text, destination changes or secret clearing. NULL forgets it;
+ * empty text stores an empty value and overrides a manifest default. */
 void standin_set(const char *key, const char *text);
 /* What is stored under the key, or NULL; a default is not stored. */
 const uint8_t *standin_value(const char *key, int32_t *length);
@@ -364,8 +379,10 @@ void standin_timer(int32_t id);          /* app_on_timer(), the timer no longer 
 void standin_alarm(int32_t id);
 void standin_intent(int32_t intent);     /* when the manifest asks for it */
 void standin_settings(void);
-void standin_updated(void);              /* another package: the alarms of the old one are gone, app_on_updated() */
-void standin_updated_as_loaded(void);    /* app_on_updated() of an instance loaded after they went */
+/* Clear the old package's requests, alarms, retained status and scene/session
+ * before loading its replacement. KV/files and persistent poll overrides stay.
+ * The next successful load consumes the update marker before app_on_updated(). */
+void standin_prepare_update(void);
 uint64_t standin_draw(void);             /* app_on_draw(): what the frame was made of */
 uint64_t standin_screen(uint64_t frame); /* the frame with the header and the inversion around it */
 

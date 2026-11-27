@@ -101,8 +101,10 @@ bool app_store_drop_incoming(const char *root, const char *name);
  * unfinished. */
 void app_store_recover(const char *root);
 
-/* What the application's data files take, as they lie: whole blocks. */
-long app_store_files_bytes(const char *root, const char *name);
+/* What the application's data files take, excluding the module and manifest:
+ * whole blocks, including translations and certificates. False on any census
+ * failure; *bytes is then unchanged. */
+bool app_store_files_bytes(const char *root, const char *name, long *bytes);
 
 typedef enum {
     APP_WRITE_OK,
@@ -122,11 +124,17 @@ app_write_result_t app_store_write_file(const char *root, const char *name, cons
  * when the name is not an application's or something could not go. */
 bool app_store_remove(const char *root, const char *name);
 
-/* How long a file of an application is; negative when there is none. */
+#define APP_FILE_NOT_FOUND (-1L)
+#define APP_FILE_FAILED    (-2L)
+
+/* How long a regular file is; APP_FILE_NOT_FOUND only for absence,
+ * APP_FILE_FAILED for an invalid path or a storage failure. */
 long app_store_file_size(const char *root, const char *name, const char *file);
 
 /* Up to `capacity` bytes of it from `offset` on; fewer at its end, none
- * past it, negative when it cannot be read. */
+ * past it. APP_FILE_NOT_FOUND only for absence; APP_FILE_FAILED for seek,
+ * read (including after a partial copy) or close failures. On failure the
+ * destination may have changed. */
 long app_store_read_file(const char *root, const char *name, const char *file, long offset,
                          void *bytes, size_t capacity);
 

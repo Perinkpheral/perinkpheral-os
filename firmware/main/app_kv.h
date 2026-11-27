@@ -48,9 +48,9 @@ bool app_kv_set_poll_pace(const char *app_name, int poll, uint32_t every_s);
 
 /* The id of the version of an application that last ran here, for telling
  * an installation and an update apart; 0: none - it is new, or was
- * removed. */
-uint32_t app_kv_seen_id(const char *app_name);
-void app_kv_set_seen_id(const char *app_name, uint32_t id);
+ * removed. Reads leave *id unchanged on failure; writes report commit failure. */
+bool app_kv_seen_id(const char *app_name, uint32_t *id);
+bool app_kv_set_seen_id(const char *app_name, uint32_t id);
 
 /* Removed: the host keeps nothing for it - its paces go, and installed
  * again it is new again, whatever its store kept. */

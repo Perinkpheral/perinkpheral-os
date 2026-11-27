@@ -158,7 +158,7 @@ static void test_timers_and_alarms(void)
     standin_alarm(2);
     assert(standin_alarm_left(0) == 60 && standin_alarm_left(2) == 0);
     /* A restart clears them all; an update too. */
-    standin_updated();
+    standin_prepare_update();
     assert(standin_alarms() == 0);
 }
 

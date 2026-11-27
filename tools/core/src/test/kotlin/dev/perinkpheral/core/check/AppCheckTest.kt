@@ -49,6 +49,19 @@ object AppCheckTest {
             "    if (row_length <= 0 || is_same(row, \"null\")) {\n        row[0] = '-';\n        row[1] = '\\0';\n    }")
 
     private val BREAKS = listOf(
+        Break("sessions", "native allocations retain the declared arena boundary",
+            listOf("#include \"app_text.h\"" to
+                "#include \"app_alloc.h\"\nAPP_ALLOC_ARENA(64);\n#include \"app_text.h\"",
+                "void app_on_focus(void)\n{" to
+                    "void app_on_focus(void)\n{\n    volatile uint8_t *edge = app_alloc(64);\n    edge[64] = 1;"),
+            "AddressSanitizer"),
+        Break("store", "a failed restore must not be replaced by default state",
+            listOf("static int32_t count;" to "static bool bad_restore;\nstatic int32_t count;",
+                "    kv_get(\"count\", 5, &count, sizeof count);" to
+                    "    bad_restore = kv_get(\"count\", 5, &count, sizeof count) == HOST_ERR_FAILED;",
+                "void app_on_focus(void)\n{" to
+                    "void app_on_focus(void)\n{\n    if (bad_restore) kv_set(\"count\", 5, &count, sizeof count);"),
+            "restore-read:"),
         Break("network", "a raw application with a timer that never retries an unsuccessful read",
             listOf("    if (id == ASK_ALARM) {\n        ask_note();\n    }" to ""),
             "after the whole answer it shows another picture",

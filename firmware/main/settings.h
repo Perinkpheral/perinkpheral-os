@@ -26,8 +26,8 @@ typedef struct {
     uint32_t pace[SETTINGS_APP_POLLS];   /* seconds a poll asked for; 0: the manifest's */
 } settings_app_record_t;
 
-/* Zero when nothing is kept. */
-void settings_load_app_record(const char *app_name, settings_app_record_t *record);
+/* Zero when nothing is kept; false on a read failure or malformed record. */
+bool settings_load_app_record(const char *app_name, settings_app_record_t *record);
 /* False if reading or writing the record fails; an unchanged record is kept. */
 bool settings_save_app_record(const char *app_name, const settings_app_record_t *record);
 /* Removed: nothing of it stays. */

@@ -25,8 +25,8 @@
 #include <stdint.h>
 
 /* Declares the arena of `bytes` bytes, rounded up to eight. Once, at file scope. */
-#define APP_ALLOC_ARENA(bytes)                                           \
-    _Alignas(8) unsigned char app_alloc_arena[((bytes) + 7) & ~7];       \
+#define APP_ALLOC_ARENA(bytes)                                              \
+    _Alignas(8) unsigned char app_alloc_arena[((bytes) + 7) & ~7] = {0};      \
     const int32_t             app_alloc_arena_bytes = ((bytes) + 7) & ~7
 
 /* Returns `bytes` of memory, aligned to eight bytes, or NULL if the arena

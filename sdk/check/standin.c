@@ -470,6 +470,10 @@ int32_t kv_get(const char *key, int32_t key_length, void *bytes, int32_t capacit
     if (!is_key(key, key_length) || bytes == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
     }
+    if (world->refuse_reads != HOST_OK) {
+        world->refused_reads++;
+        return world->refuse_reads;
+    }
     const uint8_t *found = NULL;
     int32_t length = 0;
     standin_value_t *value = value_of(key, key_length);
@@ -494,7 +498,7 @@ static int32_t refused_write(int32_t result, const char *what, const char *name,
 {
     world->refused_writes++;
     /* Only what the limits refuse is the application's doing: a test's refusal is the test's. */
-    if (world->refuse_writes == HOST_OK) {
+    if (world->refuse_writes == HOST_OK && world->refuse_reads == HOST_OK) {
         say(world->refused_what, "%s(\"%.*s\", %d bytes) in %s answered %d", what, name_length, name, length,
             running(), result);
     }
@@ -511,7 +515,10 @@ int32_t kv_set(const char *key, int32_t key_length, const void *bytes, int32_t l
         return refused_write(HOST_ERR_ARGUMENT, "kv_set", is_shown ? key : "", is_shown ? key_length : 0, length);
     }
     host->handler_writes++;
-    if (host->refuse_writes != HOST_OK) {
+    if (host->refuse_reads != HOST_OK) {
+        return refused_write(HOST_ERR_FAILED, "kv_set", key, key_length, length);
+    }
+    if (host->refuse_writes != HOST_OK && host->write_failure_mode == STANDIN_WRITE_REFUSE) {
         return refused_write(host->refuse_writes, "kv_set", key, key_length, length);
     }
     /* The device's store (NVS) compares before it writes: the value it already holds, or the
@@ -525,7 +532,8 @@ int32_t kv_set(const char *key, int32_t key_length, const void *bytes, int32_t l
     }
     host->store_writes++;
     host->store_changes += is_change;
-    return HOST_OK;
+    return host->refuse_writes != HOST_OK
+               ? refused_write(host->refuse_writes, "kv_set", key, key_length, length) : HOST_OK;
 }
 
 /* ---- Files ---- */
@@ -602,6 +610,10 @@ int32_t file_size(const char *name, int32_t name_length)
     if (!is_file_name(name, name_length)) {
         return HOST_ERR_ARGUMENT;
     }
+    if (world->refuse_reads != HOST_OK) {
+        world->refused_reads++;
+        return world->refuse_reads;
+    }
     standin_stored_file_t *file = file_of(name, name_length);
     return file != NULL ? file->size : HOST_ERR_NOT_FOUND;
 }
@@ -613,6 +625,16 @@ int32_t file_read(const char *name, int32_t name_length, int32_t offset, void *b
         return HOST_ERR_ARGUMENT;
     }
     standin_stored_file_t *file = file_of(name, name_length);
+    if (world->refuse_reads != HOST_OK) {
+        world->refused_reads++;
+        int32_t prefix = world->failed_read_bytes;
+        if (file != NULL && offset < file->size && prefix > 0) {
+            if (prefix > capacity) prefix = capacity;
+            if (prefix > file->size - offset) prefix = file->size - offset;
+            copy(bytes, file->bytes + offset, (size_t)prefix);
+        }
+        return world->refuse_reads;
+    }
     if (file == NULL) {
         return HOST_ERR_NOT_FOUND;
     }
@@ -667,7 +689,10 @@ int32_t file_write(const char *name, int32_t name_length, int32_t offset, const 
         return refused_write(HOST_ERR_ARGUMENT, "file_write", name, name_length, length);
     }
     host->handler_writes++;
-    if (host->refuse_writes != HOST_OK) {
+    if (host->refuse_reads != HOST_OK) {
+        return refused_write(HOST_ERR_FAILED, "file_write", name, name_length, length);
+    }
+    if (host->refuse_writes != HOST_OK && host->write_failure_mode == STANDIN_WRITE_REFUSE) {
         return refused_write(host->refuse_writes, "file_write", name, name_length, length);
     }
     if (length == 0) {
@@ -675,12 +700,15 @@ int32_t file_write(const char *name, int32_t name_length, int32_t offset, const 
             file->is_stored = false;
             host->file_writes++;
         }
-        return HOST_OK;
+        return host->refuse_writes != HOST_OK
+                   ? refused_write(host->refuse_writes, "file_write", name, name_length, length) : HOST_OK;
     }
     int32_t size = file != NULL && file->size > offset + length ? file->size : offset + length;
     int32_t others = 0;
     for (int index = 0; index < STANDIN_FILES; index++) {
-        if (host->files[index].is_stored && &host->files[index] != file) {
+        if (host->files[index].is_stored && &host->files[index] != file &&
+            strcmp(host->files[index].name, "manifest.json") != 0 &&
+            strcmp(host->files[index].name, "app.wasm") != 0) {
             others += blocks_of(host->files[index].size);
         }
     }
@@ -699,10 +727,16 @@ int32_t file_write(const char *name, int32_t name_length, int32_t offset, const 
     if (file == NULL) {
         return refused_write(HOST_ERR_NO_SPACE, "file_write", name, name_length, length);
     }
-    copy(file->bytes + offset, bytes, (size_t)length);
+    int32_t written = length;
+    if (host->refuse_writes != HOST_OK && host->write_failure_mode == STANDIN_WRITE_PARTIAL) {
+        written = length > 1 ? length / 2 : 1;
+        size = file->size > offset + written ? file->size : offset + written;
+    }
+    copy(file->bytes + offset, bytes, (size_t)written);
     file->size = size;
     host->file_writes++;
-    return HOST_OK;
+    return host->refuse_writes != HOST_OK
+               ? refused_write(host->refuse_writes, "file_write", name, name_length, length) : HOST_OK;
 }
 
 /* ---- Time ---- */
@@ -953,6 +987,14 @@ int32_t alarm_set_every(int32_t id, int32_t seconds, int32_t first_in)
     if (true && host->refuse_alarms != HOST_OK) {
         host->refused_alarms++;
         return host->refuse_alarms;
+    }
+    int32_t occupied = host->external_repeating_alarms;
+    for (int32_t index = 0; index < HOST_ALARM_COUNT; index++) {
+        occupied += host->alarms[index].kind == STANDIN_ALARM_EVERY;
+    }
+    if (host->alarms[id].kind != STANDIN_ALARM_EVERY && occupied >= HOST_ALARM_REPEATING_MAX) {
+        host->refused_alarms++;
+        return HOST_ERR_NO_SPACE;
     }
     host->alarms[id] = (standin_alarm_t){
         .kind = STANDIN_ALARM_EVERY, .every = seconds, .first_in = first_in,
@@ -1234,6 +1276,10 @@ int32_t poll_set_interval(int32_t poll, int32_t seconds)
     if (poll < 0 || poll >= standin_subject.poll_count || (seconds != 0 && (seconds < 10 || seconds > SECONDS_PER_DAY))) {
         return HOST_ERR_ARGUMENT;
     }
+    if (world->refuse_intervals != HOST_OK) {
+        world->refused_intervals++;
+        return world->refuse_intervals;
+    }
     world->poll_interval[poll] = seconds;
     return HOST_OK;
 }
@@ -1346,6 +1392,7 @@ int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_leng
     }
     host->sends++;
     if (host->refuse_requests != HOST_OK) {
+        host->refused_requests++;
         return host->refuse_requests;
     }
     int32_t bytes = request_bytes(filled, headers, headers_length, body_length);
@@ -2084,6 +2131,11 @@ int32_t gfx_draw_bitmap_file(int32_t x, int32_t y, int32_t width, int32_t height
         offset > HOST_FILES_MAX) {
         return refused_draw("gfx_draw_bitmap_file");
     }
+    if (world->refuse_reads != HOST_OK) {
+        world->refused_reads++;
+        world->draw_calls--;
+        return HOST_ERR_NOT_FOUND;
+    }
     standin_stored_file_t *file = file_of(name, name_length);
     int32_t size = (width + 7) / 8 * height;
     if (file == NULL || offset > file->size - size) {
@@ -2707,7 +2759,9 @@ int32_t ui_draw_date(const host_date_t *date)
 #define ARENA_BYTES     (64 * 1024)
 #define ARENA_ALIGNMENT 8
 
-static _Alignas(ARENA_ALIGNMENT) uint8_t arena[ARENA_BYTES];
+/* The application overrides both weak definitions. Without a declaration the
+ * capacity is zero; a defined fallback also works with native sanitizer links. */
+_Alignas(ARENA_ALIGNMENT) __attribute__((weak)) uint8_t app_alloc_arena[ARENA_ALIGNMENT];
 static int32_t arena_taken;
 
 /* The application's declaration overrides this one, which stands for none. */
@@ -2723,6 +2777,14 @@ static int32_t arena_bytes(void)
     return bytes >= 0 && bytes <= ARENA_BYTES ? bytes : 0;
 }
 
+static uint8_t *arena_memory(void)
+{
+    /* A weak fallback's extent is not the extent of the application's
+     * overriding array. Keep that extent out of native bounds inference. */
+    uint8_t *volatile declared = app_alloc_arena;
+    return declared;
+}
+
 int32_t app_alloc_left(void)
 {
     return arena_bytes() - arena_taken;
@@ -2733,7 +2795,7 @@ void *app_alloc(int32_t bytes)
     if (bytes <= 0 || bytes > app_alloc_left()) {
         return NULL;
     }
-    void *piece = arena + arena_taken;
+    void *piece = arena_memory() + arena_taken;
     arena_taken += (bytes + ARENA_ALIGNMENT - 1) & ~(ARENA_ALIGNMENT - 1);
     return piece;
 }
@@ -2788,12 +2850,21 @@ void standin_load(void)
     memset(host->header_text, 0, sizeof host->header_text);
     host->is_inverted = host->session_inverted;
     arena_taken = 0;
+    if (arena_bytes() > 0) {
+        memset(arena_memory(), 0, (size_t)arena_bytes());
+    }
     CALL(on_load);
     host->is_loading = false;
     /* host/app.h: once, on or off the screen, after app_on_load(). */
-    if (host->is_new) {
-        host->is_new = false;
-        CALL(on_installed);
+    if ((host->is_new || host->is_update_pending) &&
+        host->refuse_lifecycle_reads == HOST_OK && host->refuse_lifecycle_writes == HOST_OK) {
+        bool updated = host->is_update_pending;
+        host->is_new = host->is_update_pending = false;
+        if (updated) {
+            CALL(on_updated);
+        } else {
+            CALL(on_installed);
+        }
     }
 }
 
@@ -2886,16 +2957,26 @@ void standin_settings(void)
     CALL(on_settings);
 }
 
-void standin_updated(void)
+void standin_prepare_update(void)
 {
-    /* host/app.h: a new version does not inherit the alarms of the old one. */
-    memset(standin()->alarms, 0, sizeof world->alarms);
-    CALL(on_updated);
-}
-
-void standin_updated_as_loaded(void)
-{
-    CALL(on_updated);
+    standin_t *host = standin();
+    if (host->is_loaded) {
+        if (host->is_on_screen) standin_leave();
+        else standin_terminate();
+    }
+    memset(host->alarms, 0, sizeof host->alarms);
+    memset(host->requests, 0, sizeof host->requests);
+    host->request_count = 0;
+    memset(host->polls_run, 0, sizeof host->polls_run);
+    memset(requested_head, 0, sizeof requested_head);
+    memset(host->status_text, 0, sizeof host->status_text);
+    host->status_icon[0] = host->status_icon[1] = HOST_ICON_NONE;
+    memset(host->header_text, 0, sizeof host->header_text);
+    standin_forget_session();
+    host->is_leaving = host->wants_screen = host->is_inverted = false;
+    host->redraw_flags = 0;
+    host->is_new = false;
+    host->is_update_pending = true;
 }
 
 uint64_t standin_draw(void)
