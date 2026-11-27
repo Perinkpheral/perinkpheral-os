@@ -1159,8 +1159,10 @@ static void check_stress_counters(app_t *app, const char *counters)
     gfx_clear(&frame, false);
     gfx_clear(&reference, false);
     app_draw(app, &frame);
-    const gfx_font_t *font = gfx_font(GFX_FONT_TEXT);
-    int row_y = HOST_UI_MARGIN + 5 * gfx_font_height(font);
+    const gfx_font_t *font = gfx_font(GFX_FONT_SMALL);
+    int row_y = HOST_UI_MARGIN + 5 * gfx_font_height(gfx_font(GFX_FONT_TEXT));
+    CHECK(HOST_UI_MARGIN + gfx_text_font_width(font, counters) <= WIDTH - HOST_UI_MARGIN);
+    CHECK(row_y + gfx_font_height(font) <= HEIGHT);
     gfx_text_font(&reference, HOST_UI_MARGIN, row_y + gfx_font_ascent(font), font, counters, true);
     CHECK(memcmp(actual + row_y * WIDTH / 8, expected + row_y * WIDTH / 8,
                  (size_t)gfx_font_height(font) * WIDTH / 8) == 0);

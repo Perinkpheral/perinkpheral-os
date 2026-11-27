@@ -189,5 +189,5 @@ void app_on_draw(void)
     app_text_add(&line, "ticks "); app_text_add_number(&line, (int32_t)ticks);
     app_text_add(&line, " requests "); app_text_add_number(&line, (int32_t)requests);
     app_text_add(&line, " refused "); app_text_add_number(&line, (int32_t)refusals);
-    gfx_draw_text(HOST_UI_MARGIN, HOST_UI_MARGIN + 5 * height, HOST_FONT_TEXT, text, app_text_length(text));
+    gfx_draw_text(HOST_UI_MARGIN, HOST_UI_MARGIN + 5 * height, HOST_FONT_SMALL, text, app_text_length(text));
 }

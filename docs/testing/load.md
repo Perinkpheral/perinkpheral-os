@@ -28,7 +28,7 @@ No packages or glyph packs are downloaded by the computer.
 | B: host memory | Two 5 s levels: catalog/install/glyph/page workers 1/1/1/2 and 2/2/2/4 | Seven 150 s levels: each heavy operation alone, 1/1/1/0, 2/2/2/2, 4/4/4/8, 8/8/8/16 |
 | C: hostile polls | Eight cases: pick oversized/nesting/lying length; document oversized/endless; XML 65 attributes; raw 5 MB/endless; 1.5 s hold after observed request | All 51 cases; ordinary holds 30 s, trickle/stall 70 s, endless 90 s, 4/5 MB streams 120 s; document abandonment and long-BACK stream release timing |
 | D: application faults | All 12 modes/cases, 1.5 s observation each | Same cases, 60 s each: queue refill, stalled queue, file/KV quota, 1 ms timers/redraw, recursion, bad pointer, endless handler/data handler, 62.2 KB memory (builder report: 8.0 KB stack and 54.2 KB data) |
-| E: navigation | Open, UP/DOWN, BACK-held switching and mixed actions; gaps 200/0 ms, 1.5 s per level | Same actions; gaps 2000/1000/500/200/50/0 ms, 120 s per level; fixed seed |
+| E: navigation | Open, UP/DOWN and mixed actions; gaps 200/0 ms, 1.5 s per level | Same actions; gaps 2000/1000/500/200/50/0 ms, 120 s per level; fixed seed |
 | F: storage | Up to three approximately 42 KB modules, remaining application slots, or the first confirmed storage refusal | Modules until confirmed storage refusal or the remaining slots of the 24-entry table; reload and open after each successful upload |
 | G: clock/restarts | +1 day, -1 day, 2099; two single restarts, two concurrent, one during catalog read if reachable | +1 day, -1 day, +1 year, 2099, 2026, +5 hours, current time; eight single restarts, two concurrent, one during catalog read |
 
@@ -68,9 +68,10 @@ exactly HOST_DOCUMENT_MAX (12,288 bytes) and the first byte over that limit.
 Its connection-release checks require the bench server to observe the tested
 connection closing within 120 seconds, below the streamed response's 300-second
 timeout. The next ordinary poll is not part of this check. E opens the bench
-application before each ordinary UP/DOWN press, including after sibling switching.
-A BACK chord sends BACK down, directional down/up/short, then BACK up/short;
-cleanup retries both releases after failures or interruption.
+application before each UP/DOWN press. Mixed actions only open and press UP/DOWN
+inside that application. Sibling switching is covered by the firmware's host tests,
+not by stress-run: the input queue can drop an injected DOWN while its HTTP route
+returns 200. The runner sends no BACK-held chords or release retries.
 F accepts the firmware's storage-refusal responses, including HTTP 500, only when
 mounted-filesystem usage confirms insufficient free space for the module. Other
 upload failures fail the axis.
@@ -86,7 +87,9 @@ budget and the shutdown hook waits at most that budget plus 15 seconds. Every no
 request has an overall deadline covering upload and response reads; cancellation
 closes its connection. Recording failures fail the run and do not stop cleanup.
 A catalog install that outlives its request is allowed up to three minutes to settle
-before removal; cleanup then checks that the name stays absent for five seconds. The original
+before removal; cleanup then checks that the name stays absent for five seconds.
+B settles and removes its temporary installation before restoring the remembered
+application and starting the next axis. The original
 manual clock value is not preserved. A partial
 development upload may require completing a small package and restarting before the
 public removal route can remove it. Cleanup runs after failures and Ctrl-C; a device

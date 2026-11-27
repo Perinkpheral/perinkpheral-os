@@ -31,7 +31,6 @@ object StressRunTest {
         requestDeadlines()
         verdicts()
         regressions()
-        chordSemantics()
         runAxes()
         releaseAndFailures()
         failedUpload()
@@ -271,21 +270,17 @@ object StressRunTest {
         exercise(expected = 0, say = { _, out, line ->
             if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("first: 123 worst:456\n")
         }) { fake, _ -> fake.assertRestored() }
-        exercise(listOf('e'), expected = 0, setup = { fake, _ -> fake.releaseFailures = 2 }) { fake, _ ->
-            check(fake.calls.count { "button=4&press=up" in it } >= 3)
-            check(!fake.backHeld)
-        }
-        for (button in listOf("1", "3", "4")) exercise(listOf('e'), expected = 0,
-            setup = { fake, _ -> fake.releaseFailures = 2; fake.releaseFailureButton = button }) { fake, _ ->
+        exercise(listOf('e'), setup = { fake, _ -> fake.dropButton = true }) { fake, _ ->
             fake.assertRestored()
+            check(fake.calls.count { it.startsWith("POST /api/dev/button?") } == 1)
+            check(fake.directionalApps == listOf("stress"))
         }
-        exercise(listOf('e'), setup = { fake, _ -> fake.failDirectionDown = true }) { fake, _ ->
-            fake.assertRestored()
-            check(fake.calls.any { "button=4&press=up" in it })
-        }
-        exercise(listOf('e'), setup = { fake, _ -> fake.interruptOnDirectionDown = Thread.currentThread() }) { fake, out ->
+        exercise(listOf('e'), say = { _, _, line ->
+            if (line.startsWith("E mixed")) throw InterruptedException()
+        }) { fake, out ->
             fake.assertRestored()
             check("Interrupted" in out.resolve("report.md").readText())
+            check(fake.directionalApps.isNotEmpty() && fake.directionalApps.all { it == "stress" })
         }
         for (cancel in listOf(false, true)) exercise(expected = if (cancel) 1 else 0,
             setup = { fake, _ -> fake.dropInstall = true; fake.removeBusy = 4 },
@@ -293,16 +288,34 @@ object StressRunTest {
         ) { fake, _ ->
             check(fake.busyProbes == 4)
             check(fake.calls.count { it == "POST /api/apps/install" } >= 5)
+            val removedAt = fake.calls.indexOfLast { it.startsWith("POST /api/apps/remove?app=sample") }
+            val restoredAt = fake.calls.indexOfLast { it == "POST /api/dev/open?app=keeper" }
+            check(removedAt in 0 until restoredAt)
+            fake.assertRestored()
+        }
+        exercise(setup = { fake, _ -> fake.dropInstall = true; fake.removeBusy = 25 }) { fake, out ->
+            val removedAt = fake.calls.indexOfLast { it.startsWith("POST /api/apps/remove?app=sample") }
+            val restoredAt = fake.calls.indexOfFirst { it == "POST /api/dev/open?app=keeper" }
+            check(removedAt in 0 until restoredAt)
+            check("removal deadline expired" in out.resolve("report.md").readText())
             fake.assertRestored()
         }
         exercise(expected = 0, setup = { fake, _ -> fake.reappear = true }) { fake, _ ->
             check(fake.calls.count { "POST /api/apps/remove?app=sample" in it } >= 4)
             fake.assertRestored()
         }
-        exercise(listOf('b', 'g'), say = { _, _, line -> if (line.startsWith("G clock")) throw InterruptedException() }) { fake, _ ->
+        var settledBeforeNextAxis = false
+        exercise(listOf('b', 'g'), setup = { fake, _ -> fake.dropInstall = true }, say = { fake, _, line ->
+            if (line.startsWith("G clock")) {
+                settledBeforeNextAxis = !fake.pendingInstall && !fake.installed.containsKey("sample") &&
+                    fake.remembered == "keeper" && fake.currentApp == "keeper"
+                throw InterruptedException()
+            }
+        }) { fake, _ ->
+            check(settledBeforeNextAxis)
             val removedAt = fake.calls.indexOfFirst { it.startsWith("POST /api/apps/remove") }
             val restoredAt = fake.calls.indexOfLast { it == "POST /api/settings" }
-            check(restoredAt in 0 until removedAt)
+            check(removedAt in 0 until restoredAt)
             fake.assertRestored()
         }
         exercise(setup = { fake, _ -> fake.onCall = { call ->
@@ -346,8 +359,11 @@ object StressRunTest {
             check(fake.calls.indexOf("GET /api/screen") < fake.calls.indexOfFirst { it.startsWith("POST ") })
         }
         exercise(listOf('e'), expected = 0) { fake, _ ->
-            check(fake.ownerButtonWrites == 0)
-            check(fake.siblingSwitches > 0)
+            check(fake.directionalApps.isNotEmpty() && fake.directionalApps.all { it == "stress" })
+            check(fake.calls.filter { it.startsWith("POST /api/dev/button?") }.all {
+                it in listOf("POST /api/dev/button?button=1&press=short", "POST /api/dev/button?button=3&press=short")
+            })
+            fake.assertRestored()
         }
         exercise(('c'..'f').toList(), expected = 0, setup = { fake, _ -> fake.exposeRemembered = false }) { fake, out ->
             check(fake.calls.none { it.startsWith("POST ") })
@@ -473,26 +489,6 @@ object StressRunTest {
         File(out, "app.wasm").writeBytes(ByteArray(if (kind == "stressbig") 42_000 else 100) { 1 })
     }
 
-    private fun chordSemantics() {
-        FakeDevice().use { fake ->
-            val client = DeviceClient(fake.host)
-            fun press(button: Int, kind: String) {
-                check(client.raw("/api/dev/button?button=$button&press=$kind", "POST").status == 200)
-            }
-            press(4, "down")
-            press(1, "short")
-            check(fake.siblingSwitches == 0 && fake.ownerButtonWrites == 1)
-            press(1, "down")
-            check(fake.siblingSwitches == 1)
-            press(1, "up")
-            press(1, "short")
-            press(4, "up")
-            press(4, "short")
-            check(fake.ownerButtonWrites == 1 && fake.currentApp == "keeper")
-            fake.assertRestored()
-        }
-    }
-
     private fun runAxes() {
         FakeDevice().use { fake ->
             val out = Files.createTempDirectory("stress-axes").toFile()
@@ -509,7 +505,8 @@ object StressRunTest {
                 check(steps.any { it["event"] == "storage_refusal" })
                 check(steps.any { it["conditions"] == "restart during catalog" })
                 check(fake.calls.none { "button=2" in it || "/api/reset" in it || "/api/wifi" in it })
-                check(fake.calls.any { "press=down" in it } && fake.calls.any { "press=up" in it })
+                check(fake.calls.none { "press=down" in it || "press=up" in it })
+                check(fake.directionalApps.isNotEmpty() && fake.directionalApps.all { it == "stress" })
                 check(fake.calls.filter { "POST /api/apps/remove?" in it }.all { "forget=1" in it })
                 check(fake.calls.none { "/api/apps/install" in it && "app=keeper" in it })
             } finally { out.deleteRecursively() }
@@ -525,6 +522,9 @@ object StressRunTest {
                 val steps = out.resolve("steps.jsonl").readText()
                 check("parallel GETs=64" in steps && "workers catalog/install/glyph/page=8/8/8/16" in steps)
                 check("mixed gap=0ms" in steps && "restart 8" in steps)
+                check("held gap=" !in steps)
+                check(fake.calls.none { "press=down" in it || "press=up" in it })
+                check(fake.directionalApps.isNotEmpty() && fake.directionalApps.all { it == "stress" })
                 fake.assertRestored()
             } finally { out.deleteRecursively() }
         }
@@ -654,8 +654,8 @@ object StressRunTest {
         var exposeRemembered = true
         var remembered = "keeper"
         var currentApp = "keeper"
-        var ownerButtonWrites = 0
-        var siblingSwitches = 0
+        val directionalApps = CopyOnWriteArrayList<String>()
+        var dropButton = false
         var maxInstalled = 1
         var storageCode = 500
         var storageText = "the file could not be stored"
@@ -666,15 +666,6 @@ object StressRunTest {
         var removeBusy = 0
         var reappear = false
         private var absentPolls = 0
-        var releaseFailures = 0
-        var releaseFailureButton: String? = null
-        var failDirectionDown = false
-        var interruptOnDirectionDown: Thread? = null
-        var backHeld = false
-        private var backChorded = false
-        private var backLong = false
-        private val heldButtons = mutableSetOf<String>()
-        private val swallowed = mutableSetOf<String>()
         @Volatile var wrongReleasePath = false
         @Volatile var repeatPolls = false
         @Volatile var releaseDelayMs = 0L
@@ -732,8 +723,11 @@ object StressRunTest {
                         response = mapOf("time_auto" to timeAuto, "wifi_ssid" to "saved", "menu_order" to listOf("keeper"))
                     }
                     path == "/api/apps" -> {
-                        if (absentPolls > 0 && --absentPolls == 0)
+                        if (absentPolls > 0 && --absentPolls == 0) {
                             installed["sample"] = mapOf("name" to "sample", "version" to "1", "values" to emptyMap<String, Any>())
+                            currentApp = "sample"
+                            remembered = "sample"
+                        }
                         response = installed.values.toList()
                     }
                     path == "/api/apps/removed" -> response = removed
@@ -753,6 +747,8 @@ object StressRunTest {
                             code = 503
                             if (name.isEmpty() && ++busyProbes == 4) {
                                 installed["sample"] = mapOf("name" to "sample", "version" to "1", "values" to emptyMap<String, Any>())
+                                currentApp = "sample"
+                                remembered = "sample"
                                 pendingInstall = false
                             }
                         } else if (body == null || name.isEmpty()) code = 400
@@ -764,9 +760,8 @@ object StressRunTest {
                                 exchange.close()
                                 return@createContext
                             }
-                            installed[name] = mapOf("name" to name, "version" to "1", "values" to emptyMap<String, Any>())
-                            currentApp = name
-                            remembered = name
+                            val wasInstalled = installed.put(name, mapOf("name" to name, "version" to "1", "values" to emptyMap<String, Any>())) != null
+                            if (!wasInstalled) { currentApp = name; remembered = name }
                         }
                     }
                     path == "/api/dev/app" -> {
@@ -808,37 +803,9 @@ object StressRunTest {
                     path == "/api/dev/open" -> { opened.incrementAndGet(); currentApp = name; remembered = name }
                     path == "/api/dev/button" -> {
                         val button = query.getValue("button")
-                        when (query["press"]) {
-                            "down" -> {
-                                heldButtons += button
-                                if (button == "4") { backHeld = true; backChorded = false; backLong = false }
-                                else if (button in listOf("1", "3")) {
-                                    swallowed -= button
-                                    if (backHeld && currentApp.isNotEmpty()) {
-                                        backChorded = true
-                                        swallowed += button
-                                        currentApp = "keeper"; remembered = "keeper"; siblingSwitches++
-                                    }
-                                    if (failDirectionDown) { failDirectionDown = false; code = 503 }
-                                    interruptOnDirectionDown?.let { interruptOnDirectionDown = null; it.interrupt() }
-                                }
-                            }
-                            "up" -> if (releaseFailures > 0 && (releaseFailureButton == null || releaseFailureButton == button)) { releaseFailures--; code = 503 }
-                                else if (heldButtons.remove(button) && button == "4") {
-                                    backHeld = false
-                                    if (backLong && !backChorded) currentApp = ""
-                                    backChorded = backChorded && !backLong
-                                    backLong = false
-                                }
-                            "long" -> if (button == "4") {
-                                if (backHeld) backLong = true else currentApp = ""
-                            }
-                            "short" -> if (button == "4") {
-                                if (backChorded) backChorded = backHeld else currentApp = ""
-                            } else if (button in listOf("1", "3") && !swallowed.remove(button) && currentApp == "keeper") {
-                                ownerButtonWrites++
-                            }
-                        }
+                        check(button in listOf("1", "3") && query["press"] == "short" || button == "4" && query["press"] == "long")
+                        if (button == "4") currentApp = "" else directionalApps += currentApp
+                        if (dropButton) { dropButton = false; exchange.close(); return@createContext }
                     }
                     path == "/api/apps/remove" -> {
                         check(query["forget"] == "1" && name != "keeper")
@@ -899,7 +866,6 @@ object StressRunTest {
         fun assertRestored() {
             check(installed == mapOf("keeper" to keeper)) { "applications changed: $installed" }
             check(packs == mapOf("latin" to mapOf("name" to "latin", "bytes" to 1000L, "faces" to 4))) { "glyph packs changed: $packs" }
-            check(!backHeld && heldButtons.isEmpty())
             check(remembered == "keeper") { "remembered application changed: $remembered" }
             check(timeAuto)
         }

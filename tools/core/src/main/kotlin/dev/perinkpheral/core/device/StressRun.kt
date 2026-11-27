@@ -72,8 +72,6 @@ class StressRun(
     private var serialTail = ""
     private var observedConsole = emptyList<String>()
     private var restartRequested = false
-    private var backDown = false
-    private var directionDown: Int? = null
     private var originalRememberedApp: String? = null
     private var canRestoreRemembered = false
     private var rememberedChanged = false
@@ -173,7 +171,7 @@ class StressRun(
                     fail(axis, "setup", error.message ?: error.javaClass.simpleName)
                 } finally {
                     server?.clear()
-                    cleanup(::restoreClock, ::releaseDirection, ::releaseBack, { if (axis in "cdef") removeBench() },
+                    cleanup(::restoreClock, { if (axis in "bcdef") removeBench() },
                         ::restoreRememberedApp, { checkCleanupObservation() })
                 }
             }
@@ -187,7 +185,7 @@ class StressRun(
         } finally {
             Thread.interrupted()
             try {
-                cleanup(::restoreClock, ::releaseDirection, ::releaseBack, { server?.close() }, ::removeBench,
+                cleanup(::restoreClock, { server?.close() }, ::removeBench,
                     ::restoreRememberedApp, ::removeGlyph,
                     ::verifyGlyphs, ::verifyOriginalApps, { checkCleanupObservation() })
             } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
@@ -571,7 +569,9 @@ class StressRun(
     }
     private fun open(name: String) { rememberedChanged = true; post("/api/dev/open?app=${encode(name)}") }
     private fun press(button: Int, kind: String = "short") {
-        require(button in listOf(1, 3, 4)) { "stress-run never injects OK" }
+        require(button in listOf(1, 3) && kind == "short" || button == 4 && kind == "long") {
+            "stress-run injects only short UP/DOWN and long BACK"
+        }
         post("/api/dev/button?button=$button&press=$kind")
     }
     private fun served(path: String, case: String, since: Int, timeout: Long): StressServer.Connection {
@@ -658,18 +658,7 @@ class StressRun(
         val names = (originalApps.filter { it["system"] != true }.map { it["name"].toString() } + "stress").distinct()
         var index = 0
         val random = java.util.Random(7)
-        fun chord() {
-            backDown = true
-            try {
-                press(4, "down")
-                pause(50)
-                val direction = if (random.nextBoolean()) 1 else 3
-                directionDown = direction
-                press(direction, "down")
-                pause(50)
-            } finally { cleanup(::releaseDirection, ::releaseBack) }
-        }
-        for (mode in listOf("open", "updown", "held", "mixed")) {
+        for (mode in listOf("open", "updown", "mixed")) {
             val gaps = if (options.quick) listOf(200L, 0L) else listOf(2000L, 1000L, 500L, 200L, 50L, 0L)
             for (gap in gaps) step('e', "$mode gap=${gap}ms") {
                 open("stress")
@@ -677,11 +666,10 @@ class StressRun(
                 var count = 0
                 do {
                     checkCancelled()
-                    val action = if (mode == "mixed") listOf("open", "held", "updown")[random.nextInt(3)] else mode
-                    when (action) {
-                        "open" -> open(names[index++ % names.size])
-                        "held" -> chord()
-                        else -> { open("stress"); press(if (random.nextBoolean()) 1 else 3) }
+                    if (mode == "open") open(names[index++ % names.size])
+                    else {
+                        open("stress")
+                        if (mode == "updown" || random.nextBoolean()) press(if (random.nextBoolean()) 1 else 3)
                     }
                     count++; pause(gap)
                 } while (timing.now() < deadline)
@@ -763,22 +751,8 @@ class StressRun(
     private fun cleanupSleep(ms: Long) {
         timing.sleep(if (cleanupDeadline == null) ms else minOf(ms, cleanupRemaining()))
     }
-    private fun releaseDirection() {
-        directionDown?.let { button -> cleanupAttempt("release button $button") {
-            press(button, "up")
-            press(button, "short")
-            directionDown = null
-        } }
-    }
-    private fun releaseBack() {
-        if (backDown) cleanupAttempt("release BACK") {
-            press(4, "up")
-            press(4, "short")
-            backDown = false
-        }
-    }
     private fun restoreRememberedApp() {
-        if (!rememberedChanged || !canRestoreRemembered) return
+        if (owned.isNotEmpty() || !rememberedChanged || !canRestoreRemembered) return
         cleanupAttempt("restore remembered application") {
             post("/api/dev/open?app=${encode(originalRememberedApp!!)}")
             rememberedChanged = false
