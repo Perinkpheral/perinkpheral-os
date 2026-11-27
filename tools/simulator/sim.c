@@ -371,6 +371,7 @@ typedef struct job {
     struct job *next;
     bool        is_poll;
     bool        wants_values;
+    bool        only_on_screen; /* a poll refused before network dispatch */
     int         format_policy;
     int         number; /* the poll's index, or the request's tag */
     int         method;
@@ -472,18 +473,40 @@ static void answer_from_mock(job_t *job, const json_t *mock)
             job->status = HOST_FAILED_NO_ANSWER;
             return;
         }
-        fseek(opened, 0, SEEK_END);
+        if (fseek(opened, 0, SEEK_END) != 0) {
+            fclose(opened);
+            job->status = HOST_FAILED_NO_ANSWER;
+            return;
+        }
         long length = ftell(opened);
-        fseek(opened, 0, SEEK_SET);
+        if (length < 0 || length > INT32_MAX || fseek(opened, 0, SEEK_SET) != 0) {
+            fclose(opened);
+            job->status = HOST_FAILED_NO_ANSWER;
+            return;
+        }
         job->answer = malloc((size_t)length + 1);
+        if (job->answer == NULL) {
+            fclose(opened);
+            job->status = HOST_FAILED_NO_MEMORY;
+            return;
+        }
         job->answer_length = fread(job->answer, 1, (size_t)length, opened);
+        bool complete = job->answer_length == (size_t)length && !ferror(opened) && fgetc(opened) == EOF;
         fclose(opened);
+        if (!complete) {
+            job->status = HOST_FAILED_NO_ANSWER;
+            return;
+        }
     } else if (json_is_string(body)) {
         job->answer_length = strlen(body->text);
         job->answer = malloc(job->answer_length + 1);
+        if (job->answer == NULL) {
+            job->status = HOST_FAILED_NO_MEMORY;
+            return;
+        }
         memcpy(job->answer, body->text, job->answer_length);
     }
-    job->response.length = (int32_t)job->answer_length;
+    job->response.length = job->answer_length <= INT32_MAX ? (int32_t)job->answer_length : -1;
     keep_answer_headers(&job->response_headers, json_get(mock, "headers"));
 }
 
@@ -689,7 +712,10 @@ static void exchange(job_t *job, char *next, size_t next_size)
     char number[24] = "";
     copy_answer_header(metadata_headers, "content-length", number, sizeof number);
     if (number[0] != '\0') {
-        response->length = atoi(number);
+        char *end;
+        long long length = strtoll(number, &end, 10);
+        response->length = *end == '\0' && length >= 0 && length <= INT32_MAX
+                               ? (int32_t)length : -1;
     }
     number[0] = '\0';
     copy_answer_header(metadata_headers, "retry-after", number, sizeof number);
@@ -820,13 +846,20 @@ static void reset_jobs(void)
     s_requests_waiting = 0;
 }
 
-static void add_header(char **headers, const char *name, const char *value);
+static bool add_header(char **headers, const char *name, const char *value);
 
 /* Settings saves and application writes cannot interleave with preparation here. */
 static void prepare_job(job_t *job)
 {
+    if (job->status < 0) {
+        return;
+    }
     job->manifest = strdup(s_manifest_json);
     job->host_values = json_new_object();
+    if (job->manifest == NULL || job->host_values == NULL) {
+        job->status = HOST_FAILED_NO_MEMORY;
+        return;
+    }
     json_t *root = json_parse(job->manifest);
     const json_t *setting;
     json_for_each(setting, json_get(root, "settings")) {
@@ -860,7 +893,10 @@ static void prepare_job(job_t *job)
             job->status = HOST_FAILED_NOT_READY;
             return;
         }
-        add_header(&job->headers, job->header_templates[i].name, value);
+        if (!add_header(&job->headers, job->header_templates[i].name, value)) {
+            job->status = HOST_FAILED_NO_MEMORY;
+            return;
+        }
     }
     if (job->body_template != NULL) {
         char body[APP_POLL_BODY_MAX + 1];
@@ -871,6 +907,9 @@ static void prepare_job(job_t *job)
         }
         job->body_length = strlen(body);
         job->body = (uint8_t *)strdup(body);
+        if (job->body == NULL) {
+            job->status = HOST_FAILED_NO_MEMORY;
+        }
     }
 }
 
@@ -883,6 +922,7 @@ static void dispatch_job(void)
     s_jobs_pending = job->next;
     job->next = NULL;
     prepare_job(job);
+    job->only_on_screen = job->is_poll && job->status == HOST_FAILED_NO_MEMORY;
     s_job_active = true;
     pthread_mutex_lock(&s_jobs_lock);
     s_jobs_asked = job;
@@ -926,13 +966,13 @@ static void hand_over(job_t *job)
     if (job->status < 0) {
         say('W', "sim", "%s/%s %d%s: failed (%d)", s_options.app, kind, job->number, item,
             job->status);
-        /* A pre-header failure keeps the request's original route. Once
-         * headers arrived, a body failure uses the final representation. */
-        bool picked = job->wants_values && (!job->response_headers.type_seen ||
-            answer_format(job->format_policy,&job->response_headers,&job->response)==HOST_FORMAT_JSON);
+        /* A picked poll keeps its callback after preparation or transport fails,
+         * including a failure after non-JSON response headers. */
+        bool picked = job->wants_values;
         app_delivery_t failed = {
             .kind = picked ? APP_DELIVERY_VALUES : APP_DELIVERY_PIECE,
             .request = job->number, .http_status = job->status, .flags = HOST_DATA_FAILED,
+            .only_on_screen = job->only_on_screen,
             .headers=&job->response_headers,.response=&job->response,
             .has_item = job->item >= 0, .item = job->item,
         };
@@ -941,7 +981,10 @@ static void hand_over(job_t *job)
     }
     say('I', "sim", "%s/%s %d%s: HTTP %d, %zu bytes", s_options.app, kind, job->number, item,
         job->status, job->answer_length);
-    if (job->wants_values && answer_format(job->format_policy,&job->response_headers,&job->response)==HOST_FORMAT_JSON) {
+    if (job->method == HOST_HTTP_HEAD) {
+        job->answer_length = 0;
+    }
+    if (job->wants_values) {
         const char *paths[JSON_PICK_PATHS_MAX];
         for (int i = 0; i < job->pick_count; i++) {
             paths[i] = job->pick[i];
@@ -950,8 +993,9 @@ static void hand_over(job_t *job)
         static char        list[HOST_LIST_BYTES];
         json_pick_init(&pick, paths, job->pick_count);
         json_pick_lists(&pick, list, sizeof list);
-        bool is_json = json_pick_feed(&pick, (const char *)job->answer, job->answer_length);
-        is_json = json_pick_finish(&pick) && is_json; /* as the device: a document that ends whole */
+        bool too_large = job->answer_length > HOST_ANSWER_MAX;
+        bool is_json = !too_large && json_pick_feed(&pick, (const char *)job->answer, job->answer_length);
+        is_json = job->method == HOST_HTTP_HEAD || (json_pick_finish(&pick) && is_json); /* as the device: a document that ends whole */
         if (json_pick_is_cut(&pick)) {
             say('W', "sim", "%s/%s %d: list elements beyond %d bytes were dropped", s_options.app,
                 kind, job->number, HOST_LIST_BYTES);
@@ -963,11 +1007,20 @@ static void hand_over(job_t *job)
         }
         app_delivery_t delivery = {
             .kind = APP_DELIVERY_VALUES, .request = job->number,
-            .http_status = is_json || !is_ok ? job->status : HOST_FAILED_NO_ANSWER,
+            .http_status = is_json || !is_ok ? job->status
+                           : too_large ? HOST_FAILED_TOO_LARGE : HOST_FAILED_NO_ANSWER,
             .response = &job->response, .headers = &job->response_headers, .picked = &pick,
             .has_item = job->item >= 0, .item = job->item,
         };
         deliver(&delivery);
+        return;
+    }
+    if (job->answer_length > HOST_ANSWER_PIECES_MAX) {
+        app_delivery_t failed = { .kind = APP_DELIVERY_PIECE, .request = job->number,
+            .http_status = HOST_FAILED_TOO_LARGE, .flags = HOST_DATA_FAILED,
+            .response = &job->response, .headers = &job->response_headers,
+            .has_item = job->item >= 0, .item = job->item };
+        deliver(&failed);
         return;
     }
     size_t at = 0;
@@ -988,7 +1041,7 @@ static void hand_over(job_t *job)
     } while (at < job->answer_length);
 }
 
-static void add_header(char **headers, const char *name, const char *value)
+static bool add_header(char **headers, const char *name, const char *value)
 {
     size_t had = *headers != NULL ? strlen(*headers) : 0;
     size_t more = strlen(name) + strlen(value) + 3;
@@ -997,6 +1050,7 @@ static void add_header(char **headers, const char *name, const char *value)
         snprintf(grown + had, more + 1, "%s: %s\n", name, value);
         *headers = grown;
     }
+    return grown != NULL;
 }
 
 /* One request of a poll: for item `item` of the list it goes over, or -1. */
@@ -1004,11 +1058,20 @@ static void start_poll_request(const app_poll_t *poll, int number, const list_it
                                int item)
 {
     job_t *job = calloc(1, sizeof *job);
+    if (job == NULL) {
+        app_delivery_t failed = { .kind = APP_DELIVERY_POLL_FAILED, .request = number,
+            .http_status = HOST_FAILED_NO_MEMORY, .only_on_screen = true };
+        deliver(&failed);
+        return;
+    }
     job->is_poll = true;
     job->number = number;
     job->item = item;
     job->method = poll->method;
     job->body_template = strdup(poll->body);
+    if (job->body_template == NULL) {
+        job->status = HOST_FAILED_NO_MEMORY;
+    }
     job->format_policy = poll->response_format;
     job->wants_values = poll->pick_count > 0;
     job->pick_count = poll->pick_count;
@@ -1177,6 +1240,9 @@ static int32_t services_request(const char *app_name, const app_request_t *reque
         return HOST_ERR_ARGUMENT;
     }
     job_t *job = calloc(1, sizeof *job);
+    if (job == NULL) {
+        return HOST_ERR_NO_SPACE;
+    }
     job->number = request->tag;
     job->item = -1;
     job->method = request->method;
@@ -1186,6 +1252,10 @@ static int32_t services_request(const char *app_name, const app_request_t *reque
            (size_t)request->header_count * sizeof job->header_templates[0]);
     if (request->body_length > 0) {
         job->body = malloc((size_t)request->body_length);
+        if (job->body == NULL) {
+            free_job(job);
+            return HOST_ERR_NO_SPACE;
+        }
         memcpy(job->body, request->body, (size_t)request->body_length);
         job->body_length = (size_t)request->body_length;
     }

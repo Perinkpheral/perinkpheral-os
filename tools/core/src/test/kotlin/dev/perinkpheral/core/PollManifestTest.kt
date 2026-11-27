@@ -128,6 +128,16 @@ object PollManifestTest {
                 val index = Json.parse(File(catalog, "catalog.json").readText()) as Map<*, *>
                 check(((index["apps"] as List<*>).single() as Map<*, *>)["firmware"] == introduced)
 
+                // Nonempty pick fixes the callback even with no format and no raw export.
+                val pickedOnly = File(app, "probe.c")
+                val originalPicked = pickedOnly.readText()
+                pickedOnly.writeText("""/* SPDX-License-Identifier: MIT */
+                    #include "host_api.h"
+                    void app_on_picked(int32_t request, int32_t status) { (void)request; (void)status; }
+                """.trimIndent())
+                manifest(pick)
+                builder.build(app, out)
+                pickedOnly.writeText(originalPicked)
                 // A module may omit the raw handler only for a statically structured request or poll.
                 val probe = File(app, "probe.c")
                 val originalProbe = probe.readText()

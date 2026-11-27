@@ -329,8 +329,8 @@ int64_t standin_alarm_left(int32_t id);          /* seconds; 0: not set */
 bool standin_alarm_due(int32_t id);              /* set, and its time has come */
 
 /* The address poll `poll` asks for item `item` of its list (-1: it has
- * none): {{key}} filled from the store. False when a key it needs is empty,
- * which the device delivers as HOST_FAILED_NOT_READY. */
+ * none): {{key}} filled from the store. False for missing values, invalid
+ * input or expansion limits; stored empty values participate in expansion. */
 bool standin_poll_url(int32_t poll, int32_t item, char *url, int32_t capacity);
 /* The same for an address a request of the application's own was sent to. */
 bool standin_fill_url(const char *written, char *url, int32_t capacity);
@@ -344,7 +344,7 @@ bool standin_header_lines_ready(const char *headers, int32_t length);
 /* How many items a poll with "each" is asked for; -1 for a poll without. */
 int32_t standin_poll_items(int32_t poll);
 /* Whether the list a poll with "each" is asked over has no item at all: the device asks it once
- * then, with no item, and the request is not ready (poller_net.c). */
+ * then, with no item; normal URL/header/body expansion decides readiness. */
 bool standin_poll_list_is_empty(int32_t poll);
 /* Item `index` of those the poll claims: its number in the list, or -1. */
 int32_t standin_poll_item(int32_t poll, int32_t index);
@@ -378,6 +378,9 @@ uint64_t standin_screen(uint64_t frame); /* the frame with the header and the in
 /* Headers for the next standin_data()/standin_picked() delivery only. Names
  * and values must remain valid until that call; NULL/0 supplies no headers.
  * Storage and metadata parsing use the firmware's rules. */
+/* Method of the next response. Defaults to the manifest poll method or GET for
+ * a raw fixture. Set it from the dequeued request before background loading. */
+void standin_answer_method(int32_t method);
 void standin_answer_headers(const standin_pair_t *headers, int32_t count);
 
 /* An answer in pieces of `piece` bytes through app_data_buffer() and

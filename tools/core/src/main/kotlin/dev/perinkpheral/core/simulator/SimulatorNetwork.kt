@@ -184,10 +184,9 @@ object SimulatorNetwork {
             }, timeout.toMillis())
             // A refusal (not 2xx) whose values are picked keeps its status however its page arrives,
             // as the device does: its body then gives nothing. Pieces fail as before.
-            // The device chooses the streaming or JSON projection limit only
-            // once the final Content-Type is known. Older simulator clients
-            // use the originally negotiated fixed limit.
-            val policy = asked["formatPolicy"] as? Long
+            // Picked polls keep their JSON projection limit even when an HTTP
+            // refusal has a non-JSON Content-Type. Other responses use the
+            // streamed transport limit.
             val mimeTypes = response.headers().allValues("content-type").map { it.substringBefore(';').trim(' ', '\t').lowercase() }
             fun format(type: String) = when {
                 type == "application/json" || type == "text/json" || JSON_SUFFIX.matches(type) -> 1
@@ -195,7 +194,7 @@ object SimulatorNetwork {
                 else -> 0
             }
             val mime = mimeTypes.map(::format).distinct().singleOrNull() ?: 0
-            val picked = wantsValues && (policy == null || policy == 1L || (policy == 0L && mime == 1))
+            val picked = wantsValues
             val most = if (picked) configuredMax else (asked["rawMax"] as? Long) ?: configuredMax
             val isRefusal = picked && response.statusCode() !in 200..299
             val kept = LinkedHashMap<String, Any?>()

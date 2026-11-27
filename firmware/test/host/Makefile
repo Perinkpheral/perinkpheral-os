@@ -74,7 +74,7 @@ TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_m3_area test_web_memory
 TESTS   += test_standin_text
-TESTS   += test_standin_contract
+TESTS   += test_standin_contract test_standin_network
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
@@ -219,7 +219,9 @@ test_scenes: test_scenes.c tinytest.h $(UI)/kit.c $(MAIN)/header.c $(MAIN)/heade
 		$(MAIN)/header.c $(MAIN)/menu_order.c $(MAIN)/scene_menu.c $(MAIN)/scene_splash.c $(MAIN)/scene_confirm.c $(MAIN)/scene_notify.c $(MAIN)/scene_working.c $(MAIN)/scene_storage.c $(MAIN)/screens.c $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(QR_SRCS)
 
 STANDIN_SRCS := $(SDK)/check/standin.c $(filter-out $(SDK_LIB)/app_alloc.c $(SDK_LIB)/app_runtime.c,$(wildcard $(SDK_LIB)/*.c)) $(MAP)/map_geo.c $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/document_reader.c $(APPSYS)/json_document.c
-test_standin_text test_standin_contract: %: %.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
+test_standin_network: $(SDK)/check/checks.c
+
+test_standin_text test_standin_contract test_standin_network: %: %.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
 	$(CC) $(CFLAGS) -D_DARWIN_C_SOURCE -Wno-attributes '-DHOST_IMPORT(name,...)=__VA_ARGS__' '-DAPP_EXPORT(name,...)=__VA_ARGS__' $(MANIFEST_FLAGS) -I$(SDK)/check -I$(MAP)/include -o $@ $< $(STANDIN_SRCS) -lm
 
 # The interpreter is upstream code: built once, without our warnings, and

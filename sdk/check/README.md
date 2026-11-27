@@ -21,9 +21,20 @@ case-insensitive HTTP tokens. `answer_header()` uses the firmware's storage and 
 1024 bytes including names and separators, no partial values, and every lookup fails
 with `HOST_ERR_NO_SPACE` after aggregate overflow or an invalid received field name.
 `answer_info()` uses the firmware's fixed metadata parser independently of that storage;
-Content-Length comes from the mock header, or is -1 when absent. Headers are scoped to one
-answer, available in every data chunk and in picked delivery. Direct native tests can call
+Content-Length comes from the mock header, or is -1 when absent or outside 0..INT32_MAX. Headers are scoped to one
+answer, available in every data chunk, picked delivery and document callback. Direct native tests can call
 `standin_answer_headers(fields, count)` before the next delivery; without it there are no headers.
+
+Response and mutation files are read completely, with explicit errors for read or allocation
+failures. More than 64 mocks are supported. Delivery applies the 256 KB picked and 4 MB
+streamed ceilings. An oversized streamed fixture ends in `HOST_DATA_FAILED` with
+`HOST_FAILED_TOO_LARGE`; its prefix never receives a successful `HOST_DATA_LAST`.
+Nonempty `pick` always uses JSON delivery, including for non-JSON HTTP refusals.
+Direct raw HEAD fixtures set `standin_answer_method(HOST_HTTP_HEAD)` before
+`standin_data()`. The checker carries the dequeued method across background loads.
+Each delivery snapshots that method before any application callback can queue another
+request with the same tag. Without an explicit method a raw fixture uses GET, and a
+poll uses its declared method.
 
 The stand-in arena uses eight-byte alignment, as does the device allocator.
 

@@ -204,6 +204,46 @@ static void test_time_and_recurrence(void)
     fixed_wall_clock = false;
 }
 
+static void test_preparation_memory_failure(void)
+{
+    for (int is_poll = 0; is_poll <= 1; is_poll++) {
+        job_t *job = calloc(1, sizeof *job);
+        assert(job != NULL);
+        job->is_poll = is_poll;
+        job->status = HOST_FAILED_NO_MEMORY;
+        ask(job);
+        dispatch_job();
+        assert(s_jobs_asked == job && job->only_on_screen == (bool)is_poll);
+        s_jobs_asked = NULL;
+        s_job_active = false;
+        free_job(job);
+    }
+}
+
+static void test_content_lengths(void)
+{
+    s_fetcher_in = tmpfile();
+    s_fetcher_out = tmpfile();
+    assert(s_fetcher_in != NULL && s_fetcher_out != NULL);
+    const char *lengths[] = { "0", "2147483647", "2147483648", "4294967296", "9223372036854775807" };
+    for (size_t index = 0; index < sizeof lengths / sizeof lengths[0]; index++) {
+        assert(fprintf(s_fetcher_out, "{\"status\":200,\"headers\":{\"content-length\":\"%s\"},\"body\":\"\"}\n", lengths[index]) > 0);
+    }
+    rewind(s_fetcher_out);
+    for (size_t index = 0; index < sizeof lengths / sizeof lengths[0]; index++) {
+        job_t job = { .method = HOST_HTTP_HEAD, .number = INT32_MAX };
+        snprintf(job.url, sizeof job.url, "http://example.test/length");
+        char next[APP_URL_MAX + 1];
+        exchange(&job, next, sizeof next);
+        assert(job.status == 200);
+        assert(job.response.length == (index == 0 ? 0 : index == 1 ? INT32_MAX : -1));
+        free(job.answer);
+    }
+    fclose(s_fetcher_in);
+    fclose(s_fetcher_out);
+    s_fetcher_in = s_fetcher_out = NULL;
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -215,6 +255,8 @@ int main(void)
     test_time_and_recurrence();
     test_network_icon();
     test_mocks(state);
+    test_content_lengths();
+    test_preparation_memory_failure();
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["
                              "{\"key\":\"server\",\"type\":\"url\"},"
                              "{\"key\":\"other\",\"type\":\"url\"}]}");

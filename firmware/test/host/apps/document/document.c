@@ -28,4 +28,8 @@ void app_on_document(int32_t request, int32_t format, int32_t status, int32_t le
 {
     int32_t result[] = { ++documents, request, format, status, length };
     kv_set("document", 8, result, sizeof result);
+    host_answer_info_t info = {0};
+    int32_t metadata[] = { answer_info(&info, sizeof info), info.status, answer_item(),
+        document_buffer_set(document, sizeof document) };
+    kv_set("metadata", 8, metadata, sizeof metadata);
 }

@@ -254,23 +254,30 @@ static void test_broken_documents(void)
     CHECK(json_pick_value(&pick, 0) == NULL && json_pick_value(&pick, 1) == NULL);
 }
 
-static void test_tolerant_document_grammar(void)
+static void test_strict_document_grammar(void)
 {
     static const char *const PATHS[] = { "a" };
-    static const char *const ACCEPTED[] = { "", "[1,]", "1 2", "{\"a\" 123}", "{\"a\":123,}" };
-    for (size_t index = 0; index < sizeof ACCEPTED / sizeof ACCEPTED[0]; index++) {
-        size_t length = strlen(ACCEPTED[index]);
+    static const char *const INVALID[] = {
+        "", "[1,]", "1 2", "{\"a\" 123}", "{\"a\":123,}", "{,}", "[,1]",
+        "{\"a\":1 \"b\":2}", "[1:2]", "{\"a\":\"\\x\"}", "{\"a\":\"raw\nline\"}",
+        "\"\xc0\xaf\"", "\"\xed\xa0\x80\"", "\"\xf4\x90\x80\x80\"", "\"\xc2\"",
+        "{\"unpicked\":{\"a\":\"\\q\"}}", "{}{}", "truefalse", "[1,,2]",
+    };
+    for (size_t index = 0; index < sizeof INVALID / sizeof INVALID[0]; index++) {
+        size_t length = strlen(INVALID[index]);
         for (size_t piece = 1; piece <= length + 1; piece++) {
             json_pick_init(&pick, PATHS, 1);
             for (size_t at = 0; at < length; at += piece) {
                 size_t taken = length - at < piece ? length - at : piece;
-                CHECK(json_pick_feed(&pick, ACCEPTED[index] + at, taken));
+                json_pick_feed(&pick, INVALID[index] + at, taken);
             }
-            CHECK(json_pick_finish(&pick));
-            if (ACCEPTED[index][0] == '{') {
-                CHECK_STR(value(0), "123");
-            }
+            CHECK(!json_pick_finish(&pick));
         }
+    }
+    static const char *const VALID[] = { "{}", "[]", "true", "null", "0", "-1.2e+3", " \r\n [1,{}] \t" };
+    for (size_t index = 0; index < sizeof VALID / sizeof VALID[0]; index++) {
+        read_in_pieces(PATHS, 1, VALID[index], 1);
+        CHECK(json_pick_finish(&pick));
     }
 }
 
@@ -362,8 +369,48 @@ static void test_lists(void)
     CHECK_STR(element(1, 0), "5");
 }
 
+static void test_structural_paths(void)
+{
+    const char *const paths[] = { "a.b", "a[0]", "items[*].a", "a", "a b" };
+    const char *document = "{\"a.b\":9,\"a[0]\":9,\"a\\u0000\":9,\"a\\nb\":9,"
+                           "\"items[0]\":{\"a\":9},\"items\":[{\"a\":3}],\"a\":{\"b\":1}}";
+    for (size_t piece = 1; piece <= strlen(document); piece++) {
+        char list_bytes[64];
+        json_pick_init(&pick, paths, 5);
+        json_pick_lists(&pick, list_bytes, sizeof list_bytes);
+        for (size_t at = 0; at < strlen(document); at += piece) {
+            size_t taken = strlen(document) - at < piece ? strlen(document) - at : piece;
+            CHECK(json_pick_feed(&pick, document + at, taken));
+        }
+        CHECK(json_pick_finish(&pick));
+        CHECK_STR(value(0), "1");
+        CHECK(json_pick_value(&pick, 1) == NULL);
+        CHECK(json_pick_count(&pick, 2) == 1);
+        CHECK_STR(json_pick_element(&pick, 2, 0), "3");
+        CHECK(json_pick_value(&pick, 3) == NULL);
+        CHECK(json_pick_value(&pick, 4) == NULL);
+    }
+    const char *const noncanonical[] = { "[00]", "[0]" };
+    read_in_pieces(noncanonical, 2, "[1]", 1);
+    CHECK(json_pick_value(&pick, 0) == NULL);
+    CHECK_STR(value(1), "1");
+    char first_key[JSON_PICK_KEY_MAX + 1], second_key[JSON_PICK_KEY_MAX + 1];
+    memset(first_key, 'a', JSON_PICK_KEY_MAX);
+    memset(second_key, 'b', JSON_PICK_KEY_MAX);
+    first_key[JSON_PICK_KEY_MAX] = second_key[JSON_PICK_KEY_MAX] = '\0';
+    char long_path[128], nested[256];
+    snprintf(long_path, sizeof long_path, "%s.%s.c", first_key, second_key);
+    snprintf(nested, sizeof nested, "{\"%s\":{\"%s\":{\"c\":1}}}", first_key, second_key);
+    const char *const overlong[] = { long_path };
+    CHECK(strlen(long_path) > JSON_PICK_PATH_MAX);
+    read_in_pieces(overlong, 1, nested, 1);
+    CHECK(json_pick_finish(&pick) && json_pick_value(&pick, 0) == NULL);
+
+}
+
 int main(void)
 {
+    test_structural_paths();
     test_lists();
     test_picks_by_path();
     test_what_has_no_value();
@@ -373,6 +420,6 @@ int main(void)
     test_a_value_is_cut_between_characters();
     test_limits();
     test_broken_documents();
-    test_tolerant_document_grammar();
+    test_strict_document_grammar();
     REPORT();
 }

@@ -218,6 +218,7 @@ static bool request_value_of(void *context, const char *key, char *value, size_t
 /* Reads poll number `poll_number` of the manifest into the request. */
 static bool load_poll(request_t *request, const char *app_name, int poll_number)
 {
+    errno = 0;
     char *manifest = app_store_read_manifest(STORAGE_APPS_ROOT, app_name);
     bool  parsed = manifest != NULL && app_manifest_parse_poll(manifest, poll_number,
                                                                &request->poll) == APP_MANIFEST_OK;
@@ -367,11 +368,16 @@ static int prepare(request_t *request, const char *app_name, int method,
     };
     *client = esp_http_client_init(&config);
     if (*client == NULL) {
-        return HOST_FAILED_NOT_READY;
+        return HOST_FAILED_NO_MEMORY;
     }
     for (int i = 0; i < request->poll.header_count; i++) {
         const app_header_t *header = &request->poll.headers[i];
-        esp_http_client_set_header(*client, header->name, header->value);
+        esp_err_t result = esp_http_client_set_header(*client, header->name, header->value);
+        if (result != ESP_OK) {
+            esp_http_client_cleanup(*client);
+            *client = NULL;
+            return result == ESP_ERR_NO_MEM ? HOST_FAILED_NO_MEMORY : HOST_FAILED_NOT_READY;
+        }
     }
     return 0;
 }
@@ -736,7 +742,8 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         /* Most likely a setting that is not there yet: the application is
          * told, so that it can say what it is waiting for. */
         ESP_LOGI(TAG, "%s/%d: cannot be asked yet", app_name, number);
-        tell_failure(app_name, number, wants_values, preparation_failure);
+        tell_failure_to(app_name, number, wants_values, preparation_failure,
+                        !only_listed_hosts && preparation_failure == HOST_FAILED_NO_MEMORY);
         return;
     }
     int64_t   started_ms = now_ms();
@@ -807,10 +814,10 @@ static void ask_network(request_t *request, const char *app_name, int number, in
         if (retry_after > 0) {
             s_host->retry_after(retry_after);
         }
-        request->response.length = esp_http_client_is_chunked_response(client)
-                                       ? -1
-                                       : (int32_t)esp_http_client_get_content_length(client);
-        wants_values = wants_values && answer_format(request->poll.response_format,&request->headers,&request->response)==HOST_FORMAT_JSON;
+        int64_t content_length = esp_http_client_get_content_length(client);
+        request->response.length = esp_http_client_is_chunked_response(client) ||
+                                   content_length < 0 || content_length > INT32_MAX
+                                       ? -1 : (int32_t)content_length;
         if (method == HOST_HTTP_HEAD) {
             request->headers.head_response=true;
             /* There is no body to wait for: the headers are the answer. */
@@ -841,14 +848,9 @@ static void ask_network(request_t *request, const char *app_name, int number, in
  * why, and one that is not is left asleep - there is nothing new. */
 void poller_net_poll_not_made(const char *app_name, int poll_number, int why)
 {
-    request_t *request = calloc(1, sizeof *request);
-    if (request == NULL) {
-        return;
-    }
-    if (load_poll(request, app_name, poll_number)) {
-        tell_failure_to(app_name, poll_number, request->poll.pick_count > 0, why, true);
-    }
-    free(request);
+    app_delivery_t delivery = { .kind = APP_DELIVERY_POLL_FAILED, .request = poll_number,
+                                .http_status = why, .only_on_screen = true };
+    hand_over(app_name, &delivery);
 }
 
 /* Item number `item` of a list setting, and how many there are. */
@@ -882,6 +884,7 @@ int poller_net_poll(const char *app_name, int poll_number, int item, int *method
     request_t *request = calloc(1, sizeof *request);
     if (request == NULL) {
         ESP_LOGW(TAG, "%s/%d: no memory for the request", app_name, poll_number);
+        poller_net_poll_not_made(app_name, poll_number, HOST_FAILED_NO_MEMORY);
         return 0;
     }
     int items = 0;
@@ -901,7 +904,7 @@ int poller_net_poll(const char *app_name, int poll_number, int item, int *method
                 memmove(request->item, value, strlen(value) + 1);
             }
         }
-        /* An empty list leaves the key without a value: "not ready". */
+        /* An empty list expands its stored value normally, without an item override. */
         s_item = items > 0 ? item : -1;
         if (items == 0 && request->poll.each_key[0] != '\0') {
             request->poll.each_key[0] = '\0';
@@ -910,6 +913,9 @@ int poller_net_poll(const char *app_name, int poll_number, int item, int *method
         perform(request, app_name, poll_number, *method, NULL, 0, false);
         *network_failed = request->network_failed;
         s_item = -1;
+    } else {
+        poller_net_poll_not_made(app_name, poll_number,
+                                 errno == ENOMEM ? HOST_FAILED_NO_MEMORY : HOST_FAILED_NOT_READY);
     }
     free(request);
     return items;
@@ -920,7 +926,7 @@ void poller_net_request(const char *app_name, const poller_ask_t *ask)
     request_t *request = calloc(1, sizeof *request);
     if (request == NULL) {
         ESP_LOGW(TAG, "%s/%d: no memory for the request", app_name, ask->number);
-        tell_failure(app_name, ask->number, false, HOST_FAILED_NO_ANSWER);
+        tell_failure(app_name, ask->number, false, HOST_FAILED_NO_MEMORY);
         return;
     }
     /* A request is a poll nobody scheduled: the same URL and headers. */
