@@ -1,0 +1,58 @@
+{
+  "name": "stress",
+  "title": "Stress",
+  "author": "Bench",
+  "description": "Bench load generator.",
+  "version": "0.1.0",
+  "abi": 3,
+  "format": "raw",
+  "fullscreen": false,
+  "writes_files": true,
+  "hosts": [
+    "{{server}}"
+  ],
+  "intents": [
+    "started"
+  ],
+  "polls": [
+    {
+      "url": "{{server}}/pick",
+      "every": 10,
+      "format": "json",
+      "pick": [
+        "a.b",
+        "items[*].x",
+        "items[*].y",
+        "deep"
+      ]
+    },
+    {
+      "url": "{{server}}/doc",
+      "every": 10,
+      "format": "json"
+    },
+    {
+      "url": "{{server}}/xml",
+      "every": 10,
+      "format": "xml"
+    },
+    {
+      "url": "{{server}}/raw",
+      "every": 10,
+      "format": "raw"
+    }
+  ],
+  "settings": [
+    {
+      "key": "server",
+      "type": "url",
+      "title": "Server"
+    },
+    {
+      "key": "mode",
+      "type": "text",
+      "title": "Mode",
+      "default": "idle"
+    }
+  ]
+}

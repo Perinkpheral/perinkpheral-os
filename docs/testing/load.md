@@ -3,9 +3,130 @@
 Run load testing after [endurance testing](stability.md) has passed on the same image.
 The scenarios measure resource limits, responsiveness and recovery under sustained load.
 
-Nothing here is automated yet: `tools/cli` has no workload runner. The feature freeze
-covers the firmware, not test tools; a runner may be added. The short stress run of
-2026-11-27 is recorded in [stress-2026-11-27.md](stress-2026-11-27.md).
+`tools/perinkpheral stress-run` implements the short A-G stress ramps below.
+The feature freeze covers firmware features, not test tools. The L1-L10 duration
+and qualification plan remains separate; stress-run does not claim to complete it.
+The prototype run is recorded in [stress-2026-11-27.md](stress-2026-11-27.md).
+
+## Manual stress runner
+
+```sh
+tools/perinkpheral stress-run --out <empty-directory> --host <device> \
+    --bench <computer-LAN-address> --axes a,b,c,d,e,f,g --serial <port> --quick
+```
+
+`--host` defaults to `PERINKPHERAL_HOST`. The other options are optional. Without
+`--bench`, exactly one LAN IPv4 address must be available. The hostile server binds
+that address on an automatically selected port; the device must be able to reach it.
+Java 21 is required. C-F build their bench packages with wasi-sdk, through the same
+builder as `run`. B generates a Latin glyph pack locally with a separate bench name.
+No packages or glyph packs are downloaded by the computer.
+
+| Axis | Quick | Full |
+|---|---|---|
+| A: web server | 4 and 12 parallel GETs, 2 screenshots, 4 slow clients, 6 idle sockets; one client per oversized header, URI and body case | GETs 4/8/12/16/24/32/48/64; screenshots 1/2/4/6/8/12; slow clients 4/8/12/16/24; idle sockets 6/12/16/24/32; malformed clients 1/4/8, declared 1 GB bodies 1/4 |
+| B: host memory | Two 5 s levels: catalog/install/glyph/page workers 1/1/1/2 and 2/2/2/4 | Seven 150 s levels: each heavy operation alone, 1/1/1/0, 2/2/2/2, 4/4/4/8, 8/8/8/16 |
+| C: hostile polls | Eight cases: pick oversized/nesting/lying length; document oversized/endless; XML 65 attributes; raw 5 MB/endless; 1.5 s hold after observed request | All 51 cases; ordinary holds 30 s, trickle/stall 70 s, endless 90 s, 4/5 MB streams 120 s; document abandonment and long-BACK stream release timing |
+| D: application faults | All 12 modes/cases, 1.5 s observation each | Same cases, 60 s each: queue refill, stalled queue, file/KV quota, 1 ms timers/redraw, recursion, bad pointer, endless handler/data handler, 62.2 KB memory (builder report: 8.0 KB stack and 54.2 KB data) |
+| E: navigation | Open, UP/DOWN and mixed actions; gaps 200/0 ms, 1.5 s per level | Same actions; gaps 2000/1000/500/200/50/0 ms, 120 s per level; fixed seed |
+| F: storage | Up to three approximately 42 KB modules, remaining application slots, or the first confirmed storage refusal | Modules until confirmed storage refusal or the remaining slots of the 24-entry table; reload and open after each successful upload |
+| G: clock/restarts | +1 day, -1 day, 2099; two single restarts, two concurrent, one during catalog read if reachable | +1 day, -1 day, +1 year, 2099, 2026, +5 hours, current time; eight single restarts, two concurrent, one during catalog read |
+
+Quick mode reduces loads and observation periods; it usually takes a few minutes.
+Device scheduling, request timeouts, package reloads and recovery can extend it.
+A, B and G work on release firmware. C-F are skipped with a diagnostic when
+`dev_tools` is absent or false. They also require a captured, restorable remembered
+application or `--allow-remembered-change`. A step records status before and after,
+responses, elapsed time and console fault lines. Each axis stops at its first failure; remaining
+selected axes continue. Readiness requires status and the page to answer within
+three minutes. Refused connections and HTTP refusals during A are load observations.
+Memory/busy refusals during B are observations; HTTP 500, new failed allocations,
+new panic records, unexpected restarts and console faults fail the axis. Requested
+restarts require software reset reason 3 and a changed `X-Log-Boot` from `/api/log`.
+Status and console checks also cover the
+gaps between steps and cleanup; uptime must advance with elapsed monotonic time
+(with two seconds of slack). The panic comparison ignores its starts-since counter,
+but that counter must rise across a requested restart.
+
+B uses only the device's own catalog source 0. If unreachable, catalog/install work
+is skipped and glyph/page work proceeds. Reinstalls use an initially absent, small,
+non-system two-file catalog package; installed applications and retained stores are
+excluded. The install part is skipped if no such package or application slot is
+available, any retained stores exist, or the remembered application cannot be
+restored and `--allow-remembered-change` is absent. Catalog, glyph and page work continues.
+Application handlers may write KV and evict retained stores.
+C and D are skipped when retained stores exist because configuration also writes KV.
+C-F are skipped when the retained-store list has all 16 entries and may omit protected
+names. Every temporary upload applies this guard. Installed applications keep
+their existing polls and settings. No TLS endpoints or credentials
+are created. Glyph uploads use `stressbench`, preserving installed packs; that part
+is skipped if its name is present, spare glyph space is insufficient, or the 12-face
+table cannot hold another pack. The current API omits face counts, so existing packs
+are conservatively treated as potentially filling that table. Pack names and sizes
+are recorded at the start and checked after cleanup. Full C includes a document of
+exactly HOST_DOCUMENT_MAX (12,288 bytes) and the first byte over that limit.
+Its connection-release checks require the bench server to observe the tested
+connection closing within 120 seconds, below the streamed response's 300-second
+timeout. The next ordinary poll is not part of this check. E opens the bench
+application before each UP/DOWN press. Mixed actions only open and press UP/DOWN
+inside that application. Sibling switching is covered by the firmware's host tests,
+not by stress-run: the input queue can drop an injected DOWN while its HTTP route
+returns 200. The runner sends no BACK-held chords or release retries.
+F accepts the firmware's storage-refusal responses, including HTTP 500, only when
+mounted-filesystem usage confirms insufficient free space for the module. Other
+upload failures fail the axis.
+
+The runner never calls factory reset or Wi-Fi routes and never injects OK. Settings
+and focus activate the bench application's fault modes. It protects installed names
+and retained application stores, removes every temporary package with `forget=1`,
+removes its glyph pack, restores the current clock and original `time_auto` value,
+and compares the installed application list, versions, exposed settings, glyph packs
+and device settings after cleanup. Clock restoration runs first. Each cleanup has a
+five-minute overall deadline, including requests; Ctrl-C shares the remaining cleanup
+budget and the shutdown hook waits at most that budget plus 15 seconds. Every normal
+request has an overall deadline covering upload and response reads; cancellation
+closes its connection. Recording failures fail the run and do not stop cleanup.
+A catalog install that outlives its request is allowed up to three minutes to settle
+before removal; cleanup then checks that the name stays absent for five seconds.
+B settles and removes its temporary installation before restoring the remembered
+application and starting the next axis. The original
+manual clock value is not preserved. A partial
+development upload may require completing a small package and restarting before the
+public removal route can remove it. Cleanup runs after failures and Ctrl-C; a device
+that remains unreachable can prevent it. Unfinished cleanup is reported as failure
+with the inventory retained for manual recovery. SIGKILL and power loss cannot run
+process cleanup.
+
+Outputs are `steps.jsonl`, optional `serial.log`, `cleanup.json`, `initial-status.json`,
+`initial-screen.bmp` and `report.md`. The initial screen is the last frame shown by
+the panel, read from `/api/screen` before mutations.
+Use a new empty output directory per run; keep it private because it contains device
+and application settings. The exit code is 1 for an axis failure, interruption or
+cleanup error, otherwise 0. Skipped coverage is listed in the report. Console capture
+configures the supplied tty with `stty -f/-F <port> raw -echo clocal`, before capture
+and while holding it open, on every reopen. If configuration fails, capture stops
+and the report says "console not captured". An open with no bytes after ten seconds
+is reported the same way. The runner never writes bytes to the port or explicitly
+sets modem-control lines; opening and closing a tty can change DTR/RTS. It reopens
+that path after disconnection. If enumeration changes its name, restart the
+run with the new port. Without `--serial`, console-only faults cannot be detected.
+
+Development open records the selected installed application as the remembered
+application without restarting. The runner captures `last_app`, or `current_app`
+when available, from initial status and accepts only an installed name. Cleanup
+reopens that application after removing bench packages. Current firmware exposes
+neither field, so C-F and B's install part are skipped by default. A menu frame or
+an application bitmap alone does not identify the remembered name.
+`--allow-remembered-change` permits these workloads when restoration is unavailable;
+the report records that the remembered application may change and the owner must
+open their application once to select it for subsequent boots. The initial screen
+and status are recorded before mutations.
+G's restarts re-arm automatic application updates when `app_auto_update` is on;
+an update may change an installed
+version and fail the final comparison.
+
+These ramps do not qualify L1-L10, two-root TLS, controlled network outages, physical
+buttons, power loss, panel behavior or long-term stability. No firmware is flashed.
 
 ## Builds
 

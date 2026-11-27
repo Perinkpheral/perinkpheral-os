@@ -196,6 +196,28 @@ development build. Status, log and firmware OTA also work in release builds.
   the new API. Catalog applications are installed from the page.
   `status` prints device status; `log` prints device logs.
 
+Manual stress ramps on a bench device:
+
+```bash
+tools/perinkpheral stress-run --out <empty-directory> --host <device> \
+    --bench <computer-LAN-address> --axes a,b,c,d,e,f,g --serial <port> --quick
+```
+
+`--host` defaults to `PERINKPHERAL_HOST`. `--bench` is inferred only with one
+unambiguous LAN address. `--axes`, `--serial` and `--quick` are optional. A, B and G
+work on release builds; C-F require development tools and wasi-sdk. C-F and B's
+install part require a captured, restorable remembered application or
+`--allow-remembered-change`; current firmware does not expose the remembered name.
+The runner owns its hostile HTTP server and builds `tools/stress/apps` with the application builder.
+It records `steps.jsonl`, optional `serial.log`, a cleanup inventory and `report.md`;
+an axis failure, interruption or cleanup error exits 1. Ctrl-C waits for cleanup.
+It never resets to defaults, changes Wi-Fi or injects OK. It restores `time_auto`,
+removes temporary applications with `forget=1` and removes its separate glyph pack.
+Existing application names and retained stores are protected. Source 0 is read
+through the device; unavailable catalog installs are skipped. No GitHub access from
+the computer is required. See [load testing](docs/testing/load.md) for the ramps
+and qualification limits. Run directories contain device settings; keep them private.
+
 Verify a change on the real device this way, not only in the preview.
 With no network, `tools/perinkpheral usb $PORT --keys 3,2 --out
 shot.png` does presses and the frame over the USB console (`1`-`4` a

@@ -16,6 +16,7 @@ import dev.perinkpheral.core.catalog.Publisher
 import dev.perinkpheral.core.check.AppCheck
 import dev.perinkpheral.core.device.Bmp
 import dev.perinkpheral.core.device.DeviceClient
+import dev.perinkpheral.core.device.StressRun
 import dev.perinkpheral.core.device.Endurance
 import dev.perinkpheral.core.device.LogFollower
 import dev.perinkpheral.core.device.UsbConsole
@@ -95,6 +96,9 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
     perinkpheral status                       what the device is and how it is doing
     perinkpheral soak --out <dir> --image <id> [--hours 72]
                                               observe a release image; logs, status and gaps, no device changes
+    perinkpheral stress-run --out <dir> [--host <device>] [--bench <LAN address>]
+                     [--axes a,b,c,d,e,f,g] [--serial <port>] [--quick] [--allow-remembered-change]
+                                              manual stress ramps A-G; C-F require development tools
     perinkpheral log [--follow] [--app]       its log; --app: only the lines of applications
     perinkpheral shot [out.png]               the frame its panel shows
     perinkpheral press 3 3 2L [--shot f.png]  buttons: 1-4 a short press, 1L-4L a long one
@@ -242,7 +246,7 @@ private fun preinstalled(arguments: Arguments) {
 }
 
 private fun run(raw: Array<String>): Int {
-    val arguments = Arguments(raw, setOf("follow", "app", "apps", "clock", "update", "check", "unfrozen"))
+    val arguments = Arguments(raw, setOf("follow", "app", "apps", "clock", "update", "check", "unfrozen", "quick"))
     when (arguments.words.firstOrNull()) {
         "build" -> {
             builder().build(File(arguments.word(1, "the application's folder")),
@@ -371,6 +375,24 @@ private fun run(raw: Array<String>): Int {
         "soak" -> Endurance(device(arguments), File(arguments.option("out") ?: fail("--out is required")),
             arguments.option("image") ?: fail("--image is required")).run(
                 (arguments.option("hours") ?: "72").toDouble())
+        "stress-run" -> {
+            val client = device(arguments)
+            val output = File(arguments.option("out") ?: fail("--out is required")).absoluteFile
+            val axes = (arguments.option("axes") ?: "a,b,c,d,e,f,g").lowercase().split(',').map {
+                if (it.length != 1 || it[0] !in 'a'..'g') fail("--axes requires letters a,b,c,d,e,f,g")
+                it[0]
+            }
+            return StressRun(client, output, StressRun.Options(arguments.option("bench"), axes,
+                arguments.option("serial"), arguments.has("quick"), arguments.has("allow-remembered-change")), build = { kind, out ->
+                builder().build(File(root(), "tools/stress/apps/$kind"), out)
+            }, glyphs = {
+                val scratch = java.nio.file.Files.createTempDirectory("stress-glyphs").toFile()
+                try {
+                    GlyphPacks.make(root(), scratch, null)
+                    File(scratch, "latin.glyphs").readBytes()
+                } finally { scratch.deleteRecursively() }
+            }).run()
+        }
         "log" -> {
             val log = LogFollower(device(arguments))
             val isFollowing = arguments.has("follow")

@@ -1250,10 +1250,122 @@ static void test_builder_memory(const char *path, int32_t data_bytes)
     free(bytes);
 }
 
+static int stress_queued;
+static int stress_attempts;
+static int32_t stress_http_send(const char *app_name, const app_request_t *request)
+{
+    CHECK_STR(app_name, "stress");
+    CHECK_STR(request->url, "http://bench/q");
+    CHECK(request->method == HOST_HTTP_POST);
+    CHECK(request->tag >= HOST_REQUEST_FIRST && request->tag <= HOST_REQUEST_LAST);
+    CHECK(request->header_count == 1);
+    CHECK_STR(request->headers[0].name, "X-A");
+    CHECK_STR(request->headers[0].value, "1");
+    CHECK(request->body_length == HOST_HTTP_BODY_MAX);
+    stress_attempts++;
+    if (stress_queued == HOST_HTTP_PENDING_MAX) return HOST_ERR_NO_SPACE;
+    stress_queued++;
+    return HOST_OK;
+}
+
+static void check_stress_counters(app_t *app, const char *counters)
+{
+    enum { WIDTH = 400, HEIGHT = 260 };
+    uint8_t actual[WIDTH / 8 * HEIGHT], expected[WIDTH / 8 * HEIGHT];
+    gfx_t frame, reference;
+    gfx_init(&frame, actual, WIDTH, HEIGHT);
+    gfx_init(&reference, expected, WIDTH, HEIGHT);
+    gfx_clear(&frame, false);
+    gfx_clear(&reference, false);
+    app_draw(app, &frame);
+    const gfx_font_t *font = gfx_font(GFX_FONT_SMALL);
+    int row_y = HOST_UI_MARGIN + 5 * gfx_font_height(gfx_font(GFX_FONT_TEXT));
+    CHECK(HOST_UI_MARGIN + gfx_text_font_width(font, counters) <= WIDTH - HOST_UI_MARGIN);
+    CHECK(row_y + gfx_font_height(font) <= HEIGHT);
+    gfx_text_font(&reference, HOST_UI_MARGIN, row_y + gfx_font_ascent(font), font, counters, true);
+    CHECK(memcmp(actual + row_y * WIDTH / 8, expected + row_y * WIDTH / 8,
+                 (size_t)gfx_font_height(font) * WIDTH / 8) == 0);
+    CHECK(!app_has_stopped(app));
+}
+
+static void test_stress_package(const char *path)
+{
+    FILE *module = fopen(path, "rb");
+    CHECK(module != NULL);
+    if (module == NULL) return;
+    CHECK(fseek(module, 0, SEEK_END) == 0);
+    long size = ftell(module);
+    CHECK(size > 0);
+    rewind(module);
+    uint8_t *bytes = size > 0 ? malloc((size_t)size) : NULL;
+    CHECK(bytes != NULL);
+    if (bytes == NULL) { fclose(module); return; }
+    CHECK(fread(bytes, 1, (size_t)size, module) == (size_t)size);
+    fclose(module);
+    app_services_t services = SERVICES;
+    services.http_send = stress_http_send;
+    const char *modes[] = { "loop", "recurse", "http", "arena" };
+    for (size_t index = 0; index < sizeof modes / sizeof modes[0]; index++) {
+        const char *mode = modes[index];
+        memset(kv_slots, 0, sizeof kv_slots);
+        CHECK(fake_kv_set("stress", "mode", mode, (int32_t)strlen(mode)) == HOST_OK);
+        CHECK(fake_kv_set("stress", "server", "http://bench", 12) == HOST_OK);
+        clock_runs = false;
+        clock_ms = FAKE_UPTIME_MS;
+        clock_step_ms = 1;
+        app_t *app = NULL;
+        CHECK(app_load("stress", HOST_API_VERSION, bytes, (size_t)size, APP_GRANT_FILES,
+                       &services, &app) == APP_OK);
+        if (app == NULL) continue;
+        CHECK(!app_has_stopped(app));
+        stress_queued = stress_attempts = 0;
+        clock_runs = true;
+        app_focus(app);
+        clock_runs = false;
+        if (strcmp(mode, "loop") == 0) {
+            CHECK(app_has_stopped(app));
+            CHECK_STR(app_stop_reason(app), "it ran too long");
+        } else if (strcmp(mode, "recurse") == 0) {
+            CHECK(app_has_stopped(app));
+            CHECK(strstr(app_stop_reason(app), "stack") != NULL);
+        } else if (strcmp(mode, "http") == 0) {
+            CHECK(stress_queued == HOST_HTTP_PENDING_MAX);
+            CHECK(stress_attempts == HOST_HTTP_PENDING_MAX + 1);
+            check_stress_counters(app, "ticks 0 requests 17 refused 1");
+            app_data(app, HOST_REQUEST_FIRST, NULL, 0, HOST_DATA_FIRST, 200);
+            CHECK(stress_attempts == HOST_HTTP_PENDING_MAX + 1);
+            stress_queued--;
+            app_data(app, HOST_REQUEST_FIRST, NULL, 0, HOST_DATA_LAST, 200);
+            CHECK(stress_queued == HOST_HTTP_PENDING_MAX);
+            CHECK(stress_attempts == HOST_HTTP_PENDING_MAX + 3);
+            check_stress_counters(app, "ticks 0 requests 19 refused 2");
+            stress_queued--;
+            app_data(app, HOST_REQUEST_FIRST, NULL, 0, HOST_DATA_FAILED, HOST_FAILED_NO_ANSWER);
+            CHECK(stress_queued == HOST_HTTP_PENDING_MAX);
+            CHECK(stress_attempts == HOST_HTTP_PENDING_MAX + 5);
+            check_stress_counters(app, "ticks 0 requests 21 refused 3");
+        } else {
+            check_stress_counters(app, "ticks 0 requests 0 refused 0");
+            app_settings_changed(app);
+            check_stress_counters(app, "ticks 0 requests 0 refused 1");
+            app_settings_changed(app);
+            check_stress_counters(app, "ticks 0 requests 0 refused 2");
+        }
+        CHECK(stress_attempts == 0 || strcmp(mode, "http") == 0);
+        app_unload(app);
+    }
+    free(bytes);
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1], "--builder-memory") == 0) {
         test_builder_memory(argv[2], (int32_t)strtol(argv[3], NULL, 10));
+        REPORT();
+    }
+    if (argc == 3) {
+        test_stress_package(argv[1]);
+        test_stress_package(argv[2]);
         REPORT();
     }
     CHECK(argc == 1);

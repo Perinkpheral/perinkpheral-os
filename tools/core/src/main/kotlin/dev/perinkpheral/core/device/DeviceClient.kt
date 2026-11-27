@@ -122,27 +122,33 @@ class DeviceClient(val host: String) {
     /** An answer as it came: for whoever passes it on. */
     class Answer(val status: Int, val body: ByteArray, val headers: Map<String, String>)
 
-    /** Asks once and gives back whatever the device answered, a refusal included. */
-    fun raw(path: String, method: String = "GET", timeoutMs: Int = 10_000): Answer {
+    /** Asks once with an overall deadline. Interruption closes the in-flight connection. */
+    fun raw(path: String, method: String = "GET", timeoutMs: Int = 10_000,
+            body: ByteArray? = null, contentType: String = "application/json"): Answer {
         require(timeoutMs > 0) { "timeout must be positive" }
-        val connection = URI.create(base + path).toURL().openConnection() as HttpURLConnection
+        val publisher = if (body == null) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofByteArray(body)
+        val request = HttpRequest.newBuilder(URI.create(base + path))
+            .timeout(Duration.ofMillis(timeoutMs.toLong())).header("Content-Type", contentType)
+            .method(method, publisher).build()
+        val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
+            .version(HttpClient.Version.HTTP_1_1).build()
+        val pending = http.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
         try {
-            connection.requestMethod = method
-            connection.connectTimeout = 3_000
-            connection.readTimeout = timeoutMs
-            connection.setRequestProperty("Connection", "close")
-            if (method != "GET") {
-                connection.doOutput = true
-                connection.setFixedLengthStreamingMode(0)
-                connection.outputStream.close()
-            }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.use { it.readBytes() } ?: ByteArray(0)
-            val headers = connection.headerFields.filterKeys { it != null }.mapValues { it.value.firstOrNull().orEmpty() }
-            return Answer(code, body, headers)
+            val response = try { pending.get(timeoutMs.toLong(), TimeUnit.MILLISECONDS) }
+                catch (error: TimeoutException) {
+                    throw java.net.SocketTimeoutException("$method $path: request deadline expired").apply { initCause(error) }
+                } catch (error: ExecutionException) {
+                    val cause = error.cause
+                    if (cause is java.net.http.HttpTimeoutException)
+                        throw java.net.SocketTimeoutException("$method $path: request deadline expired").apply { initCause(cause) }
+                    throw IOException("$method $path: ${cause?.message}", cause)
+                }
+            val headers = java.util.TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER)
+            response.headers().map().forEach { (name, values) -> headers[name] = values.firstOrNull().orEmpty() }
+            return Answer(response.statusCode(), response.body(), headers)
         } finally {
-            connection.disconnect()
+            pending.cancel(true)
+            http.shutdownNow()
         }
     }
 
