@@ -19,10 +19,8 @@ extern "C" {
  * already are. The host writes a module when an application is installed
  * and forgets it when one is removed; nothing else ever goes there. An
  * application's manifest, files and store are where they were.
- *
- * Until 2026-11-16 the partition was six slots of 52 KB, one an
- * application; a slot began at a sector, so what they hold is found the
- * same way. */
+ * Every header must carry a valid size/name check; unchecked records are
+ * not accepted. */
 #define APP_CODE_HEADER_BYTES 32 /* the mark, the module's size and name */
 
 /* Once, before anything asks. Without the partition - a device flashed

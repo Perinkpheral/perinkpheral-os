@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "app_manifest.h"
 #include "esp_partition.h"
 #include "tinytest.h"
 
@@ -23,6 +24,7 @@ static bool cuts_before_mark, is_cut;
  * all of them, and the size's (TEARS_SIZE) or the name's (TEARS_NAME) some. */
 enum { TEARS_NOTHING, TEARS_SIZE, TEARS_NAME };
 static int tears_first_erase;
+static bool tears_header_check;
 
 const esp_partition_t *esp_partition_find_first(int type, int subtype, const char *label)
 {
@@ -52,6 +54,10 @@ esp_err_t esp_partition_erase_range(const esp_partition_t *part, size_t offset, 
             words[1] |= 0x2000; /* two sectors claim four */
         } else {
             flash[8] |= 0x02;   /* "a" reads "c" */
+        }
+        if (tears_header_check) {
+            size_t check_offset = 2 * sizeof(uint32_t) + APP_NAME_MAX + 1;
+            memset(flash + check_offset, 0xff, sizeof(uint32_t));
         }
         is_cut = true;
         return ESP_FAIL;
@@ -141,6 +147,14 @@ bool events_call(events_call_fn run, void *argument)
     return true;
 }
 
+static void set_header_check(slot_header_t *header)
+{
+    uint32_t zeros = zero_bits(header);
+    for (int i = 0; i < CHECK_BYTES; i++) {
+        header->check[i] = (uint8_t)(zeros >> (8 * i));
+    }
+}
+
 static void seed_code(int sector)
 {
     memset(flash, 0xff, sizeof flash);
@@ -148,6 +162,7 @@ static void seed_code(int sector)
     header->magic = SLOT_MAGIC;
     header->size = 4;
     strcpy(header->name, "clock");
+    set_header_check(header);
     memcpy((uint8_t *)header + sizeof *header, "old!", 4);
     erases = 0;
     app_code_start();
@@ -219,6 +234,47 @@ static void test_private_compaction_file(const char *root)
     app_code_adopt(root);
     check_application_data(root, "runtime data!");
     CHECK(app_store_remove(root, "clock"));
+}
+
+static void test_erased_header_check(const char *root)
+{
+    memset(flash, 0xff, sizeof flash);
+    app_code_start();
+    char alpha[APP_STORE_PATH_MAX], beta[APP_STORE_PATH_MAX], module[APP_STORE_PATH_MAX];
+    snprintf(alpha, sizeof alpha, "%s/alpha", root);
+    snprintf(beta, sizeof beta, "%s/beta", root);
+    CHECK(mkdir(alpha, 0700) == 0);
+    snprintf(module, sizeof module, "%s/alpha/app.wasm", root);
+    uint8_t body[4100];
+    memset(body, 'a', sizeof body);
+    FILE *output = fopen(module, "wb");
+    CHECK(output != NULL && fwrite(body, 1, sizeof body, output) == sizeof body && fclose(output) == 0);
+    app_code_adopt(root);
+    CHECK(mkdir(beta, 0700) == 0);
+    snprintf(module, sizeof module, "%s/beta/app.wasm", root);
+    write_bytes(module, "beta");
+    app_code_adopt(root);
+    CHECK(rmdir(alpha) == 0);
+
+    /* Erasing the check as well must not turn a damaged header into an unchecked module. */
+    tears_first_erase = TEARS_SIZE;
+    tears_header_check = true;
+    app_code_adopt(root);
+    tears_first_erase = TEARS_NOTHING;
+    tears_header_check = is_cut = false;
+    CHECK(header_at(0)->magic == SLOT_MAGIC && header_at(0)->size > 3 * SECTOR_BYTES);
+    for (int i = 0; i < CHECK_BYTES; i++) {
+        CHECK(header_at(0)->check[i] == 0xff);
+    }
+    app_code_start();
+    size_t size;
+    const uint8_t *code = app_code_find(root, "beta", &size);
+    CHECK(code != NULL && size == 4 && memcmp(code, "beta", 4) == 0);
+    app_code_adopt(root);
+    code = app_code_find(root, "beta", &size);
+    CHECK(code != NULL && size == 4 && memcmp(code, "beta", 4) == 0);
+    CHECK(rmdir(beta) == 0);
+    app_code_adopt(root);
 }
 
 int main(void)
@@ -330,6 +386,7 @@ int main(void)
     memset(body, 'd', sizeof body);
     slot_header_t fake = { .magic = SLOT_MAGIC, .size = 4 };
     strcpy(fake.name, "clock");
+    set_header_check(&fake);
     size_t at_second = SECTOR_BYTES - sizeof(slot_header_t);
     memcpy(body + at_second, &fake, sizeof fake);
     memcpy(body + at_second + sizeof fake, "evil", 4);
@@ -423,6 +480,7 @@ int main(void)
     code = app_code_find(root, "c", &size);
     CHECK(code != NULL && size == 4 && memcmp(code, "cccc", 4) == 0);
     CHECK(rmdir(c) == 0);
+    test_erased_header_check(root);
     test_private_compaction_file(root);
     CHECK(rmdir(root) == 0);
     REPORT();

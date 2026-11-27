@@ -49,8 +49,7 @@ typedef struct {
     /* How many bits of the size and the name are 0, little-endian. Writing
      * only clears bits and erasing only sets them, so a write or an erase cut
      * short changes the count one way and the bits it counts the other: the
-     * size and the name of such a header are not believed. Modules written
-     * by an older firmware have it erased. */
+     * size and the name of such a header are not believed. */
     uint8_t  check[CHECK_BYTES];
     uint8_t  unused[APP_CODE_HEADER_BYTES - 2 * sizeof(uint32_t) - (APP_NAME_MAX + 1) - CHECK_BYTES];
 } slot_header_t;
@@ -118,9 +117,7 @@ static int piece_at(int sector)
     for (int i = CHECK_BYTES - 1; i >= 0; i--) {
         check = check << 8 | header->check[i];
     }
-    /* A marked module of an older firmware has no check. */
-    bool is_checked = check == zero_bits(header) ||
-                      (header->magic == SLOT_MAGIC && check == UINT32_MAX);
+    bool is_checked = check == zero_bits(header);
     if (!is_checked || header->size < 1 || header->size > MANIFEST_MODULE_MAX_BYTES ||
         sector + sectors_for(header->size) > s_sectors ||
         memchr(header->name, '\0', sizeof header->name) == NULL ||
@@ -236,9 +233,9 @@ size_t app_code_free_bytes(void)
  * read as the mark of another module once the sectors are free - a module
  * can carry bytes that look like one, and the scan looks at every sector.
  * The first sector goes last, so that its header covers the rest until
- * they are erased, whenever the power goes; its mark is cleared before, so
- * that a header that erase leaves half done, its size or name changed, is
- * no module's of an older firmware either and has to agree with its check. */
+ * they are erased, whenever the power goes. Its mark is cleared before the
+ * first-sector erase; any header left by an interrupted erase must still
+ * agree with its check. */
 static bool erase_run(int start, int sectors)
 {
     static const uint32_t CLEARED = 0;
