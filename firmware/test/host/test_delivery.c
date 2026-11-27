@@ -393,6 +393,40 @@ static void test_foreground_stream_interrupted_by_navigation(void)
     CHECK(calls == 2); /* a new request can fail before it has a FIRST */
 }
 
+/* The failure that ends an answer nobody took the rest of goes to the instance taking it and
+ * to no other: after the application list was reloaded mid-answer, it is not a new failure. */
+static void test_closing_failure_reaches_only_its_answer(void)
+{
+    for (int is_closing = 0; is_closing < 2; is_closing++) {
+        start_on(probe);
+        int calls = 0;
+        app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = 1, .http_status = 200,
+            .flags = HOST_DATA_FIRST, .loaded = count_delivery, .loaded_context = &calls };
+        CHECK(app_deliver(&state, &wm, probe, &piece, 0).owner == NULL && calls == 1);
+        state.answer_owner = NULL; /* what a reload of the application list does to the answer */
+        piece.flags = 0;
+        CHECK(app_deliver(&state, &wm, probe, &piece, 1).rest_unwanted && calls == 1);
+        app_delivery_t ending = { .kind = APP_DELIVERY_PIECE, .request = 1,
+            .http_status = HOST_FAILED_NO_ANSWER, .flags = HOST_DATA_FAILED,
+            .is_closing = is_closing, .loaded = count_delivery, .loaded_context = &calls };
+        app_deliver(&state, &wm, probe, &ending, 2);
+        CHECK(calls == (is_closing ? 1 : 2)); /* a failure of its own would be told */
+        CHECK(state.answer_owner == NULL && !wm.suspended);
+    }
+    /* To the instance still taking the answer it is the answer's end. */
+    start_on(&menu.scene);
+    int calls = 0;
+    app_delivery_t piece = { .kind = APP_DELIVERY_PIECE, .request = 1, .http_status = 200,
+        .flags = HOST_DATA_FIRST, .loaded = count_delivery, .loaded_context = &calls };
+    app_deliver(&state, &wm, probe, &piece, 0);
+    CHECK(calls == 1 && state.in_background == probe && wm.suspended);
+    app_delivery_t ending = { .kind = APP_DELIVERY_PIECE, .request = 1,
+        .http_status = HOST_FAILED_NO_ANSWER, .flags = HOST_DATA_FAILED, .is_closing = true,
+        .loaded = count_delivery, .loaded_context = &calls };
+    app_deliver(&state, &wm, probe, &ending, 1);
+    CHECK(calls == 2 && state.in_background == NULL && !wm.suspended && state.answer_owner == NULL);
+}
+
 static void test_stream_owner_cannot_load(void)
 {
     start_on(probe);
@@ -477,7 +511,7 @@ static void test_background_load_memory_failure(void)
             .flags = HOST_DATA_FIRST, .http_status = 200,
             .loaded = count_delivery, .loaded_context = &calls };
         app_abandoned_t abandoned = app_deliver(&state, &wm, probe, &piece, 0);
-        CHECK(abandoned.owner == probe && abandoned.request == 1);
+        CHECK(abandoned.owner == probe && abandoned.request == 1 && abandoned.rest_unwanted);
         CHECK(!refuse_module_memory && !wm.suspended && state.in_background == NULL);
         CHECK(calls == 0 && state.answer_owner == probe && state.answer_instance == 0);
         if (occupying != NULL) {
@@ -1081,6 +1115,7 @@ int main(void)
     test_on_the_screen();
     test_foreground_stream_interrupted_by_another_owner();
     test_foreground_stream_interrupted_by_navigation();
+    test_closing_failure_reaches_only_its_answer();
     test_stream_owner_cannot_load();
     test_background_load_memory_failure();
     test_failure_starts_a_different_answer();

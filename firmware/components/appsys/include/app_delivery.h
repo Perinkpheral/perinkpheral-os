@@ -52,6 +52,9 @@ typedef struct {
     /* Not worth loading an application for: it is given only to one that
      * is on the screen. News that there is nothing new. */
     bool only_on_screen;
+    /* PIECE: the failure that ends an answer nobody took the rest of. It
+     * goes only to the instance taking that answer, never starts one. */
+    bool is_closing;
     /* PIECE and VALUES: what else is known of the answer, or NULL */
     const struct host_answer_info *response;
     const struct answer_headers *headers; /* borrowed, never retained after the handler */

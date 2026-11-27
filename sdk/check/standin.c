@@ -2903,6 +2903,11 @@ static void deliver_piece(int request, const uint8_t *buffer, const uint8_t *sou
     bool done = standin_handlers.on_document &&
                 document_reader_feed(&doc_reader, doc_buffer, doc_capacity, request,
                                      selected_format(request), status, source, n, flags, head);
+    /* As on the device: a decided document is given before the rest of its answer when
+     * nothing else reads the answer. */
+    if (!done && standin_handlers.on_document && standin_handlers.on_data == NULL) {
+        done = document_reader_end_early(&doc_reader);
+    }
     if (done) {
         CALL(on_document, request, doc_reader.format, doc_reader.status, doc_reader.used);
     }

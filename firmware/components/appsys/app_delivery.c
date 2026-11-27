@@ -145,8 +145,8 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     /* Continuations belong to the instance that received FIRST. A failed
      * response may also start without FIRST, unless this stream was lost. */
     bool is_first_piece = delivery->kind != APP_DELIVERY_PIECE ||
-                          (delivery->flags & HOST_DATA_FIRST) != 0 ||
-                          ((delivery->flags & HOST_DATA_FAILED) != 0 &&
+                          ((delivery->flags & HOST_DATA_FIRST) != 0 && !delivery->is_closing) ||
+                          ((delivery->flags & HOST_DATA_FAILED) != 0 && !delivery->is_closing &&
                            !(state->answer_owner == owner && state->answer_request == delivery->request));
     if (!is_first_piece && (state->answer_owner != owner ||
                            state->answer_request != delivery->request || state->answer_instance == 0)) {
@@ -226,7 +226,8 @@ app_abandoned_t app_deliver(app_delivery_state_t *state, wm_t *wm, scene_t *owne
     abandoned.rest_unwanted = app == NULL || !call(app, delivery);
     if (app == NULL && app_scene_needs_memory(owner) &&
         (delivery->kind == APP_DELIVERY_PIECE || delivery->kind == APP_DELIVERY_VALUES)) {
-        abandoned = (app_abandoned_t){ .owner = owner, .request = delivery->request };
+        abandoned = (app_abandoned_t){ .owner = owner, .request = delivery->request,
+                                       .rest_unwanted = true };
     }
     note_piece(state, owner, delivery);
     if (delivery->kind == APP_DELIVERY_PIECE) {

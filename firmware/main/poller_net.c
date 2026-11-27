@@ -162,6 +162,18 @@ static bool hand_over_piece(const char *app_name, int request, int http_status,
     return hand_over(app_name, &delivery);
 }
 
+/* The end of an answer nobody takes the rest of: for the delivery's own bookkeeping, given
+ * only to the instance taking that answer - never to a new one as a failure of its own. */
+static void close_unwanted_answer(const char *app_name, int request, const host_answer_info_t *response,
+                                  const answer_headers_t *headers)
+{
+    app_delivery_t delivery = { .kind = APP_DELIVERY_PIECE, .request = request,
+                                .http_status = HOST_FAILED_NO_ANSWER, .response = response,
+                                .headers = headers, .flags = HOST_DATA_FAILED, .is_closing = true,
+                                .has_item = s_item >= 0, .item = s_item };
+    hand_over(app_name, &delivery);
+}
+
 /* The settings of an application are values in its own store; a poll's
  * {{key}} is one of them. */
 bool poller_net_setting_of(void *context, const char *key, char *value, size_t value_size)
@@ -498,12 +510,10 @@ static void fetch_pieces(request_t *request, esp_http_client_handle_t client,
         }
         if (!is_rest_wanted) {
             /* Nobody takes the rest: the instance that took the beginning is gone, or reads
-             * only a document that has failed already. The connection is the device's only
-             * one; the polls of every application wait for it. The failure ends the answer
-             * for the delivery's own bookkeeping; nobody is told of it. */
+             * only a document whose result is decided already. The connection is the device's
+             * only one; the polls of every application wait for it. */
             ESP_LOGI(TAG, "%s/%d: the rest of the answer is not wanted", app_name, poll_number);
-            hand_over_piece(app_name, poll_number, HOST_FAILED_NO_ANSWER, &request->response,
-                            &request->headers, NULL, 0, HOST_DATA_FAILED);
+            close_unwanted_answer(app_name, poll_number, &request->response, &request->headers);
             return;
         }
         flags = 0;

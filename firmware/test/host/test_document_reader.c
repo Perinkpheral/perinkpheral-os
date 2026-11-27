@@ -84,6 +84,10 @@ int main(void)
     CHECK(document_reader_feed(&r, buf, 4, 10, 1, HOST_FAILED_NO_NETWORK, NULL, 0,
                                HOST_DATA_FAILED, false));
     CHECK(r.status == HOST_FAILED_NO_NETWORK);
+    /* A refusal's status is its whole result: given at its first piece. */
+    CHECK(!document_reader_feed(&r, buf, 32, 12, 1, 404, json, 3, HOST_DATA_FIRST, false));
+    CHECK(document_reader_end_early(&r) && r.status == 404 && !r.used && !r.active);
+    CHECK(!document_reader_feed(&r, buf, 32, 12, 1, 404, json, 3, HOST_DATA_LAST, false));
     /* A document still being read is not ended. */
     CHECK(!document_reader_feed(&r, buf, 32, 11, 1, 200, json, 3, HOST_DATA_FIRST, false));
     CHECK(!document_reader_end_early(&r) && r.active);

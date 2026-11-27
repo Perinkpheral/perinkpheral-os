@@ -64,11 +64,13 @@ bool document_reader_feed(document_reader_t *r, uint8_t *target, int cap, int re
 
 bool document_reader_end_early(document_reader_t *r)
 {
-    if (!r->active || !r->error)
+    bool is_refusal = r->status < 200 || r->status >= 300;
+    if (!r->active || (!r->error && !is_refusal))
         return false;
     r->active = false;
     r->ended = true;
-    r->status = r->error;
+    if (r->error)
+        r->status = r->error;
     r->used = 0;
     return true;
 }

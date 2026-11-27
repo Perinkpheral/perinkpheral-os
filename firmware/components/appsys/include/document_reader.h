@@ -13,8 +13,9 @@ bool document_json_valid(const uint8_t *data, int length);
 bool document_reader_feed(document_reader_t *reader, uint8_t *target, int capacity, int request,
                           int format, int status, const uint8_t *piece, int length, int flags,
                           bool head);
-/* A document already failed - too large, no buffer - is failed now, before
- * the rest of the answer arrives: returns true when there is such a result
+/* A document whose result is decided - failed (too large, no buffer), or
+ * a refusal whose status is the whole result - is given now, before the
+ * rest of the answer arrives: returns true when there is such a result
  * to give. The pieces of the same answer that still come, its failure
  * among them, give no second result. */
 bool document_reader_end_early(document_reader_t *reader);
