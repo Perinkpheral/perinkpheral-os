@@ -126,7 +126,7 @@ void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t f
     char answer[24] = "untouched";
     int mask = xml_attrs(doc, used, 1, fields, 2, answer, sizeof answer);
     if (id == POST_BAD || id == GET_BAD || id == POLL_GET_BAD || id == POLL_POST_BAD) {
-        if (item == -2 && mask == -1 && app_text_equal(answer, "untouched"))
+        if (item == HOST_ERR_ARGUMENT && mask == HOST_ERR_ARGUMENT && app_text_equal(answer, "untouched"))
             pass(id);
         return;
     }

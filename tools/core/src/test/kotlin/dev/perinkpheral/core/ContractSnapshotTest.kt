@@ -7,7 +7,7 @@ import java.io.File
 import java.nio.file.Files
 
 object ContractSnapshotTest {
-    private const val ABI_3_RELEASE = "0.1.103"
+    private const val ABI_3_RELEASE = "0.1.104"
 
     @JvmStatic fun main(args: Array<String>) {
         val wasi = System.getenv("WASI_SDK_PATH")?.let(::File) ?: run {

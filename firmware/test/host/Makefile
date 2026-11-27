@@ -376,8 +376,9 @@ test_delivery: test_delivery.c tinytest.h $(MAIN)/host_apps.c build/document/app
 		-Dd_m3MaxLinearMemoryPages=1 -Dd_m3ApplicationArea -I$(COMP)/wasm3 $(QR_INCS) -o $@ test_delivery.c $(MAIN)/host_apps.c $(QR)/qrcodegen/qrcodegen.c $(APP_SRCS) $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c \
 		$(MAIN)/question_press.c $(MANIFEST_SRCS) $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(WORDS)/words.c $(GFX)/font_square.c $(WASM3_OBJS) $(HOST_TEST_LDFLAGS) -lm
 
+# GCC ASan retains the unused services table and its hardware callbacks.
 test_app_host_files: test_app_host_files.c tinytest.h $(MAIN)/app_host.c $(APPSTORE)/include/app_store.h
-	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -ffunction-sections -fdata-sections -D_DARWIN_C_SOURCE -Ipersistence_stubs -Iinstall_stubs -Imemory_stubs -Iroute_stubs -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_app_host_files.c $(HOST_TEST_LDFLAGS)
+	$(CC) $(CFLAGS) $(MANIFEST_FLAGS) -fno-sanitize=address -ffunction-sections -fdata-sections -D_DARWIN_C_SOURCE -Ipersistence_stubs -Iinstall_stubs -Imemory_stubs -Iroute_stubs -I$(APPCONF)/include -I$(NET)/include -I$(DEADLINES)/include -I$(GFX)/include -I$(UI)/include -I$(MAIN) -o $@ test_app_host_files.c $(HOST_TEST_LDFLAGS)
 
 test_app_store_faults: test_app_store_faults.c tinytest.h $(APPSTORE)/app_store.c $(APPSTORE)/include/app_store.h $(MANIFEST_SRCS)
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE $(MANIFEST_FLAGS) -o $@ test_app_store_faults.c $(MANIFEST_SRCS) -lm

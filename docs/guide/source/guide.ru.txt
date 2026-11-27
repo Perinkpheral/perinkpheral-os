@@ -2518,8 +2518,8 @@ Once. A new version does not inherit the alarms of the old one: set them here. P
 screen_request() returns void. Perinkpheral OS decides after background delivery ends, after the last piece for a streamed answer. It refuses within 30 s of a button press, over a question waiting for its answer, or within 30 s of the last granted focus request. A refused request is discarded, with no retry. A request in app_on_terminate() is too late for that decision.
 screen_request() возвращает void. Perinkpheral OS принимает решение после окончания фоновой доставки, после последней части потокового ответа. Отказывает в течение 30 с после нажатия кнопки, поверх вопроса, ожидающего ответа, или в течение 30 с после последнего удовлетворённого запроса экрана. Отклонённый запрос отбрасывается без повтора. Запрос в app_on_terminate() поступает слишком поздно для этого решения.
 
-These question and focus rules are included in the ABI 3 release floor, 0.1.103. No additional manifest minimum is needed for them.
-Эти правила вопросов и получения экрана входят в начальную публичную версию ABI 3, прошивку 0.1.103. Отдельный минимум в манифесте для них не нужен.
+These question and focus rules are included in the ABI 3 release floor, 0.1.104. No additional manifest minimum is needed for them.
+Эти правила вопросов и получения экрана входят в начальную публичную версию ABI 3, прошивку 0.1.104. Отдельный минимум в манифесте для них не нужен.
 
 Notifications
 Уведомления
@@ -3130,8 +3130,8 @@ Commands name the subject then the verb (<code>kv_get</code>, <code>gfx_draw_tex
 ABI 3 compatibility
 Совместимость ABI 3
 
-ABI 3 starts with the first public release, firmware 0.1.103. Packages built before that release have no compatibility guarantee and must be rebuilt. After release, changed signatures or meanings require a new ABI. HOST_SINCE_ stamps identify later additions; baseline entries need none. Firmware releases and ABI generations are independent. Missing exports remain optional.
-ABI 3 начинается с первого публичного выпуска, прошивки 0.1.103. Совместимость пакетов, собранных до этого выпуска, не гарантируется; их нужно пересобрать. После выпуска изменение сигнатуры или смысла требует нового ABI. Отметки HOST_SINCE_ обозначают позднейшие дополнения; исходным элементам они не нужны. Выпуски прошивки и поколения ABI независимы. Отсутствующие экспорты остаются необязательными.
+ABI 3 starts with the first public release, firmware 0.1.104. Packages built before that release have no compatibility guarantee and must be rebuilt. After release, changed signatures or meanings require a new ABI. HOST_SINCE_ stamps identify later additions; baseline entries need none. Firmware releases and ABI generations are independent. Missing exports remain optional.
+ABI 3 начинается с первого публичного выпуска, прошивки 0.1.104. Совместимость пакетов, собранных до этого выпуска, не гарантируется; их нужно пересобрать. После выпуска изменение сигнатуры или смысла требует нового ABI. Отметки HOST_SINCE_ обозначают позднейшие дополнения; исходным элементам они не нужны. Выпуски прошивки и поколения ABI независимы. Отсутствующие экспорты остаются необязательными.
 
 The supported set is {3}. The manifest ABI is retained through loading and checked before execution. The device page uses ABI membership and the firmware minimum together for Install, Update and Update all; /api/status reports supported_abis. The downloaded manifest is authoritative. Catalog publishing copies identity and compatibility metadata from the packaged manifest.
 Поддерживается множество {3}. ABI манифеста передаётся до загрузки и проверяется до выполнения кода. Страница устройства вместе проверяет принадлежность ABI и минимум прошивки для Install, Update и Update all; /api/status сообщает supported_abis. Окончательное решение принимается по загруженному манифесту. При публикации каталога данные об идентичности и совместимости берутся из упакованного манифеста.
@@ -4543,8 +4543,8 @@ Handled by Perinkpheral OS: opens the previous or next application in menu order
 Recognized translation codes
 Распознаваемые коды переводов
 
-The minimum firmware release. The build takes the maximum of the ABI 3 release floor (0.1.103), introduction stamps of used imports and exports, detected manifest features and an explicit minimum. All pre-release features are included in the floor. Later additions retain HOST_SINCE_ stamps; using a later capacity increase requires an explicit minimum. Older firmware refuses installation and startup with "Update Perinkpheral OS."
-Минимальная версия прошивки. Сборка берёт максимум из начальной публичной версии ABI 3 (0.1.103), отметок появления используемых импортов и экспортов, распознанных возможностей манифеста и явного минимума. Все возможности до первого выпуска входят в эту начальную версию. Позднейшие дополнения сохраняют отметки HOST_SINCE_; использование увеличенного позднее лимита требует явного минимума. Старая прошивка отклоняет установку и запуск с сообщением «Обновите Perinkpheral OS».
+The minimum firmware release. The build takes the maximum of the ABI 3 release floor (0.1.104), introduction stamps of used imports and exports, detected manifest features and an explicit minimum. All pre-release features are included in the floor. Later additions retain HOST_SINCE_ stamps; using a later capacity increase requires an explicit minimum. Older firmware refuses installation and startup with "Update Perinkpheral OS."
+Минимальная версия прошивки. Сборка берёт максимум из начальной публичной версии ABI 3 (0.1.104), отметок появления используемых импортов и экспортов, распознанных возможностей манифеста и явного минимума. Все возможности до первого выпуска входят в эту начальную версию. Позднейшие дополнения сохраняют отметки HOST_SINCE_; использование увеличенного позднее лимита требует явного минимума. Старая прошивка отклоняет установку и запуск с сообщением «Обновите Perinkpheral OS».
 
 Optional request method; defaults to GET. Only GET follows redirects, up to three times; another method delivers its redirect response without sending again. <code>pick</code> works with every method; HEAD delivers no response values.
 Необязательный метод запроса; по умолчанию GET. Только GET следует перенаправлениям, не более трёх раз; другой метод передаёт ответ с перенаправлением приложению без повторной отправки. <code>pick</code> работает с любым методом; HEAD передаёт ответ без значений.

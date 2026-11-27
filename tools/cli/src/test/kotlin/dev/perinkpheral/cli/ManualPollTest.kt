@@ -59,7 +59,7 @@ object ManualPollTest {
             val sdk = Sdk(root)
             AppBuilder(sdk, wasi) {}.build(app, packed)
             val manifest = Json.parse(File(packed, "manifest.json").readText()) as Map<*, *>
-            check(manifest["firmware"] == sdk.contract.string("HOST_SINCE_POLL_MANUAL"))
+            check(manifest["firmware"] == sdk.firmwareFirst)
             val state = File(scratch, "state")
             Applications.install(packed, "probe", state)
             val mocks = File(scratch, "mocks.json")

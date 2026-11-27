@@ -42,7 +42,7 @@ object PollManifestTest {
                 }
             }
             val manual = mapOf("url" to "https://example.test/manual", "manual" to true, "pick" to listOf("value"))
-            val manualMinimum = sdk.contract.string("HOST_SINCE_POLL_MANUAL")!!
+            val manualMinimum = sdk.firmwareFirst
             accepted(manual)
             accepted(get + ("manual" to true))
             accepted(get + ("manual" to false))
@@ -125,7 +125,7 @@ object PollManifestTest {
                 }
                 val floor = sdk.firmwareFor(emptyList()).first
                 check(builtMinimum(manual, floor) == manualMinimum)
-                check(buildLines.any { "for manual polls" in it })
+                check(buildLines.any { "for manual polls" in it } == (manualMinimum != floor))
                 check(builtMinimum(get + ("manual" to true)) == manualMinimum)
                 check(builtMinimum(get + ("manual" to false)) == floor)
                 check(builtMinimum(get) == floor)

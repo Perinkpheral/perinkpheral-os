@@ -247,7 +247,7 @@ internal fun readScenario(file: File): Map<String, Any?> {
     if ("language" in value && value["language"] !in listOf("en", "ru")) invalid("language")
     if ("font" in value && value["font"] !in listOf("departure", "jersey")) invalid("font")
     for (key in listOf("clock", "serial")) if (key in value && value[key] !is Boolean) invalid(key)
-    if ("at" in value && (value["at"] !is Long || (value["at"] as Long) < 0)) invalid("at")
+    if ("at" in value && value["at"] !is Long) invalid("at")
     if ("store" in value && (value["store"] !is Map<*, *> || (value["store"] as Map<*, *>).any {
             it.key !is String || (it.key as String).isEmpty() || it.value !is String
         })) invalid("store")

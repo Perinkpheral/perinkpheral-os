@@ -340,7 +340,7 @@ Code:
   Record every added call with `contract snapshot`: the check refuses an unrecorded one. Commands use subject
   then verb (`kv_get`, `gfx_draw_text`); queries name the subject and what
   is asked (`gfx_width`, `time_now`); events are `app_on_<what happened>`
-  (`app_on_load`, `app_on_picked`). ABI 3 requires firmware 0.1.30;
+  (`app_on_load`, `app_on_picked`). ABI 3 requires firmware 0.1.104;
   `HOST_SINCE_` stamps only additions after that floor. The contract snapshot
   is `sdk/abi/3.txt`; fixture hashes are separate, in `sdk/abi/3/fixtures.txt`.
 - The application is not trusted: `app.c` and the `app_api_*.c` check
