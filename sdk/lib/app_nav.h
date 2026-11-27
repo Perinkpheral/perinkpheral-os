@@ -2,9 +2,8 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 GrakovNe
  *
- * The screens of an application that has more than one, and the views it opens over them -
- * an event's page over a list. A recommendation, not a rule: an application that does not
- * use this keeps its buttons and its drawing to itself, as before.
+ * Optional helpers for application screens and nested views. Applications
+ * may implement their own navigation and drawing.
  *
  *     static app_nav_t nav = { .screens = 4 };
  *

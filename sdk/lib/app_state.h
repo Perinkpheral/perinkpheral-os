@@ -18,11 +18,12 @@
  * at least sizeof(int32_t) bytes; size must include its version field. */
 bool app_state_load(const char *key, void *state, int32_t size, int32_t version);
 
-/* Stores `size` bytes of `state` under `key`. One flash write: call it
- * when the state changed, in app_on_terminate() or at once for a value
- * that must survive a power loss. False when it was not stored - the
- * application's 2 KB are full, or the storage failed: what is lost is the
- * caller's to judge. */
+/* Stores `size` bytes of `state` under `key` with one kv_set() call.
+ * Save when the state changes, in app_on_terminate() or at once for a value
+ * that must survive a power loss. Returns true on HOST_OK and false
+ * whenever kv_set() fails, including invalid arguments, insufficient
+ * storage and storage errors. A failure may have changed storage; the
+ * caller must handle the failed save. */
 bool app_state_save(const char *key, const void *state, int32_t size);
 
 /* Removes the value stored under `key`; false when the storage failed. */

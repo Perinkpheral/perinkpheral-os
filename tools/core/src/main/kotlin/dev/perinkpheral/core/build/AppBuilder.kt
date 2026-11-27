@@ -134,7 +134,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
                     "number of $fileBlock-byte blocks - and an application " +
                     (if (writesFiles) "that writes files may have $filesLimit, those it writes included" else "may have $filesLimit"))
             }
-            report(wasm, module, filesBytes, filesLimit, memoryEnd, settingsStoreBytes(manifest), firmwareLine, firmware)
+            report(wasm, module, filesBytes, filesLimit, memoryEnd, settingsStoreBytes(manifest), firmwareLine)
         } catch (error: Exception) {
             // A module that fails a check, or a package that could not be written, is not left behind.
             wasm.delete()
@@ -343,7 +343,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
 
     /** What the build came to, against what the device has for it. */
     private fun report(wasm: File, module: Wasm, filesBytes: Long, filesLimit: Long, memoryEnd: Long,
-                       settingsBytes: Long, firmwareLine: String, firmware: String) {
+                       settingsBytes: Long, firmwareLine: String) {
         // Half to even, of the exact value.
         fun kb(count: Long) = java.math.BigDecimal(count / 1024.0).setScale(1, java.math.RoundingMode.HALF_EVEN)
             .toPlainString() + " KB"
@@ -368,10 +368,6 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             if (settingsBytes > sdk.storeMax) say("  warning: settings this long would not all fit the store")
         }
         say(firmwareLine)
-        if (running > PREVIOUS_INTERPRETER_ROOM_BYTES && versionNumber(firmware)!! < versionNumber(LARGER_ARENA_FIRMWARE)!!) {
-            say("  warning: estimated interpreter use exceeds 64 KB; if the application needs the larger arena, " +
-                "declare \"firmware\": \"$LARGER_ARENA_FIRMWARE\" (estimate is advisory, not peak use)")
-        }
         if (memory + running > BuildFlags.APP_AREA) say("  warning: this much memory and code may not fit when all of the code runs")
     }
 
@@ -403,8 +399,6 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         // for any application, and about four bytes for every byte of the code section.
         private const val INTERPRETER_BASE_BYTES = 11L * 1024
         private const val INTERPRETER_BYTES_PER_CODE_BYTE = 4L
-        private const val PREVIOUS_INTERPRETER_ROOM_BYTES = 64L * 1024
-        private const val LARGER_ARENA_FIRMWARE = "0.1.95"
         /** MAP_SCRATCH_BYTES of firmware/components/map/include/map.h. */
         const val MAP_WORKING_BYTES = 8128L
 

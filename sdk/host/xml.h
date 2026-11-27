@@ -10,8 +10,8 @@
 /* Each call validates the current document. Node numbers are zero-based
  * preorder ordinals, valid only for the same bytes. No pointers are retained.
  * One root, at most 12288 bytes, 256 elements, 16 levels and 64 attributes
- * per element. Duplicate names or unknown entities anywhere invalidate the
- * entire document. Names are ASCII:
+ * per element. Duplicate attribute names within an element, or unknown
+ * entities anywhere, invalidate the document. Names are ASCII:
  * a letter or underscore followed by letters, digits, underscores, dots,
  * colons or hyphens. The optional XML declaration, whitespace, opening and
  * closing tags and empty tags are supported. Text, DTDs and comments are

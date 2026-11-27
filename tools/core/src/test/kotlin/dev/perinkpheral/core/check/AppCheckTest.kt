@@ -458,6 +458,39 @@ object AppCheckTest {
 
         val scratch = Files.createTempDirectory("perinkpheral-app-check-test").toFile()
         try {
+            val certificateApp = File(scratch, "package-files/specimen")
+            specimen.copyRecursively(certificateApp)
+            check(File(certificateApp, "test/host.c").delete())
+            val certificateManifest = File(certificateApp, "manifest.json")
+            val certificateMetadata = Json.parse(certificateManifest.readText()) as Map<*, *>
+            certificateManifest.writeText(Json.write(certificateMetadata + mapOf(
+                "writes_files" to true, "certificates" to listOf("root.pem"))))
+            File(certificateApp, "files").mkdirs()
+            File(root, "firmware/test/mbedtls/fixtures/test-root.pem")
+                .copyTo(File(certificateApp, "files/root.pem"))
+            File(certificateApp, "test/package-files.c").writeText("""
+                /* SPDX-License-Identifier: MIT */
+                #include <assert.h>
+                #include <string.h>
+                #include "standin.h"
+                int main(void)
+                {
+                    standin_reset();
+                    char before[32], after[32];
+                    assert(file_read("root.pem", 8, 0, before, sizeof before) == sizeof before);
+                    assert(file_write("root.pem", 8, 0, "x", 1) == HOST_ERR_ARGUMENT);
+                    assert(file_write("root.pem", 8, 0, NULL, 0) == HOST_ERR_ARGUMENT);
+                    assert(file_write("manifest.ru", 11, 0, "x", 1) == HOST_ERR_ARGUMENT);
+                    assert(file_read("root.pem", 8, 0, after, sizeof after) == sizeof after);
+                    assert(memcmp(before, after, sizeof before) == 0);
+                }
+            """.trimIndent())
+            val certificateReport = checker.run(certificateApp, only = "logic")
+            check(certificateReport.failed.isEmpty()) {
+                certificateReport.lines.flatMap { it.details }.joinToString("\n")
+            }
+            check(certificateReport.lines.single().what == "logic package-files.c")
+
             // Actual capability delivery must carry mock headers in both delivery modes.
             val headersApp = File(scratch, "response-headers/specimen")
             specimen.copyRecursively(headersApp)

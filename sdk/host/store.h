@@ -56,8 +56,8 @@ HOST_IMPORT(kv_set, int32_t kv_set(const char *key, int32_t key_length, const vo
  * Writing wears the flash memory, like kv_set().
  * File name: 1-23 characters of a-z, 0-9, '.', '-' and '_'; the first
  * character is not a dot. Names ending in .new are reserved.
- * file_write() also refuses app.wasm, manifest.json, its translations
- * (manifest.<language>) and the files the manifest lists in "certificates".
+ * file_write() also refuses app.wasm, every name beginning "manifest.",
+ * and files listed in the manifest's "certificates" array.
  * A file supplied by an update replaces an existing file of the same
  * name, including one written by the application. At catalog
  * installation the writer quota counts the manifest too; runtime writes

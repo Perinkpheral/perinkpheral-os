@@ -73,11 +73,12 @@ HOST_IMPORT(ui_draw_list_row,
 /* Notice: a full-surface message in the style of Perinkpheral OS.
  *
  * Layout: two lines of large text on the left, a large icon on the right,
- * button labels at the bottom ("<ok> OK" at the left, "BACK <back>" at the
- * right). With `is_working`, three strokes replace the button labels.
+ * button labels at the bottom. With both buttons present, "<ok> OK" is
+ * left-aligned and "BACK <back>" is right-aligned. A single button is
+ * centered. With `is_working`, three strokes replace the button labels.
  * All texts are null-terminated. `first` is required; other empty texts
- * are not drawn. Without
- * button labels the notice takes the full height.
+ * are not drawn. The body uses the full height only when neither buttons
+ * nor working strokes are present.
  * A destructive question must ignore presses made before it was shown on
  * the panel. */
 typedef struct host_notice {
@@ -228,7 +229,8 @@ HOST_IMPORT(ui_draw_cell, int32_t ui_draw_cell(const host_cell_t *cell, const ui
  * with 1 is "21.5"); HOST_CHART_RANGE_RIGHT - the same captions at the
  * right, the series starting at the left edge; HOST_CHART_MARK_LAST - a
  * mark at the last value (LINE, AREA, STEPS).
- * Returns HOST_OK or HOST_ERR_ARGUMENT. */
+ * Returns HOST_OK, HOST_ERR_ARGUMENT, or HOST_ERR_NOT_DRAWING outside
+ * app_on_draw(). */
 #define HOST_CHART_LINE  0
 #define HOST_CHART_AREA  1
 #define HOST_CHART_BARS  2

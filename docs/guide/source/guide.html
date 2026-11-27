@@ -80,7 +80,7 @@
   <tr><td>Partial refresh</td><td class="n">0.46 - 0.7 s</td><td>Sends the rectangle covering the current and preceding changed areas. 0.6 - 0.7 s when the panel has been idle for more than 1.5 s and is woken first</td></tr>
   <tr><td>Full refresh</td><td class="n">Fast: 2.2 s; standard: 2.7 s</td><td>The panel flashes during a full refresh. The refresh_fast setting selects the fast waveform</td></tr>
   <tr><td>Full refresh interval</td><td class="n">disabled by default</td><td>Full refresh on screen changes, CLEAN requests and the cleaning 24 hours after the last full refresh. The user can enable a partial-refresh count</td></tr>
-  <tr><td>Refresh after a button press</td><td class="n">immediate</td><td></td></tr>
+  <tr><td>Refresh after a button press</td><td class="n">Immediate by default</td><td>Subject to the configured minimum button-refresh interval</td></tr>
   <tr><td>Refresh without a button press</td><td class="n">60 s normal data interval by default</td><td>Normal data refreshes may occur up to one second early. Button, SOON, CLEAN, NO_BLINK and urgent settings refreshes use their own policies. The panel manufacturer recommends 180 s for normal data refreshes</td></tr>
   <tr><td>Frame sequence rate</td><td class="n">about 1.5 frames/s</td><td><code>HOST_REDRAW_NO_BLINK</code>. Ghosting accumulates until the sequence ends</td></tr>
 </table>
@@ -102,7 +102,7 @@
   <tr><td>Module (<code>app.wasm</code>)</td><td class="n">max. 48 KB</td><td>Executed from flash</td></tr>
   <tr><td>Application area</td><td class="n">112 KB</td><td>Linear memory, plus about 11 KB base and 4 bytes per byte of executed code</td></tr>
   <tr><td>Executable code, all paths run</td><td class="n">about 22 KB</td><td>With 10 KB of linear memory; each 4 KB of data leaves 1 KB less. The build warns when the estimate is exceeded</td></tr>
-  <tr><td>Handler time limit</td><td class="n">3 s</td><td>On expiry the handler is stopped and the application terminated</td></tr>
+  <tr><td>Handler time limit</td><td class="n">3 s</td><td>Cooperative 3000 ms budget; exceeding it stops the instance at the next check. Native calls and scheduling delays can extend elapsed time</td></tr>
   <tr><td>Loaded instances</td><td class="n">1</td><td>Across all applications</td></tr>
   <tr><td>Floating point</td><td class="n">integer only</td><td>The build rejects a module with a float operation</td></tr>
   <tr><td>C library</td><td class="n"><code>sdk/lib</code></td><td>Strings, numbers, an arena allocator, the <code>memcpy</code> family. The standard C library is absent</td></tr>
@@ -169,7 +169,7 @@
 <table>
   <tr><th style="width:27%">Event</th><th style="width:33%">Instance</th><th>Handlers, in order</th></tr>
   <tr><td>The user opens the application</td><td>Loaded; stays while it has the screen</td><td class="c">app_on_load, app_on_focus, app_on_draw ... app_on_blur, app_on_terminate</td></tr>
-  <tr><td>A response, alarm, intent or settings change while on the screen</td><td>Same instance</td><td class="c">app_on_data / app_on_picked / app_on_alarm / app_on_intent / app_on_settings</td></tr>
+  <tr><td>A response, alarm, intent or settings change while on the screen</td><td>Same instance</td><td class="c">app_on_data / app_on_picked / app_on_document / app_on_alarm / app_on_intent / app_on_settings</td></tr>
   <tr><td>The same while off the screen</td><td>Loaded for the delivery, unloaded when it ends. Stream chunks share one instance. The current screen is suspended and restored</td><td class="c">app_on_load, the handler, app_on_terminate</td></tr>
   <tr><td>Installed, or replaced by a package with different module or manifest bytes</td><td>Once, on or off the screen</td><td class="c">app_on_installed / app_on_updated</td></tr>
   <tr><td><code>screen_request()</code> granted by Perinkpheral OS</td><td>Unloaded, then opened on top of the stack</td><td class="c">... app_on_terminate; app_on_load, app_on_focus, app_on_draw</td></tr>
@@ -179,11 +179,11 @@
 <h2 id="model-rules">Handler guarantees</h2>
 <ul>
   <li>Handlers are run one at a time, each to completion. Locking is unnecessary.</li>
-  <li>A handler is limited to 3 seconds. A handler that exceeds the limit, or traps (for example, on an invalid pointer), is stopped. The application is then terminated. A foreground failure shows an error screen; a background failure unloads the instance and restores the foreground. Perinkpheral OS is unaffected.</li>
+  <li>Handlers have a cooperative 3000 ms execution budget. Exceeding it stops the instance at the next check; native calls and scheduling delays can extend elapsed time. A trap (for example, on an invalid pointer) also stops the instance. A foreground failure shows an error screen; a background failure unloads the instance and restores the foreground. Perinkpheral OS is unaffected.</li>
   <li>Handlers return <code>void</code>. A redraw, the screen or an exit is obtained with a request. Requests are applied after the handler returns.</li>
   <li><code>app_on_load()</code> is called before any other handler of an instance.</li>
   <li>Button events are delivered in order. There are 16 event slots, four reserved for releases; new non-release events are refused once 12 events are queued. Pending timers with the same number are merged. The pieces of one response are delivered in order; a settings change or an alarm may be delivered between two of them.</li>
-  <li>Response delivery can be interrupted on or off the screen. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Only <code>app_on_terminate()</code> is called. A GET or HEAD poll cut off this way is repeated after one minute, or after its interval when that is shorter; other methods keep their normal pace. Saving the application's settings also stops a poll stream: the instance may stay loaded, with no call to end the stream, and the poll is fetched again at once.</li>
+  <li>Response delivery can be interrupted on or off the screen. A button press, screen switch, application-list reload or delivery to another application can unload the instance and drop the remaining pieces. Foreground unload calls <code>app_on_blur()</code> followed by <code>app_on_terminate()</code>; background unload calls only <code>app_on_terminate()</code>. Neither callback runs after the instance has faulted. A GET or HEAD poll cut off this way is repeated after one minute, or after its interval when that is shorter; other methods keep their normal pace. Saving the application's settings also stops a poll stream: the instance may stay loaded, with no call to end the stream, and the poll is requested again.</li>
 </ul>
 
 <h2 id="model-state">State</h2>
@@ -291,9 +291,9 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   <tr><td class="c">module</td><td>File size: code and initial data. Executed from flash</td><td>Move pictures and tables to <code>files/</code>. Use the kit instead of custom drawing</td></tr>
   <tr><td class="c">code</td><td>Code size and the estimated interpreter memory needed to run all of it. <b>The scarcest resource</b>: one byte of code uses four bytes of memory</td><td>See "Memory" in section 13</td></tr>
   <tr><td class="c">memory</td><td>Stack, static data, and the arena declared with <code>APP_ALLOC_ARENA()</code></td><td>Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. Call <code>app_alloc_release(mark)</code> when finished. Read files in parts; see app_alloc.h in section 23</td></tr>
-  <tr><td class="c">firmware</td><td>The oldest firmware the application runs on, and the Perinkpheral OS call that asks for it</td><td>-</td></tr>
+  <tr><td class="c">firmware</td><td>The minimum firmware version, with the determining import, export, manifest feature or explicit minimum when applicable</td><td>-</td></tr>
 </table>
-<p>The log reports two conditions of a running application, once per instance or per minute: a handler that runs longer than 400 ms (<code>slow handler: on_draw took 520 ms</code>), and more than 12 store writes in a minute. Each store write is a flash write: state is saved in <code>app_on_terminate()</code>.</p>
+<p>The runtime logs a handler taking 400 ms or longer once per instance (<code>slow handler: on_draw took 520 ms</code>). It also logs more than 12 validated <code>kv_set()</code> attempts in a tracked one-minute window. This count includes unchanged, refused and failed writes; it resets after a minute or when another application writes. It does not measure physical flash writes. Save changed state in <code>app_on_terminate()</code>, or immediately when it must survive a power loss.</p>
 <p>The build also fails in these cases:</p>
 <ul>
   <li>the module imports a function that <code>host_api.h</code> does not declare;</li>
@@ -304,7 +304,7 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   <li>a translation does not match <code>en.json</code> (section 12);</li>
   <li>a function is named like a handler (<code>app_on_...</code>) and Perinkpheral OS has no such handler;</li>
   <li>the code calls <code>timer_set()</code>, <code>alarm_set*()</code> or <code>http_send()</code> and lacks the handler that receives the result;</li>
-  <li>the manifest declares a poll or intents and the code lacks <code>app_on_picked()</code>, <code>app_on_data()</code> or <code>app_on_intent()</code>;</li>
+  <li>a picked poll lacks <code>app_on_picked()</code>; another poll lacks <code>app_on_data()</code>, unless it has <code>app_on_document()</code> and an effective format explicitly set to <code>json</code> or <code>xml</code>; declared intents lack <code>app_on_intent()</code>;</li>
   <li>the code draws and lacks <code>app_on_draw()</code>;</li>
   <li>a string of <code>strings/</code> or a picture of <code>pictures/</code> is not used in the code.</li>
 </ul>
@@ -316,7 +316,7 @@ void app_on_draw(void)              /* draw the whole frame from the state */
   strings/           optional: en.json, ru.json ...; one file per language    (section 12)
   pictures/          optional: PNG, PBM, or text rows of '#' and '.'          (section 6)
   files/             optional: data files, read with file_read()</pre>
-<p>The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. It also enforces the eight-file package limit, including generated tables and translated manifests, and the 8192-byte limit for each packaged manifest. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one string table per language.</p>
+<p>The build makes the package from this folder. It compiles the sources with the SDK library, generates <code>strings.h</code> from <code>strings/</code> and <code>pictures.h</code> from <code>pictures/</code>, and checks the module and data-file limits. It also enforces the eight-file package limit, including generated tables and translated manifests, and the 8192-byte limit for each packaged manifest. The package contains <code>app.wasm</code>, <code>manifest.json</code>, data files and one separate string table per non-English translation. English strings are embedded in <code>app.wasm</code>.</p>
 
 <p>A catalog package contains at most eight files: app.wasm, manifest.json and at most six other files. Generated string tables and manifest translations count towards this limit.</p>
 <h2 id="package-manifest">Manifest</h2>
@@ -422,7 +422,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <p>Settings are declared in the manifest. The device's web page builds the settings form from the manifest alone. Each value is stored as text in the application's store, under the key of the setting.</p>
 <p>The application reads a setting with <code>kv_get()</code> and the key of the setting.</p>
 <p>Settings form values must be printable ASCII; list values also allow line breaks between items.</p>
-<p>When the user saves the form, Perinkpheral OS calls <code>app_on_settings()</code> and repeats all polls immediately.</p>
+<p>When the user saves the form, Perinkpheral OS calls <code>app_on_settings()</code> and requests all polls again; queued work and active server cooldowns can delay execution.</p>
 <h3>Setting fields</h3>
 <table>
   <tr><th style="width:22%">Field</th><th>Rule</th></tr>
@@ -497,10 +497,10 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <p>Measure text with <code>gfx_text_width()</code>, <code>gfx_font_height()</code>, <code>gfx_font_ascent()</code> and <code>gfx_font_cap_height()</code>.</p>
 <p>Each cell gives the value for Departure Mono, then for Jersey.</p>
 <table>
-  <tr><th style="width:24%">Constant</th><th>Capital height, px</th><th>Line height, px</th><th>Characters per 400 px</th><th style="width:34%">Typical use</th></tr>
+  <tr><th style="width:24%">Constant</th><th>Capital height, px</th><th>Line height, px</th><th>Digits per 400 px</th><th style="width:34%">Typical use</th></tr>
   <tr><td class="c">HOST_FONT_SMALL</td><td>8 / 10</td><td>15 / 21</td><td>57 / 50</td><td>Units, captions</td></tr>
   <tr><td class="c">HOST_FONT_TEXT</td><td>16 / 15</td><td>30 / 28</td><td>28 / 33</td><td>Body text; Perinkpheral OS's own text</td></tr>
-  <tr><td class="c">HOST_FONT_MEDIUM</td><td>24 / 25</td><td>45 / 43</td><td>19 / 21</td><td>Titles, secondary values</td></tr>
+  <tr><td class="c">HOST_FONT_MEDIUM</td><td>24 / 25</td><td>45 / 43</td><td>19 / 20</td><td>Titles, secondary values</td></tr>
   <tr><td class="c">HOST_FONT_LARGE</td><td>32 / 30</td><td>60 / 56</td><td>14 / 16</td><td>Notice lines</td></tr>
   <tr><td class="c">HOST_FONT_DISPLAY</td><td>48 / 50</td><td>90 / 86</td><td>9 / 10</td><td>The main value of a screen</td></tr>
   <tr><td class="c">HOST_FONT_HUGE</td><td>80 / 80</td><td>150 / 140</td><td>5 / 6</td><td>Clock: five digits fill the width</td></tr>
@@ -627,11 +627,11 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
 <table>
   <tr><th style="width:27%">Call</th><th>Description</th><th style="width:32%">Use</th></tr>
   <tr><td class="c">ui_draw_list_row, ui_list_first, ui_list_visible</td><td>List: one row per line, a value or icon at the right edge, the selected row inverted, a scroll bar. Without a selection, UP and DOWN scroll</td><td>More than three items; menus; settings</td></tr>
-  <tr><td class="c">ui_draw_cell, ui_cell_fit</td><td>Name, picture and value in a box of any size; the value at the largest size that fits</td><td>Dashboards with one, two or four values</td></tr>
+  <tr><td class="c">ui_draw_cell, ui_cell_fit</td><td>Name, picture and value in a box of any size. Automatic value sizing selects among the cell's permitted font sizes by width only; height is not checked, and the smallest candidate is used if none fits</td><td>Dashboards with one, two or four values</td></tr>
   <tr><td class="c">ui_draw_value</td><td>Value with its unit on the same baseline: "18 km/h"</td><td>Any number with a unit</td></tr>
   <tr><td class="c">ui_draw_notice</td><td>Two large lines, one or two detail lines, a large icon, button labels</td><td>Questions, errors, empty states, work in progress</td></tr>
   <tr><td class="c">ui_draw_reason</td><td>Standard notice for a request status: "Loading", "Not set up", "No network", "Access denied", "No answer"</td><td>Any screen that depends on the network</td></tr>
-  <tr><td class="c">ui_draw_actions, ui_draw_button</td><td>Button row at the bottom: OK action at the left, BACK action at the right</td><td>Screens where a button action needs a label</td></tr>
+  <tr><td class="c">ui_draw_actions, ui_draw_button</td><td>Button row at the bottom. With both actions present, OK is at the left and BACK at the right. A single action is centred</td><td>Screens where a button action needs a label</td></tr>
   <tr><td class="c">ui_draw_picker</td><td>One value from a sequence: the selected value framed, neighbours above and below</td><td>Selection among a few values with UP and DOWN</td></tr>
   <tr><td class="c">ui_draw_date</td><td>Time, date or both; one part is set at a time</td><td>Entry of a moment</td></tr>
   <tr><td class="c">ui_draw_frame</td><td>Frame with arrows for the available directions</td><td>Marks the value that the buttons change</td></tr>
@@ -649,20 +649,21 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
   <figure><img src="{{ROOT}}/docs/guide/source/screens/kit-message.png" alt=""><figcaption>ui_draw_notice: a message with a reason</figcaption></figure>
   <figure><img src="{{ROOT}}/docs/guide/source/screens/notice-progress.png" alt=""><figcaption>ui_draw_notice with is_working: work in progress</figcaption></figure>
 </div>
-<p>Button handling for lists, pickers and dates is implemented in the SDK library (<code>app_ui.h</code>). The application calls it from <code>app_on_button()</code> and acts on the result. See section 7.</p>
-<p>The <code>kit</code> application in the catalog shows every part on a separate page. Its source code is a working example for each part.</p>
+<p>Button handling for lists, pickers and dates is implemented in the SDK library (<code>app_ui.h</code>). Forward ordinary events from <code>app_on_button()</code>. In <code>app_on_back()</code>, call the same helper with <code>BTN_BACK_PRESSED</code> and handle its result. See section 7.</p>
+<p>The <code>kit</code> application in the catalog provides example pages for common UI parts, including a page combining several primitives.</p>
 
 <div class="keep">
 <h2 id="screen-refresh">Requesting a refresh</h2>
 <table>
   <tr><th style="width:27%">Flag</th><th>Perinkpheral OS behaviour</th><th style="width:36%">Use</th></tr>
-  <tr><td class="c">HOST_REDRAW_NORMAL</td><td>From a button handler: immediate. Other handlers follow the refresh policy, normally once a minute; settings changes use the urgent policy described below</td><td>Default</td></tr>
+  <tr><td class="c">HOST_REDRAW_NORMAL</td><td>From a button handler: immediate by default, subject to the configured minimum button-refresh interval. Other handlers follow the refresh policy, normally once a minute; settings changes use the urgent policy described below</td><td>Default</td></tr>
   <tr><td class="c">HOST_REDRAW_SOON</td><td>Bypasses the normal data interval; waits until at least one second after the preceding refresh</td><td>Data the user is waiting for, such as the result of a manual refresh; a rhythm the user started with a press, such as a rotation or a countdown</td></tr>
   <tr><td class="c">HOST_REDRAW_CLEAN</td><td>Full refresh: 2 - 3 s, one flash, removes ghosting. Waits until at least one second after the preceding refresh</td><td>Images that must be clean; the end of a frame sequence</td></tr>
   <tr><td class="c">HOST_REDRAW_NO_BLINK</td><td>Immediate; excluded from the periodic full refresh</td><td>List navigation; values that change every second</td></tr>
   <tr><td class="c">HOST_REDRAW_QUESTION</td><td>OK reaches the application only when it is pressed after this frame is on the panel. Pending flags are combined with OR. Each consumed redraw with QUESTION starts a new question; one without it ends the question. NORMAL cannot clear a pending QUESTION</td><td>A question that OK answers: removal, reset, anything that cannot be undone</td></tr>
 </table>
 <p>Settings changes and deliveries to that application for the next 30 seconds use the urgent refresh policy while it is on screen. Other data, timer, alarm and intent redraws use the normal data policy.</p>
+<p>Redraw requests made inside <code>app_on_draw()</code> are cleared when it returns and do not schedule another frame.</p>
 <p>Redraw requests are unlimited.</p>
 </div>
 <p>Each refresh uses battery energy and wears the panel. Frequent changes also make the device distracting. See section 13 for guidelines.</p>
@@ -687,7 +688,7 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
   <tr><td>Without <code>app_on_back()</code></td><td>Closes the application (one step down, or the menu after sibling switching)</td></tr>
   <tr><td>With <code>app_on_back()</code></td><td>Delivered to <code>app_on_back()</code>. Typical handling: go one page back; on the first page call <code>screen_leave()</code></td></tr>
 </table>
-<p>A short press of BACK goes to <code>app_on_back()</code>, or closes the application if it has no such export. A long press of BACK opens Perinkpheral OS's menu. <code>app_on_button()</code> receives the other events, except that question mode consumes OK KEYDOWN. Later OK events are delivered only if the press began after the question reached the panel.</p>
+<p>A short press of BACK goes to <code>app_on_back()</code>, or closes the application if it has no such export. A long press of BACK opens Perinkpheral OS's menu. <code>app_on_button()</code> receives other unconsumed events. Long BACK and sibling-switch chords consume BACK's release; chorded UP/DOWN events are also withheld. Question mode consumes OK KEYDOWN and rejects later OK events unless the press began after the question reached the panel.</p>
 <p><code>screen_leave()</code> removes the application from the top of the stack. Normally the user returns to the previous screen, including after <code>screen_request()</code>. After BACK+UP/DOWN sibling switching, leaving any application in that row clears the entire stack and its sessions and returns to the menu.</p>
 
 <h2 id="buttons-screens">Screens</h2>
@@ -723,7 +724,7 @@ void app_on_button(int32_t event)
 
 void app_on_draw(void)
 {
-    int32_t top = app_nav_draw_title(&amp;nav, NULL, true);
+    (void)app_nav_draw_title(&amp;nav, NULL, true);
 }</pre>
 
 <h2 id="buttons-kit">Lists, pickers, dates</h2>
@@ -747,7 +748,7 @@ void app_on_draw(void)
         ui_draw_list_row(&amp;list, row, label_of(row), label_length(row), "", 0, HOST_ICON_NONE);
     }
 }</pre>
-<p><code>app_picker_t</code> and <code>app_date_t</code> follow the same pattern. The application keeps a struct, passes button events to one function and draws with another. The button function returns <code>APP_UI_CHANGED</code>, <code>APP_UI_DONE</code>, <code>APP_UI_CANCELLED</code> or <code>APP_UI_IGNORED</code>.</p>
+<p><code>app_picker_t</code> and <code>app_date_t</code> follow the same pattern. The application keeps a struct, forwards ordinary events from <code>app_on_button()</code> to the helper and draws with another function. In <code>app_on_back()</code>, pass <code>BTN_BACK_PRESSED</code> to the same helper and handle its result. The button function returns <code>APP_UI_CHANGED</code>, <code>APP_UI_DONE</code>, <code>APP_UI_CANCELLED</code> or <code>APP_UI_IGNORED</code>.</p>
 
 <h1 id="storage">8. Storage</h1>
 <h2 id="storage-kv">Store</h2>
@@ -826,7 +827,7 @@ void app_on_picked(int32_t request, int32_t http_status)
 <ul>
   <li>Lists contain matching scalar values in source order. A null scalar is kept as <code>null</code>, a gap in a series. Missing members and non-scalar values are skipped. Overlapping paths give each scalar to the first matching path only. Parallel lists cannot safely be zipped unless the source guarantees corresponding scalars for every record and the paths do not overlap.</li>
   <li>The elements of one response take up to 8 KB as text (<code>HOST_LIST_BYTES</code>); each costs its length and 2 bytes. Elements beyond that are dropped and the log says so.</li>
-  <li>With more elements than the capacity, <code>app_value_series()</code> takes evenly spread elements, the first and the last among them.</li>
+  <li>With insufficient capacity, <code>app_value_series()</code> samples evenly across the list. Capacity 1 selects the first element; capacities of at least 2 include both endpoints.</li>
   <li>A value goes to the first path that names it: <code>a[*]</code> before <code>a[0]</code> takes the element.</li>
 </ul>
 <h3>Numbers</h3>
@@ -839,11 +840,11 @@ app_text_add_fixed(&amp;text, price - previous, 2, APP_FIXED_SIGN);        /* "+
 
 <h2 id="network-documents">Complete JSON or XML responses</h2>
 <p>To receive a complete recognized response, declare <code>app_on_document()</code> and call <code>document_buffer_set()</code> in <code>app_on_load()</code>. The app owns the buffer and supplies a capacity from 1 to 12288 bytes. The buffer must be separate from <code>app_data_buffer</code>. The new entry points require firmware 0.1.100 and keep ABI 3. For <code>http_send()</code> and polls without <code>pick</code>, export <code>app_on_data()</code> when the effective format is <code>raw</code> or omitted. An explicit <code>json</code> or <code>xml</code> format allows <code>app_on_document()</code> alone. When both handlers are present, <code>app_on_data()</code> receives the pieces first. A JSON poll with <code>pick</code> uses only <code>app_on_picked()</code>. Raw responses never call <code>app_on_document()</code>.</p>
-<p><code>app_on_document(request, format, status, length)</code> receives <code>HOST_FORMAT_JSON</code> or <code>HOST_FORMAT_XML</code> and the number of bytes in the registered buffer. The host adds no trailing NUL. The bytes can be read until the next response or unload. Exceeding the capacity gives <code>HOST_FAILED_TOO_LARGE</code>. Failing format validation gives <code>HOST_FAILED_NO_ANSWER</code>. A non-2xx HTTP response or a failure has document length zero.</p>
+<p><code>app_on_document(request, format, status, length)</code> receives <code>HOST_FORMAT_JSON</code> or <code>HOST_FORMAT_XML</code> and the number of bytes in the registered buffer. Perinkpheral OS adds no trailing NUL. The bytes can be read until the next response or unload. Exceeding the capacity gives <code>HOST_FAILED_TOO_LARGE</code>. Failing format validation gives <code>HOST_FAILED_NO_ANSWER</code>. A non-2xx HTTP response or a failure has document length zero.</p>
 
-<p>Leave the registered buffer untouched while a response is in progress. The host refuses another registration until the answer completes.</p>
+<p>Leave the registered buffer untouched while a structured document is being collected. Perinkpheral OS refuses registration inside an answer callback or while structured document collection is active.</p>
 <p>The document result normally follows the final raw piece. If no <code>app_on_data()</code> handler consumes the response, the result may arrive before the final piece. A non-2xx HTTP status is delivered after the headers without reading the body. Buffer capacity errors and a missing document buffer (<code>HOST_FAILED_NOT_READY</code>) are detected when a body piece reaches the document reader; that piece may already be the final one. A transport failure before that delivery can be reported instead. After an early result, the remaining body is not read and <code>app_on_document()</code> is not called again for that response. A live <code>app_on_data()</code> consumer still receives the stream through its final piece, followed by the document result.</p>
-<p>Complete JSON documents must be valid UTF-8 and have at most 64 nesting levels. Complete XML documents use the attribute-only subset below and allow at most 64 attributes per element. Duplicate attributes and unknown entities cause validation to fail, even in fields the application does not query.</p>
+<p>Complete JSON documents must be valid UTF-8 and have at most 64 nesting levels. Complete XML documents use the attribute-only subset below and allow at most 64 attributes per element. Duplicate attribute names within an element, or unknown entities anywhere, cause validation to fail, even in fields the application does not query.</p>
 <h2 id="network-pieces">Streamed responses</h2>
 <pre>void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t http_status)
 {
@@ -911,11 +912,11 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
   <tr><th style="width:34%">Status</th><th>Cause</th></tr>
   <tr><td class="c">HOST_FAILED_NO_NETWORK (-1)</td><td>No network connection</td></tr>
   <tr><td class="c">HOST_FAILED_NO_ANSWER (-2)</td><td>No answer from the server, or an incomplete response</td></tr>
-  <tr><td class="c">HOST_FAILED_NOT_READY (-3)</td><td>Request preparation failed: a required value is absent, a substituted value is invalid, or expansion exceeds a limit</td></tr>
+  <tr><td class="c">HOST_FAILED_NOT_READY (-3)</td><td>Request preparation failed (a required value is absent, a substituted value is invalid, or expansion exceeds a limit), or a recognized document response has no registered document buffer</td></tr>
   <tr><td class="c">HOST_FAILED_NOT_ALLOWED (-4)</td><td>A queued destination is no longer permitted at dispatch, or a redirect leads to a disallowed destination</td></tr>
   <tr><td class="c">HOST_FAILED_TIMEOUT (-5)</td><td>Timeout after the server was reached</td></tr>
   <tr><td class="c">HOST_FAILED_NOT_TRUSTED (-6)</td><td>HTTPS certificate is not trusted by the device</td></tr>
-  <tr><td class="c">HOST_FAILED_TOO_LARGE (-7)</td><td>Response larger than 256 KB (extracted values) or 4 MB (streamed)</td></tr>
+  <tr><td class="c">HOST_FAILED_TOO_LARGE (-7)</td><td>Response exceeds 256 KB for extracted values, 4 MB for streaming, or the registered document-buffer capacity</td></tr>
   <tr><td class="c">HOST_FAILED_NO_MEMORY (-8)</td><td>Insufficient device memory for the request</td></tr>
 </table>
 <p>Save the last status in the store. When there is no data to display, pass the status to <code>ui_draw_reason()</code>. It draws the standard notice for the status and returns whether it drew anything:</p>
@@ -930,7 +931,7 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
 </table>
 
 <h1 id="background">10. Background work</h1>
-<p>Perinkpheral OS loads an off-screen application for a delivery when one of these events occurs:</p>
+<p>The following mechanisms support background delivery and application output while off screen:</p>
 <table>
   <tr><th style="width:26%">Task</th><th style="width:31%">Mechanism</th><th>Notes</th></tr>
   <tr><td>Scheduled data</td><td>Poll in the manifest</td><td>Active after a restart without code</td></tr>
@@ -952,7 +953,7 @@ http_send(REQUEST_TOGGLE, HOST_HTTP_POST, URL, sizeof URL - 1, HEADERS, sizeof H
     host_notice_t notice = { .first = "Time", .second = "is up", .icon = HOST_ICON_BELL };
     notification_post(&amp;notice);
 }</pre>
-<p>After <code>notification_post()</code> returns, Perinkpheral OS manages the notification. It shows the notice under the header, keeps it until the user presses OK or BACK, and then restores the previous screen.</p>
+<p>After <code>notification_post()</code> returns <code>HOST_OK</code>, Perinkpheral OS owns the queued notification. It shows the notice under the header, keeps it until the user presses OK or BACK, and then restores the previous screen. On failure, no notification is queued; the application must handle the error.</p>
 <p>Displaying a notification does not keep the application instance loaded. Later background events may load the application while the notification remains visible.</p>
 <p>Use <code>notification_post()</code> instead of <code>screen_request()</code> when the message fits in two lines.</p>
 
@@ -1037,7 +1038,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
 <div class="rule"><b>Keep interface text short and standard.</b> Use common words: "Save", "Remove", "Not set up". If a label needs an explanation, change the label.</div>
 
 <h2 id="design-memory">Memory</h2>
-<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the 112 KB application area. Each byte of data uses one. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. The interpreter arena grew from 64 KB to 80 KB in firmware 0.1.95. Applications needing more than the previous 64 KB must declare <code>"firmware": "0.1.95"</code>. The build warns when its estimate exceeds 64 KB but the resulting minimum is older; the estimate is advisory and does not prove actual peak use.</div>
+<div class="rule"><b>Minimize code size before data size.</b> Each byte of executed code uses about four bytes of the 112 KB application area. Each byte of data uses one. Prefer a table to a chain of <code>if</code> statements, the kit to custom drawing, <code>pick</code> to a custom parser, and <code>time_text()</code> to custom date formatting. Linear memory contains the application's stack and static data, up to 64 KB. It shares a 112 KB area with the interpreter. The build reports their combined estimated use; the estimate does not prove actual peak use.</div>
 <div class="rule"><b>Keep shared helpers out of line.</b> Mark a small helper that is called from many places with <code>__attribute__((noinline))</code> and compare the build reports.</div>
 <div class="rule"><b>Store pictures as bits.</b> Put pictures in <code>pictures/</code>. Put large pictures in <code>files/</code>.</div>
 <div class="rule"><b>Process responses as a stream.</b> Process a response as it arrives and keep only the data to display. Call <code>app_alloc_mark()</code> before allocating temporary buffers with <code>app_alloc()</code>. When finished, call <code>app_alloc_release(mark)</code> to release every allocation made since that mark (section 23).</div>
@@ -1135,7 +1136,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
   <tr><td>State lost after leaving and returning</td><td>State kept in global variables. Save it in <code>app_on_terminate()</code>, load it in <code>app_on_load()</code></td></tr>
   <tr><td>"&lt;title&gt; crashed" with "memory alloca..."</td><td>Executed code exceeds the interpreter memory. See the build warning and "Memory" in section 13</td></tr>
   <tr><td>"&lt;title&gt; cannot start", "Update the app."</td><td>The package uses an unsupported ABI; install a compatible build. If the device asks to update firmware, update firmware instead</td></tr>
-  <tr><td>Poll fails with HOST_FAILED_NOT_READY (-3)</td><td>Request preparation failed: a required value is absent, a substituted value is invalid, or expansion exceeds a limit</td></tr>
+  <tr><td>Poll fails with HOST_FAILED_NOT_READY (-3)</td><td>Request preparation failed (a required value is absent, a substituted value is invalid, or expansion exceeds a limit), or a recognized document response has no registered document buffer</td></tr>
   <tr><td>HTTPS fails with HOST_FAILED_NOT_TRUSTED (-6)</td><td>The server certificate is expired, has the wrong name, or lacks a trusted issuing authority. Add the authority's valid CA certificate in <code>certificates</code> only for an unknown issuer. Replace an expired or wrong-name certificate on the server. A server certificate without CA authority cannot be packaged as a trust root</td></tr>
   <tr><td><code>http_send()</code> returns HOST_ERR_NO_SPACE (-4)</td><td>16 of the application's requests are waiting, or the device's queue is full. Queue more as responses arrive</td></tr>
   <tr><td>Ghost images of earlier frames</td><td>A sequence of <code>NO_BLINK</code> redraws without a final <code>CLEAN</code> redraw</td></tr>
@@ -1171,9 +1172,9 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <h1 class="part" id="part-3">Part III. Reference</h1>
 <p>This part summarizes Perinkpheral OS calls and exports for ABI 3. Signatures are abbreviated. Include <code>sdk/host_api.h</code>; complete types, constants and declarations are in <code>sdk/host/*.h</code>.</p>
 <p><code>sdk/host_api.h</code> is the authoritative contract. If this document and the header disagree, the header is correct.</p>
-<p>Perinkpheral OS calls return <code>HOST_ERR_*</code> errors directly. Network failures arrive later in a data handler as <code>HOST_FAILED_*</code> status values; see Failed requests in section 9.</p>
+<p>Unless documented otherwise, status-returning Perinkpheral OS calls use <code>HOST_OK</code> and <code>HOST_ERR_*</code>. Network failures arrive later in a data handler as <code>HOST_FAILED_*</code> status values; see Failed requests in section 9.</p>
 <p>Numeric arguments and return values are <code>int32_t</code> unless stated otherwise. Application IDs, their buffers, and the result of <code>sys_app_get_default()</code> use <code>uint32_t</code>. A text argument is a pointer and a length in bytes; the text is UTF-8.</p>
-<p>A call that returns no value of its own returns <code>HOST_OK</code> or a negative <code>HOST_ERR_*</code> code.</p>
+<p>Calls declared <code>void</code> return no status. XML queries use their documented result codes, including for invalid arguments.</p>
 
 <p>Commands name the subject then the verb (<code>kv_get</code>, <code>gfx_draw_text</code>); queries name the subject and what is asked (<code>gfx_width</code>, <code>time_now</code>); events Perinkpheral OS calls use <code>app_on_&lt;what happened&gt;</code> (<code>app_on_load</code>, <code>app_on_picked</code>).</p>
 
@@ -1183,7 +1184,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
 <p>tools/perinkpheral contract snapshot records the contract in sdk/abi/3.txt and package hashes separately in sdk/abi/3/fixtures.txt; contract check verifies both in host tests and CI. Ordinary checks and snapshots reject changed or removed recorded entries; new imports, exports and constants require a valid HOST_SINCE_ stamp before contract snapshot can record them. Established baseline entries need no new stamp; recorded stamps remain immutable. HOST_ICON_COUNT may grow with contiguous appended icon IDs. Only host_answer_info_t may grow by appending fields beyond its old size, preserving alignment and every existing field type, offset and size; answer_info copies a capacity-bounded prefix. All other recorded layouts remain immutable. Before the first public release, an owner-approved contract snapshot --unfrozen can rewrite recorded entries. Frozen packages in sdk/abi/3/ are test inputs and are never rebuilt by tests: Probe, Hello, Settings with translations, and Hello state (presses = 42 as four little-endian bytes). The ABI 3 floor is 0.1.30, the first firmware of ABI 3.</p>
 <h2>Binary representation and buffers</h2>
 <p>The contract uses wasm32 little-endian C layouts and two's complement signed integers. Pointers are unsigned 32-bit memory offsets; zero is NULL. 32-bit integers and pointers have size/alignment 4, 64-bit integers 8, bytes 1. Structs keep C field order and natural alignment with trailing padding. sdk/abi/3.txt records every size, alignment, field type and offset. String-table size, count and offsets are little-endian 16-bit words. Picture dimensions are bytes; bitmap rows are high-bit first and padded to whole bytes.</p>
-<p>Input buffers are consumed or copied before an import returns. Perinkpheral OS retains only the exported app_data_buffer and app_strings_buffer storage for the loaded instance; keep that storage valid until unload. Handler data is valid until the handler returns. Lengths and capacities count bytes. Text output has no appended NUL, except fixed host_answer_info_t string fields. Negative lengths/capacities or invalid memory ranges give HOST_ERR_ARGUMENT.</p>
+<p>Ordinary input buffers are consumed or copied before an import returns. The exported app_data_buffer and app_strings_buffer storage must remain valid until unload. A registered document buffer must remain valid until replaced by a successful registration or the instance unloads. Handler data is valid until the handler returns. Lengths and capacities count bytes. Text outputs have no appended NUL except xml_attr(), string fields produced by xml_attrs(), and the fixed string fields of host_answer_info_t. XML output capacities include the terminator. Unless documented otherwise, status-returning calls reject negative lengths/capacities or invalid memory ranges with HOST_ERR_ARGUMENT. XML queries use their documented result codes.</p>
 <p>kv_get, answer_value, answer_element, session_get, sys_info, sys_app_title and sys_setting_get fail with HOST_ERR_NO_SPACE without copying when the value does not fit. Capacity zero is valid for an empty value. gfx_fit_text also requires room for its whole fitted result and copies nothing on error. text_fill and time_text instead truncate between UTF-8 characters and return bytes copied; text_fill accepts zero capacity, time_text rejects it. Read/format/measurement errors leave outputs untouched; file_read may have copied a prefix before a storage error. answer_info copies min(capacity, Perinkpheral OS's struct size), accepts zero and leaves later bytes untouched. sys_app_list writes up to capacity ids but returns the total count; capacity zero is allowed.</p>
 <p>Install and update are consumed after loading and before the callback, including a missing callback or a trap in app_on_load or the callback. A load failure leaves the notification pending until startup or application-list reload. Updated means another module-and-manifest package id, regardless of version-string ordering.</p>
 <p>Only HOST_DATA_LAST makes a streamed answer whole. HOST_DATA_FAILED may follow earlier pieces and invalidates them all. An interrupted answer may end with neither flag. Piece boundaries are unspecified, even inside a UTF-8 character or a document marker. Keep the previous displayed result until LAST.</p>
@@ -1336,7 +1337,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">answer_value(index, text, capacity)</td><td>Inside <code>app_on_picked()</code>: copies the value of path <code>index</code> as text without a terminator. Returns its length. A list path has no value</td></tr>
   <tr><td class="c">answer_count(index)</td><td>Inside <code>app_on_picked()</code>: the number of elements of list path <code>index</code>; 1 or 0 for any other path</td></tr>
   <tr><td class="c">answer_element(index, element, text, capacity)</td><td>Inside <code>app_on_picked()</code>: copies element <code>element</code> of path <code>index</code>, as <code>answer_value()</code> does</td></tr>
-  <tr><td class="c">answer_item(void)</td><td>Inside <code>app_on_data()</code> and <code>app_on_picked()</code>: the item of the list a poll with <code>each</code> made this request for, from 0; -1 for any other response</td></tr>
+  <tr><td class="c">answer_item(void)</td><td>Inside <code>app_on_data()</code>, <code>app_on_picked()</code> and <code>app_on_document()</code>: the zero-based list item index for a poll with <code>each</code>; -1 for any other response</td></tr>
   <tr><td class="c">answer_info(response, capacity)</td><td>Inside a data handler: copies the first min(capacity, sizeof(host_answer_info_t)) bytes and returns the byte count. Negative capacity or an invalid destination gives HOST_ERR_ARGUMENT; outside a data handler, HOST_ERR_NOT_FOUND. Capacity 0 writes nothing. Bytes beyond Perinkpheral OS's struct stay untouched. Zero the destination first if accepting a shorter struct. Fields: status, length, retry_after, content_type[48], etag[64], last_modified[32], location[128], link[192]</td></tr>
   <tr><td class="c">answer_header(name, name_length, occurrence, value, capacity)</td><td>Header value in a data handler, without NUL. Case-insensitive name; occurrence starts at 0. Returns length, HOST_ERR_ARGUMENT, HOST_ERR_NOT_FOUND or HOST_ERR_NO_SPACE. Requires firmware 0.1.51; capture limits and authentication state are described above.</td></tr>
 </table>
@@ -1393,15 +1394,15 @@ void    app_text_add_number(app_text_t *text, int32_t value);
 /* 7, 2 -> "07" */
 void    app_text_add_padded(app_text_t *text, int32_t value, int32_t digits);
 int32_t app_text_length(const char *text);                  /* length of any null-terminated text */
-/* always null-terminated */
+/* positive capacity: NUL-terminated; zero capacity: nothing written */
 void    app_text_copy(char *to, int32_t size, const char *from);
 bool    app_text_equal(const char *a, const char *b);
 bool    app_text_starts(const char *text, const char *start);
 int32_t app_time_text(int64_t moment, int32_t style, char *text, int32_t size); /* time_text(), null-terminated */
 #define APP_TEXT_DEGREE "\xC2\xB0"                                 /* the degree sign Perinkpheral OS draws */</pre>
-<p>The buffer is always null-terminated and stays within its size. Each call leaves a terminated string; excess text is dropped at a character boundary.</p>
+<p>With positive capacity, the output is NUL-terminated and stays within its size. With zero capacity, nothing is written. Excess text is dropped at a character boundary.</p>
 <h2 id="lib-draw">app_draw.h: drawing helpers</h2>
-<pre>/* null-terminated text; inside app_on_draw() */
+<pre>/* NUL-terminated text; drawing helpers require app_on_draw(); app_text_width() and app_text_center_x() work in any handler */
 #include "app_draw.h"
 int32_t app_text_width(int32_t font, const char *text);
 /* returns the width */
@@ -1418,7 +1419,7 @@ void    app_draw_cells(host_cell_t *cells, const uint8_t *const *pictures,
 <pre>#include "app_state.h"                                       /* the store, by null-terminated key */
 /* first field: int32_t version */
 bool    app_state_load(const char *key, void *state, int32_t size, int32_t version);
-/* one flash write; false: not stored */
+/* one kv_set() call; true on HOST_OK, false on error; storage may change on failure */
 bool    app_state_save(const char *key, const void *state, int32_t size);
 bool    app_state_forget(const char *key);
 /* where the user is: in app_on_blur() */
@@ -1442,7 +1443,7 @@ int32_t app_setting_seconds(const char *key, int32_t otherwise);
 /* a place's name, before its comma */
 int32_t app_setting_place(const char *key, char *name, int32_t size);
 </pre>
-<p>The text is always null-terminated. For <code>app_setting()</code> and <code>app_setting_item()</code>, a value that does not fit gives empty text and length 0. <code>app_setting_place()</code> instead truncates the name to fit, between UTF-8 characters, and returns the copied byte length.</p>
+<p>With positive capacity, the output is NUL-terminated. With zero capacity, <code>app_setting()</code> and <code>app_setting_item()</code> write nothing. <code>app_setting_place()</code> requires positive capacity. For <code>app_setting()</code> and <code>app_setting_item()</code>, a value that does not fit gives empty text and length 0. <code>app_setting_place()</code> instead truncates the name to fit, between UTF-8 characters, and returns the copied byte length.</p>
 <h2 id="lib-days">app_days.h: date conversion</h2>
 <pre>#include "app_days.h"                                        /* dates as days since 1970-01-01 */
 int32_t app_days_from_date(int32_t year, int32_t month, int32_t day);
@@ -1479,7 +1480,7 @@ void    app_text_add_fixed(app_text_t *text, int64_t value, int32_t decimals, in
 <pre>typedef enum { APP_UI_IGNORED, APP_UI_CHANGED, APP_UI_DONE, APP_UI_CANCELLED } app_ui_result_t;
 
 typedef host_list_t app_list_t;        /* count, selected (-1: none), top, height, first */
-/* UP, DOWN: changed, held: a page; OK: done; BACK: cancelled */
+/* UP/DOWN: selection or scroll; held: a page; CHANGED only on change; OK: DONE for a nonempty selectable list, otherwise IGNORED; BACK: CANCELLED */
 app_ui_result_t app_list_button(app_list_t *list, int32_t event);
 /* call in app_on_draw() before drawing rows; keeps `first` */
 int32_t         app_list_first(app_list_t *list);

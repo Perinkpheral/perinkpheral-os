@@ -181,8 +181,9 @@ HOST_SYSTEM_IMPORT(sys_app_remove, int32_t sys_app_remove(uint32_t id));
 HOST_SYSTEM_IMPORT(sys_app_get_default, uint32_t sys_app_get_default(void));
 HOST_SYSTEM_IMPORT(sys_app_set_default, int32_t sys_app_set_default(uint32_t id));
 
-/* Irreversible actions. The device restarts after each that returns
- * HOST_OK; one refused changes nothing and does not restart. */
+/* Irreversible actions. HOST_OK schedules a restart. An unsuccessful
+ * action does not schedule a restart; a storage failure may nevertheless
+ * have changed stored settings. */
 #define SYS_DO_RESTART        0
 #define SYS_DO_FORGET_NETWORK 1 /* forgets the stored network and turns Wi-Fi off: no access
                                    point, and the device starts as it does with a network.

@@ -234,36 +234,36 @@ object BuilderSafetyTest {
                 declaration(1, pageLog = 17)
                 refusedMemory("unsupported wasm memory page size")
 
-                // Real modules on either side of the new warning budget still build.
+                // The shared-area estimate includes both linear memory and interpreter use.
                 val arenaSource = File(scratch, "arena/sizing").apply { mkdirs() }
                 File(arenaSource, "manifest.json").writeText("""{"name":"sizing","title":"Sizing","abi":3}""")
                 val arenaOutput = File(scratch, "arena-built")
-                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 24_000 to null, 26_000 to null,
-                    16_000 to "0.1.94", 16_000 to "0.1.95")) {
+                for ((codeNops, firmware, dataBytes) in listOf(Triple(100, null, 0), Triple(16_000, null, 0),
+                    Triple(24_000, null, 0), Triple(26_000, null, 0), Triple(16_000, "0.1.94", 0),
+                    Triple(16_000, "0.1.95", 0), Triple(16_000, "0.1.94", 32768), Triple(16_000, "0.1.95", 32768))) {
                     File(arenaSource, "manifest.json").writeText(Json.write(mapOf(
                         "name" to "sizing", "title" to "Sizing", "abi" to 3) +
                         (firmware?.let { mapOf("firmware" to it) } ?: emptyMap())))
                     File(arenaSource, "main.c").writeText(
                         "/* SPDX-License-Identifier: MIT */\n#include \"host_api.h\"\n" +
-                        "void app_on_load(void) { __asm__ volatile(\"" + "nop\\n".repeat(codeNops) + "\"); }\n")
+                        (if (dataBytes > 0) "static volatile uint8_t retained[$dataBytes];\n" else "") +
+                        "void app_on_load(void) { " + (if (dataBytes > 0) "retained[0] = 1; " else "") +
+                        "__asm__ volatile(\"" + "nop\\n".repeat(codeNops) + "\"); }\n")
                     val messages = ArrayList<String>()
                     AppBuilder(Sdk(root), File(wasi), messages::add).build(arenaSource, arenaOutput)
                     val built = Wasm(File(arenaOutput, "app.wasm"))
                     val estimate = 11 * 1024 + 4 * built.codeBytes
-                    val needsLargerArena = estimate > 64 * 1024
-                    check(needsLargerArena == (codeNops > 100))
                     // The memory is the stack and the data, and counts against the area with the code.
                     val memory = built.memoryBytes!!
-                    check(memory == 9216L && built.memory!!.second == built.memory!!.first)
-                    val overBudget = codeNops >= 24_000
+                    check(memory == 9216L + dataBytes && built.memory!!.second == built.memory!!.first)
+                    val overBudget = codeNops >= 24_000 || dataBytes > 0
                     check((memory + estimate > BuildFlags.APP_AREA) == overBudget)
                     if (codeNops == 24_000) check(estimate <= BuildFlags.APP_AREA)
                     val totalKb = java.math.BigDecimal((memory + estimate) / 1024.0)
                         .setScale(1, java.math.RoundingMode.HALF_EVEN).toPlainString()
                     check(messages.any { "area    about $totalKb KB of 112.0 KB" in it })
                     check(messages.any { "warning: this much memory and code" in it } == overBudget)
-                    check(messages.any { "declare \"firmware\": \"0.1.95\"" in it } ==
-                        (needsLargerArena && firmware != "0.1.95"))
+                    check(messages.none { "larger arena" in it || "declare \"firmware\"" in it })
                     val packaged = Json.parse(File(arenaOutput, "manifest.json").readText()) as Map<*, *>
                     check(packaged["firmware"] == (firmware ?: "0.1.30")) // Advisory, never an automatic bump.
                     check(File(arenaOutput, "app.wasm").isFile)

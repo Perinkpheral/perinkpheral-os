@@ -43,13 +43,14 @@ HOST_IMPORT(gfx_height, int32_t gfx_height(void));
  * gfx_font_height(), gfx_font_ascent(), gfx_font_cap_height().
  *
  * Sizes in pixels, Departure Mono / Jersey:
- *                       capitals   line       characters per 400 px
+ *                       capitals   line       digits per 400 px
  *   HOST_FONT_SMALL      8 / 10    15 / 21    57 / 50
  *   HOST_FONT_TEXT      16 / 15    30 / 28    28 / 33
- *   HOST_FONT_MEDIUM    24 / 25    45 / 43    19 / 21
+ *   HOST_FONT_MEDIUM    24 / 25    45 / 43    19 / 20
  *   HOST_FONT_LARGE     32 / 30    60 / 56    14 / 16
  *   HOST_FONT_DISPLAY   48 / 50    90 / 86     9 / 10
- *   HOST_FONT_HUGE      80 / 80   150 / 140    5 / 6   */
+ *   HOST_FONT_HUGE      80 / 80   150 / 140    5 / 6
+ * Measure arbitrary text with gfx_text_width(). */
 #define HOST_FONT_TEXT    0 /* body text; Perinkpheral OS's own text */
 #define HOST_FONT_MEDIUM  1
 #define HOST_FONT_LARGE   2
