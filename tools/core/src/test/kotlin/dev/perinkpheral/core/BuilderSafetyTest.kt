@@ -158,7 +158,7 @@ object BuilderSafetyTest {
                 val arenaSource = File(scratch, "arena/sizing").apply { mkdirs() }
                 File(arenaSource, "manifest.json").writeText("""{"name":"sizing","title":"Sizing","abi":3}""")
                 val arenaOutput = File(scratch, "arena-built")
-                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 18_000 to null,
+                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 26_000 to null,
                     16_000 to "0.1.94", 16_000 to "0.1.95")) {
                     File(arenaSource, "manifest.json").writeText(Json.write(mapOf(
                         "name" to "sizing", "title" to "Sizing", "abi" to 3) +
@@ -168,13 +168,17 @@ object BuilderSafetyTest {
                         "void app_on_load(void) { __asm__ volatile(\"" + "nop\\n".repeat(codeNops) + "\"); }\n")
                     val messages = ArrayList<String>()
                     AppBuilder(Sdk(root), File(wasi), messages::add).build(arenaSource, arenaOutput)
-                    val estimate = 11 * 1024 + 4 * Wasm(File(arenaOutput, "app.wasm")).codeBytes
+                    val built = Wasm(File(arenaOutput, "app.wasm"))
+                    val estimate = 11 * 1024 + 4 * built.codeBytes
                     val needsLargerArena = estimate > 64 * 1024
                     check(needsLargerArena == (codeNops > 100))
-                    val overBudget = codeNops == 18_000
-                    check((estimate > 80 * 1024) == overBudget)
-                    check(messages.any { "interpreter's 80.0 KB" in it })
-                    check(messages.any { "warning: this much code" in it } == overBudget)
+                    // The memory is the stack and the data, and counts against the area with the code.
+                    val memory = built.memoryBytes!!
+                    check(memory in BuildFlags.APP_STACK..BuildFlags.APP_STACK + 1024L && built.memory!!.second == built.memory!!.first)
+                    val overBudget = codeNops == 26_000
+                    check((memory + estimate > BuildFlags.APP_AREA) == overBudget)
+                    check(messages.any { "of 112.0 KB" in it })
+                    check(messages.any { "warning: this much memory and code" in it } == overBudget)
                     check(messages.any { "declare \"firmware\": \"0.1.95\"" in it } ==
                         (needsLargerArena && firmware != "0.1.95"))
                     val packaged = Json.parse(File(arenaOutput, "manifest.json").readText()) as Map<*, *>
