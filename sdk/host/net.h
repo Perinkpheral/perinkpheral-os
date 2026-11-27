@@ -27,11 +27,14 @@
  *
  * Delivery can stop without HOST_DATA_LAST and without HOST_DATA_FAILED:
  * a receiving instance, on or off the screen, can be unloaded by a button
- * press, screen switch, application-list reload or delivery to another application. Only
- * app_on_terminate() is called then. Saving the application's settings also
+ * press, screen switch, application-list reload or delivery to another application.
+ * Foreground unload calls app_on_blur() followed by app_on_terminate();
+ * background unload calls app_on_terminate() only. Neither callback runs
+ * after the instance has faulted. Saving the application's settings also
  * stops a poll stream; the instance may stay loaded, with no call to end
- * the stream, and that poll is fetched again at once. The next HOST_DATA_FIRST starts a
- * new answer. Perinkpheral OS repeats an interrupted GET or HEAD poll after one
+ * the stream, and that poll is requested again, subject to queued work and
+ * server cooldowns. The next HOST_DATA_FIRST starts a new answer.
+ * Perinkpheral OS repeats an interrupted GET or HEAD poll after one
  * minute, or after its interval when that is shorter; other poll methods keep
  * their normal pace. An
  * interrupted answer to http_send() is dropped, and the application
@@ -50,17 +53,19 @@
 #define HOST_DATA_FAILED    4
 #define HOST_DATA_CHUNK_MAX 1024
 /* Failure codes, delivered in place of the HTTP status: in app_on_data()
- * with HOST_DATA_FAILED, and in app_on_picked(). */
+ * with HOST_DATA_FAILED, in app_on_picked(), and in app_on_document(). */
 #define HOST_FAILED_NO_NETWORK  (-1) /* no network connection */
 #define HOST_FAILED_NO_ANSWER   (-2) /* no answer from the server, or an incomplete answer */
 #define HOST_FAILED_NOT_READY   (-3) /* preparation failed: missing/invalid template input
-                                        or expansion limit; stored empty values are valid */
+                                        or expansion limit, or missing document buffer;
+                                        stored empty values are valid */
 #define HOST_FAILED_NOT_ALLOWED (-4) /* destination outside the current manifest "hosts" list */
 #define HOST_FAILED_TIMEOUT     (-5) /* timeout after the server was reached */
 #define HOST_FAILED_NOT_TRUSTED (-6) /* HTTPS certificate not trusted: self-signed, expired,
                                         or issued for another name */
 #define HOST_FAILED_TOO_LARGE   (-7) /* answer larger than HOST_ANSWER_MAX, or larger than
-                                        HOST_ANSWER_PIECES_MAX when streamed */
+                                        HOST_ANSWER_PIECES_MAX when streamed, or the
+                                        registered document-buffer capacity */
 #define HOST_FAILED_NO_MEMORY   (-8) /* insufficient device memory for the request */
 /* Maximum answer size: with value extraction ("pick"), and streamed. */
 #define HOST_ANSWER_MAX        (256 * 1024)
@@ -68,8 +73,11 @@
 APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, int32_t length,
                                          int32_t flags, int32_t http_status));
 
-/* The answer to a poll with "pick" in the manifest. "pick" is a list of
- * JSON paths, for example "current.temperature_2m" or
+/* For a poll with "pick", app_on_picked() receives the answer when the
+ * effective response format is JSON. The manifest format policy, or
+ * Content-Type under automatic selection, determines the format. Other
+ * formats use streamed delivery and, where applicable, app_on_document().
+ * "pick" is a list of JSON paths, for example "current.temperature_2m" or
  * "daily.weather_code[0]". Perinkpheral OS reads the answer and extracts the
  * values. The application receives this single call instead of pieces.
  * The picker checks balanced, matching containers (up to 64 levels), valid
@@ -77,9 +85,10 @@ APP_EXPORT(app_on_data, void app_on_data(int32_t request, const uint8_t *data, i
  * \u escapes. Other escape letters and raw control bytes in strings are
  * not rejected. Member/value separators and a single root value are not
  * enforced: empty input and other malformed documents may be accepted.
- * A success (2xx) whose body fails these checks gives HOST_FAILED_NO_ANSWER; any
- * other HTTP status - 401 with a login page, 404, 503 - is handed over as it is,
- * with values only when its body is a whole JSON document (an error message),
+ * For responses selected as JSON, a success (2xx) whose body fails these
+ * checks gives HOST_FAILED_NO_ANSWER. Other HTTP statuses, such as 401, 404
+ * or 503, are handed over as they are, with values only when the body is a
+ * whole JSON document (an error message),
  * and none when it is not.
  *
  * request:     poll number in the manifest.
@@ -122,13 +131,14 @@ HOST_IMPORT(answer_element,
 
 /* The item of the list setting the answer being delivered is for: its
  * number in the list, from 0, for a poll with "each"; -1 for any other
- * answer. Valid inside app_on_data() and app_on_picked(). */
+ * answer. Valid inside app_on_data(), app_on_picked(), and app_on_document(),
+ * for the current answer. */
 HOST_IMPORT(answer_item, int32_t answer_item(void));
 
 /* Response metadata. Future fields may be appended beyond its existing size
  * with alignment and the existing field types, offsets and sizes preserved.
- * Valid inside app_on_data() and app_on_picked(), for
- * the answer being delivered. The same for every piece of one answer.
+ * Valid inside app_on_data(), app_on_picked(), and app_on_document(),
+ * for the current answer. The same for every piece of one answer.
  * A header that the server did not send is an empty string. A header
  * longer than its field is cut. A terminal HOST_DATA_FAILED callback may
  * have no metadata: status is the failure code, length is -1 and header
@@ -155,8 +165,9 @@ HOST_LAYOUT(host_answer_info_t, 476);
 HOST_IMPORT(answer_info, int32_t answer_info(host_answer_info_t *response, int32_t capacity));
 
 /* Copies occurrence (from 0) of a response header, without a terminating NUL.
- * Valid only inside app_on_data/app_on_picked, for the current answer. Names
- * are case-insensitive HTTP tokens of 1..63 bytes. Repeated fields, including
+ * Valid inside app_on_data(), app_on_picked(), and app_on_document(),
+ * for the current answer. Names are case-insensitive HTTP tokens of 1..63
+ * bytes. Repeated fields, including
  * Set-Cookie, are separate values in arrival order, never comma-joined.
  * Returns the value length, HOST_ERR_NOT_FOUND if absent/outside a handler,
  * HOST_ERR_ARGUMENT for invalid arguments, or HOST_ERR_NO_SPACE if the whole
@@ -319,10 +330,12 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
 /* Register a guest buffer for structured raw responses, normally in
  * app_on_load. Its lifetime is the current instance. The buffer must be
  * disjoint from app_data_buffer; capacity is 1..HOST_DOCUMENT_MAX.
- * While receiving, leave this buffer untouched until app_on_document. A new
- * registration during any answer is refused. JSON supports 64 nested containers.
+ * While receiving, leave this buffer untouched until app_on_document.
+ * Registration is refused inside an answer callback or while a structured
+ * document is being collected. JSON supports 64 nested containers.
  * Structured XML uses the host/xml.h subset, with up to 64 attributes per
- * element and duplicate names or unknown entities rejected throughout. */
+ * element. Duplicate attribute names within an element, or unknown entities
+ * anywhere, invalidate the document. */
 #define HOST_SINCE_document_buffer_set "0.1.100"
 HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, int32_t capacity));
 

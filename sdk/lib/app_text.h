@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* The degree sign, which the host draws in any font: "21" APP_TEXT_DEGREE. */
+/* The degree sign, which Perinkpheral OS draws in any font: "21" APP_TEXT_DEGREE. */
 #define APP_TEXT_DEGREE "\xC2\xB0"
 
 /* A string builder over a caller-provided buffer. A buffer with positive

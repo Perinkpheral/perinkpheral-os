@@ -210,12 +210,15 @@ void log_write(int32_t level, const char *text, int32_t length)
     if (length > HOST_LOG_TEXT_MAX) {
         length = HOST_LOG_TEXT_MAX;
     }
-    copy(host->last_log, text, (size_t)length);
+    for (int32_t index = 0; index < length; index++) {
+        uint8_t character = (uint8_t)text[index];
+        host->last_log[index] = character >= ' ' && character <= '~' ? (char)character : '?';
+    }
     host->last_log[length] = '\0';
     host->logs++;
     host->diagnostics = (host->diagnostics ^ (uint64_t)level) * DIAGNOSTIC_HASH_PRIME;
     for (int32_t index = 0; index < length; index++) {
-        host->diagnostics = (host->diagnostics ^ (uint8_t)text[index]) * DIAGNOSTIC_HASH_PRIME;
+        host->diagnostics = (host->diagnostics ^ (uint8_t)host->last_log[index]) * DIAGNOSTIC_HASH_PRIME;
     }
     host->diagnostics = (host->diagnostics ^ (uint64_t)length) * DIAGNOSTIC_HASH_PRIME;
     if (level == HOST_LOG_ERROR) {
@@ -630,11 +633,27 @@ static bool is_named(const char *name, int32_t length, const char *wanted)
     return length == (int32_t)strlen(wanted) && memcmp(name, wanted, (size_t)length) == 0;
 }
 
+static bool is_package_file(const char *name, int32_t length)
+{
+    const char manifest_prefix[] = "manifest.";
+    if (is_named(name, length, "app.wasm") ||
+        (length >= (int32_t)sizeof manifest_prefix - 1 &&
+         memcmp(name, manifest_prefix, sizeof manifest_prefix - 1) == 0)) {
+        return true;
+    }
+    for (int32_t index = 0; index < standin_subject.certificate_count; index++) {
+        if (is_named(name, length, standin_subject.certificates[index])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int32_t file_write(const char *name, int32_t name_length, int32_t offset, const void *bytes, int32_t length)
 {
     standin_t *host = standin();
     if (!standin_subject.writes_files || !is_file_name(name, name_length) || ends_with(name, name_length, ".new") ||
-        is_named(name, name_length, "app.wasm") || is_named(name, name_length, "manifest.json") ||
+        is_package_file(name, name_length) ||
         offset < 0 || length < 0 || (bytes == NULL && length > 0) ||
         /* The device reads the bytes from the module's memory (app_memory_at): no more than the most it has. */
         length > WASM_PAGE_BYTES || offset > HOST_FILES_MAX ||
@@ -1008,7 +1027,8 @@ int64_t standin_alarm_left(int32_t id)
 void screen_redraw(int32_t flags)
 {
     standin()->redraws++;
-    world->redraw_flags = flags;
+    world->redraw_flags |= flags & (HOST_REDRAW_SOON | HOST_REDRAW_CLEAN | HOST_REDRAW_NO_BLINK |
+                                    HOST_REDRAW_QUESTION);
 }
 
 /* As app_api_ui.c keeps it: in the instance, and in the session while it may write it. */
@@ -1076,7 +1096,8 @@ void screen_leave(void)
 int32_t notification_post(const host_notice_t *notice)
 {
     standin();
-    if (notice == NULL) {
+    if (notice == NULL || notice->first[0] == '\0' ||
+        notice->icon < HOST_ICON_NONE || notice->icon >= HOST_ICON_COUNT) {
         return HOST_ERR_ARGUMENT;
     }
     world->notice_attempts++;
@@ -2762,6 +2783,7 @@ void standin_load(void)
     standin_t *host = standin();
     host->is_loaded = host->is_loading = true;
     host->is_on_screen = host->is_session_writable = host->is_leaving = host->wants_screen = false;
+    host->redraw_flags = 0;
     memset(host->timer_due_ms, 0, sizeof host->timer_due_ms);
     memset(host->header_text, 0, sizeof host->header_text);
     host->is_inverted = host->session_inverted;
@@ -2821,8 +2843,8 @@ void standin_long_press(int32_t pressed)
     /* A long BACK is the menu's: no application is told. */
     if (pressed != BTN_BACK) {
         button(pressed, BTN_LONG_PRESSED);
+        button(pressed, BTN_KEYUP);
     }
-    button(pressed, BTN_KEYUP);
 }
 
 void standin_timer(int32_t id)
@@ -2879,6 +2901,7 @@ void standin_updated_as_loaded(void)
 uint64_t standin_draw(void)
 {
     standin_t *host = standin();
+    host->redraw_flags = 0;
     host->picture = 0xcbf29ce484222325u;
     host->draw_calls = 0;
     host->draw_text[0] = '\0';

@@ -113,6 +113,8 @@ typedef struct {
     uint32_t                 intents; /* a bit a HOST_INTENT_* */
     const standin_file_t    *files;   /* the package's `files` folder */
     int32_t                  file_count;
+    const char *const       *certificates;
+    int32_t                  certificate_count;
     /* test/check.json beside the application: where and when it is checked. */
     int64_t                  at;
     int32_t                  zone_offset; /* before the first change */
@@ -357,7 +359,7 @@ void standin_focus(void);      /* it has the screen: app_on_focus() */
 void standin_leave(void);      /* app_on_blur(), app_on_terminate(); its timers stop */
 void standin_terminate(void);  /* an instance loaded off the screen ends */
 void standin_press(int32_t button);      /* KEYDOWN, KEYUP, PRESSED; BACK as the device takes it */
-void standin_long_press(int32_t button); /* KEYDOWN, LONG_PRESSED, KEYUP */
+void standin_long_press(int32_t button); /* KEYDOWN, LONG_PRESSED, KEYUP; BACK: KEYDOWN only */
 void standin_timer(int32_t id);          /* app_on_timer(), the timer no longer waiting */
 void standin_alarm(int32_t id);
 void standin_intent(int32_t intent);     /* when the manifest asks for it */

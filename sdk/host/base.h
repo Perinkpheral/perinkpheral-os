@@ -56,10 +56,12 @@
  * alignments, field types and offsets. Call arguments lower pointers and
  * 32-bit integers to wasm i32, and 64-bit integers to wasm i64.
  *
- * Ordinary input bytes are consumed or copied before an import returns;
- * Perinkpheral OS does not retain application pointers. app_data_buffer() and
- * app_strings_buffer() instead return storage valid for the entire loaded
- * instance: do not move or release it. Data passed to a handler is valid
+ * Ordinary input bytes are consumed or copied before an import returns.
+ * The buffers returned by app_data_buffer() and app_strings_buffer(), and
+ * the buffer registered by document_buffer_set(), remain available to
+ * Perinkpheral OS after the call. Keep exported buffers valid until unload
+ * and registered document storage valid until successful replacement or
+ * unload. Data passed to a handler is valid
  * only until that handler returns. String-table words are little-endian
  * uint16_t; picture dimensions and bitmap rows are bytes (host/gfx.h).
  *

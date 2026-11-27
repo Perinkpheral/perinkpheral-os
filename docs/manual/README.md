@@ -30,7 +30,7 @@ all documentation PDFs. Printing refuses missing pictures.
 ## Rebuilding pictures
 
 Requirements: the normal tools environment
-(Java 21+, C compiler, wasi-sdk), Python 3, Node.js, Blender, Playwright with
+(Java 21+, C compiler, wasi-sdk), Python 3.9 or later, Node.js, Blender, Playwright with
 Chromium, and a Python environment with `tools/case/requirements.txt` installed.
 The Python used for CAD is separate from Blender's bundled Python.
 
@@ -42,11 +42,13 @@ export PLAYWRIGHT_MODULE=/path/to/node_modules/playwright
 docs/manual/pictures.sh /tmp/manual-review-round
 ```
 
-Use a new review folder for each round. Intermediates, logs, native previews,
-BMP captures and rendered PNG/SVG files all stay under that folder. Final
-pictures are also copied beside the manual source. Review them before keeping
-them. Before copying, the script checks every PNG against the accepted source
-dimensions and writes `picture-dimensions.json`; a size change stops the build.
+Use a new review folder for each round. Capture outputs, simulator state and
+simulator logs are stored under that folder. Tool builds use their repository
+build directories; application builds and native previews also use system
+temporary directories. Final pictures are copied beside the manual source.
+Review them before keeping them. Before copying, the script checks every PNG
+against the accepted source dimensions and writes `picture-dimensions.json`;
+a size change stops the build.
 Renders and browser captures depend on tool and font versions, so reruns may
 change committed pictures; commit only changes that have been visually reviewed.
 The normal PDF build and CI consume these pictures; they do not require

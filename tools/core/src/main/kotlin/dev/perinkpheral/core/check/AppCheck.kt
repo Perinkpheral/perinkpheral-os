@@ -276,6 +276,8 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             }
             val hosts = (manifest["hosts"] as? List<*>).orEmpty().filterIsInstance<String>()
             if (hosts.isNotEmpty()) appendLine("static const char *const HOSTS[] = { ${hosts.joinToString(", ") { text(it) }} };")
+            val certificates = (manifest["certificates"] as? List<*>).orEmpty().filterIsInstance<String>()
+            if (certificates.isNotEmpty()) appendLine("static const char *const CERTIFICATES[] = { ${certificates.joinToString(", ") { text(it) }} };")
             // The package as it is installed: its files and the tables of its languages, which count
             // against what it may write as the files it writes do; not the module and the manifest.
             val files = AppBuilder.packageFiles(built.dir).filter { it != MANIFEST && it != MODULE }
@@ -415,6 +417,7 @@ class AppCheck(private val sdk: Sdk, private val wasiSdk: File, private val say:
             if (polls.isNotEmpty()) appendLine("    .polls = POLLS, .poll_count = ${polls.size},")
             if (hosts.isNotEmpty()) appendLine("    .hosts = HOSTS, .host_count = ${hosts.size},")
             if (files.isNotEmpty()) appendLine("    .files = FILES, .file_count = ${files.size},")
+            if (certificates.isNotEmpty()) appendLine("    .certificates = CERTIFICATES, .certificate_count = ${certificates.size},")
             if (store.isNotEmpty()) appendLine("    .store = STORE, .store_count = ${store.size},")
             if (answers.isNotEmpty()) appendLine("    .answers = ANSWERS, .answer_count = ${answers.size},")
             if (changes.isNotEmpty()) appendLine("    .zone_changes = ZONE, .zone_change_count = ${changes.size},")
