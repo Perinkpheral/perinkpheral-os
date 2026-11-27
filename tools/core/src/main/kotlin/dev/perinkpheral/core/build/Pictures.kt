@@ -219,6 +219,8 @@ object Pictures {
             return if (colour == 3) value else value * 255 / ((1 shl depth) - 1)
         }
 
+        fun transparentSample(index: Int): Int =
+            ((transparency[index * 2].toInt() and 0xFF) shl 8) or (transparency[index * 2 + 1].toInt() and 0xFF)
         fun isInk(row: IntArray, x: Int): Boolean {
             val red: Int
             val green: Int
@@ -236,13 +238,17 @@ object Pictures {
                     red = sample(row, x * channels)
                     green = red
                     blue = red
-                    alpha = if (colour == 4) sample(row, x * channels + 1) else 255
+                    val rawGrey = if (depth == 8) red else red * ((1 shl depth) - 1) / 255
+                    alpha = if (colour == 4) sample(row, x * channels + 1)
+                        else if (transparency.size == 2 && rawGrey == transparentSample(0)) 0 else 255
                 }
                 else -> {
                     red = sample(row, x * channels)
                     green = sample(row, x * channels + 1)
                     blue = sample(row, x * channels + 2)
-                    alpha = if (colour == 6) sample(row, x * channels + 3) else 255
+                    alpha = if (colour == 6) sample(row, x * channels + 3)
+                        else if (transparency.size == 6 && red == transparentSample(0) &&
+                            green == transparentSample(1) && blue == transparentSample(2)) 0 else 255
                 }
             }
             return alpha >= 128 && (red * 299 + green * 587 + blue * 114) / 1000 < THRESHOLD

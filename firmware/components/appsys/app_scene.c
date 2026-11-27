@@ -99,7 +99,8 @@ static bool load(app_scene_t *self)
         return false;
     }
     unsigned grants = (self->manifest->system ? APP_GRANT_SYSTEM : 0) |
-                      (self->manifest->writes_files ? APP_GRANT_FILES : 0);
+                      (self->manifest->writes_files ? APP_GRANT_FILES : 0) |
+                      (self->manifest->fullscreen ? APP_GRANT_FULLSCREEN : 0);
     switch (app_load(self->manifest->name, self->manifest->abi, self->module, module_size, grants, self->services,
                      &self->app)) {
     case APP_OK:
@@ -302,7 +303,7 @@ static void app_scene_draw(scene_t *scene, gfx_t *surface)
             take_question(self, app_take_redraw_flags(self->app));
         }
         app_draw(self->app, surface);
-        scene->inverted = app_screen_inverted(self->app);
+        take_header(self);
         app_take_redraw_request(self->app);
         app_take_redraw_flags(self->app);
     }

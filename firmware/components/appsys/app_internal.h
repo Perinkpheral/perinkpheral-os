@@ -43,6 +43,10 @@ typedef enum {
 
 #define HANDLER(app, name) ((app)->exports[EXPORT_##name])
 
+#define APP_SURFACE_WIDTH 400
+#define APP_SURFACE_HEIGHT 300
+#define APP_CONTENT_HEIGHT 260
+
 struct app {
     IM3Environment        environment;
     IM3Runtime            runtime;
@@ -67,6 +71,7 @@ struct app {
     uint32_t    data_buffer_offset; /* where in its memory the application takes data */
     bool        has_data_buffer;
 
+    gfx_t       layout; /* dimensions only, available in every handler */
     gfx_t      *surface; /* set only while app_on_draw() runs */
     bool        redraw_requested;
     bool        screen_inverted;

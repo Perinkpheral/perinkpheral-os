@@ -201,7 +201,7 @@ display_result_t display_show(const uint8_t *frame, refresh_reason_t why)
 {
     display_result_t result;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (s_shown_is_on_panel && memcmp(s_shown, frame, sizeof s_shown) == 0) {
+    if (why != REFRESH_FOR_CLEAN && s_shown_is_on_panel && memcmp(s_shown, frame, sizeof s_shown) == 0) {
         result = DISPLAY_UNCHANGED;
     } else {
         esp_err_t err = ESP_OK;

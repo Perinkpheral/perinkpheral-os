@@ -184,6 +184,8 @@ void standin_forget_session(void)
 {
     standin()->session_length = 0;
     world->session_inverted = false;
+    world->session_is_closed = true;
+    world->question = world->shown_question = 0;
 }
 
 void standin_restart(void)
@@ -194,6 +196,8 @@ void standin_restart(void)
     host->session_length = 0;
     host->session_inverted = false;
     host->request_count = 0;
+    host->pending_notice_count = 0;
+    host->question = host->shown_question = host->ok_question = 0;
     memset(host->alarms, 0, sizeof host->alarms);
     memset(host->timer_due_ms, 0, sizeof host->timer_due_ms);
     /* A status in the header is the running firmware's: a restart shows none. */
@@ -251,7 +255,7 @@ int32_t session_set(const void *data, int32_t length)
 {
     standin_t *host = standin();
     /* Attached after app_on_load() returns, and an instance off the screen only reads it. */
-    if (data == NULL || length < 0 || length > HOST_SESSION_MAX || host->is_loading || !host->is_session_writable) {
+    if (data == NULL || length < 0 || length > HOST_SESSION_MAX || host->is_loading || host->session_is_closed || !host->is_session_writable) {
         return HOST_ERR_ARGUMENT;
     }
     if (length > host->session_length && session_refusal != HOST_OK) {
@@ -1065,6 +1069,9 @@ int64_t standin_alarm_left(int32_t id)
 void screen_redraw(int32_t flags)
 {
     standin()->redraws++;
+    world->question_dirty = true;
+    world->question_flags |= flags & (HOST_REDRAW_SOON | HOST_REDRAW_CLEAN | HOST_REDRAW_NO_BLINK |
+                                      HOST_REDRAW_QUESTION);
     world->redraw_flags |= flags & (HOST_REDRAW_SOON | HOST_REDRAW_CLEAN | HOST_REDRAW_NO_BLINK |
                                     HOST_REDRAW_QUESTION);
 }
@@ -1073,7 +1080,8 @@ void screen_redraw(int32_t flags)
 int32_t screen_set_inverted(int32_t inverted)
 {
     standin()->is_inverted = inverted != 0;
-    if (world->is_session_writable) {
+    world->inversion_was_set = true;
+    if (world->is_session_writable && !world->session_is_closed) {
         world->session_inverted = world->is_inverted;
     }
     return HOST_OK;
@@ -1131,24 +1139,60 @@ void screen_leave(void)
     }
 }
 
+static void notice_field(char *text, size_t size)
+{
+    if (memchr(text, '\0', size) == NULL) {
+        size_t length = size - 1;
+        while (length > 0 && ((uint8_t)text[length] & 0xC0) == 0x80) {
+            length--;
+        }
+        text[length] = '\0';
+    }
+}
+
 int32_t notification_post(const host_notice_t *notice)
 {
     standin();
-    if (notice == NULL || notice->first[0] == '\0' ||
-        notice->icon < HOST_ICON_NONE || notice->icon >= HOST_ICON_COUNT) {
+    if (notice == NULL || notice->icon < HOST_ICON_NONE || notice->icon >= HOST_ICON_COUNT) {
+        return HOST_ERR_ARGUMENT;
+    }
+    host_notice_t kept = { .icon = notice->icon };
+    memcpy(kept.first, notice->first, sizeof kept.first);
+    memcpy(kept.second, notice->second, sizeof kept.second);
+    memcpy(kept.detail, notice->detail, sizeof kept.detail);
+    notice_field(kept.first, sizeof kept.first);
+    notice_field(kept.second, sizeof kept.second);
+    notice_field(kept.detail, sizeof kept.detail);
+    if (kept.first[0] == '\0') {
         return HOST_ERR_ARGUMENT;
     }
     world->notice_attempts++;
-    if (world->refuse_notices != HOST_OK) {
+    if (world->refuse_notices != HOST_OK || world->pending_notice_count >= STANDIN_NOTICES) {
         world->refused_notices++;
-        return world->refuse_notices;
+        return world->refuse_notices != HOST_OK ? world->refuse_notices : HOST_ERR_NO_SPACE;
     }
     if (world->refuse_receipts) {
         world->refuse_writes = HOST_ERR_NO_SPACE;
     }
-    world->last_notice = *notice;
+    world->last_notice = kept;
+    world->pending_notices[world->pending_notice_count++] = kept;
     world->notices++;
     return HOST_OK;
+}
+
+void standin_notice_dismiss(void)
+{
+    standin_t *host = standin();
+    if (host->pending_notice_count > 0) {
+        host->pending_notice_count--;
+        memmove(host->pending_notices, host->pending_notices + 1,
+                (size_t)host->pending_notice_count * sizeof host->pending_notices[0]);
+    }
+}
+
+void standin_notices_clear(void)
+{
+    standin()->pending_notice_count = 0;
 }
 
 /* ---- Network ---- */
@@ -1989,25 +2033,14 @@ static int32_t surface_height(void)
     return standin_subject.is_fullscreen ? SURFACE_HEIGHT : SURFACE_HEIGHT - HEADER_HEIGHT;
 }
 
-/* A call that measures for a frame: the device answers it only while one is drawn. */
-static bool is_measuring(const char *call)
-{
-    if (standin()->is_drawing) {
-        return true;
-    }
-    world->stray_draws++;
-    say(world->stray_draw, "%s() in %s", call, running());
-    return false;
-}
-
 int32_t gfx_width(void)
 {
-    return is_measuring("gfx_width") ? SURFACE_WIDTH : HOST_ERR_NOT_DRAWING;
+    return surface_width();
 }
 
 int32_t gfx_height(void)
 {
-    return is_measuring("gfx_height") ? surface_height() : HOST_ERR_NOT_DRAWING;
+    return surface_height();
 }
 
 int32_t gfx_draw_text(int32_t x, int32_t y, int32_t font, const char *text, int32_t length)
@@ -2084,7 +2117,9 @@ int32_t gfx_font_ascent(int32_t font)
 int32_t gfx_set_color(int32_t color)
 {
     /* In the frame's picture, and no call that puts anything on the surface. */
-    if (!is_measuring("gfx_set_color")) {
+    if (!standin()->is_drawing) {
+        world->stray_draws++;
+        say(world->stray_draw, "%s() in %s", "gfx_set_color", running());
         return HOST_ERR_NOT_DRAWING;
     }
     mix("gfx_set_color", sizeof "gfx_set_color" - 1);
@@ -2343,17 +2378,11 @@ static int32_t list_rows(const host_list_t *list)
 
 int32_t ui_list_visible(const host_list_t *list)
 {
-    if (!is_measuring("ui_list_visible")) {
-        return HOST_ERR_NOT_DRAWING;
-    }
     return is_list(list) ? list_rows(list) : HOST_ERR_ARGUMENT;
 }
 
 int32_t ui_list_first(const host_list_t *list)
 {
-    if (!is_measuring("ui_list_first")) {
-        return HOST_ERR_NOT_DRAWING;
-    }
     if (!is_list(list)) {
         return HOST_ERR_ARGUMENT;
     }
@@ -2381,6 +2410,13 @@ int32_t ui_draw_list_row(const host_list_t *list, int32_t index, const char *lab
         return refused_draw("ui_draw_list_row");
     }
     mix(list, sizeof *list);
+    if (index < 0 || index >= list->count) {
+        return HOST_OK;
+    }
+    int32_t slot = index - ui_list_first(list);
+    if (slot < 0 || slot >= list_rows(list)) {
+        return HOST_OK;
+    }
     mix_number(index);
     mix_text(label, label_length);
     mix_number(icon);
@@ -2728,9 +2764,6 @@ static int32_t cell_size(const host_cell_t *cell, const uint8_t *picture, int32_
 
 int32_t ui_cell_fit(const host_cell_t *cell, const uint8_t *picture, int32_t icon)
 {
-    if (!is_measuring("ui_cell_fit")) {
-        return HOST_ERR_NOT_DRAWING;
-    }
     return is_cell(cell, icon) && (picture == NULL || is_picture(picture)) ? cell_size(cell, picture, icon)
                                                                           : HOST_ERR_ARGUMENT;
 }
@@ -2761,10 +2794,20 @@ int32_t ui_draw_chart(const host_chart_t *chart, const int32_t *values)
     if (chart == NULL || values == NULL || chart->count < 1 || chart->count > HOST_CHART_VALUES_MAX ||
         !is_drawable(chart->x) || !is_drawable(chart->y) || !is_drawable(chart->width) ||
         !is_drawable(chart->height) || chart->width <= 0 || chart->height <= 0 || chart->kind < HOST_CHART_LINE ||
-        chart->kind > HOST_CHART_STEPS || chart->decimals < 0 || chart->decimals > 9) {
+        chart->kind > HOST_CHART_STEPS ||
+        (chart->flags & ~(HOST_CHART_AXIS | HOST_CHART_FROM_ZERO | HOST_CHART_RANGE |
+                          HOST_CHART_MARK_LAST | HOST_CHART_RANGE_RIGHT | HOST_CHART_FIXED_RANGE)) != 0 ||
+        ((chart->flags & HOST_CHART_FIXED_RANGE) && chart->minimum >= chart->maximum) ||
+        chart->decimals < 0 || chart->decimals > 9) {
         return refused_draw("ui_draw_chart");
     }
-    mix(chart, sizeof *chart);
+    host_chart_t visible = {
+        .x = chart->x, .y = chart->y, .width = chart->width, .height = chart->height,
+        .kind = chart->kind, .flags = chart->flags, .decimals = chart->decimals, .count = chart->count,
+        .minimum = (chart->flags & HOST_CHART_FIXED_RANGE) ? chart->minimum : 0,
+        .maximum = (chart->flags & HOST_CHART_FIXED_RANGE) ? chart->maximum : 0,
+    };
+    mix(&visible, sizeof visible);
     mix(values, (size_t)chart->count * sizeof values[0]);
     bool has_value = false;
     for (int32_t index = 0; index < chart->count; index++) {
@@ -2870,13 +2913,44 @@ static void begin(const char *handler)
     alarm(HANDLER_SECONDS);
 }
 
+static void take_question(bool restoring)
+{
+    standin_t *host = standin();
+    if (!host->question_dirty) {
+        return;
+    }
+    if ((host->question_flags & HOST_REDRAW_QUESTION) == 0) {
+        host->question = 0;
+    } else if (!restoring || host->question == 0) {
+        host->next_question = host->next_question == UINT32_MAX ? 1 : host->next_question + 1;
+        host->question = host->next_question;
+    }
+    host->question_dirty = false;
+    host->question_flags = 0;
+}
+
+static void close_scene(void)
+{
+    standin_forget_session();
+    standin()->is_session_writable = false;
+    world->is_leaving = true;
+    standin_leave();
+}
+
 static void end(void)
 {
     alarm(0);
     if (world->handler_writes > world->most_handler_writes) {
         world->most_handler_writes = world->handler_writes;
     }
+    bool is_lifecycle = is_handler("app_on_focus") || is_handler("app_on_blur") ||
+                        is_handler("app_on_terminate");
     world->handler = NULL;
+    if (world->is_leaving && world->is_on_screen && !world->session_is_closed) {
+        close_scene();
+    } else if (world->is_on_screen && !world->session_is_closed && !world->is_drawing && !is_lifecycle) {
+        take_question(false);
+    }
 }
 
 #define CALL(handler, ...)                    \
@@ -2893,10 +2967,11 @@ void standin_load(void)
     standin_t *host = standin();
     host->is_loaded = host->is_loading = true;
     host->is_on_screen = host->is_session_writable = host->is_leaving = host->wants_screen = false;
-    host->redraw_flags = 0;
+    host->redraw_flags = host->question_flags = 0;
+    host->question_dirty = host->inversion_was_set = false;
     memset(host->timer_due_ms, 0, sizeof host->timer_due_ms);
     memset(host->header_text, 0, sizeof host->header_text);
-    host->is_inverted = host->session_inverted;
+    host->is_inverted = false;
     arena_taken = 0;
     CALL(on_load);
     host->is_loading = false;
@@ -2909,12 +2984,23 @@ void standin_load(void)
 
 void standin_focus(void)
 {
-    standin()->is_on_screen = world->is_session_writable = true;
+    standin_t *host = standin();
+    host->session_is_closed = false;
+    if (host->inversion_was_set) {
+        host->session_inverted = host->is_inverted;
+    } else {
+        host->is_inverted = host->session_inverted;
+    }
+    host->is_on_screen = host->is_session_writable = true;
     CALL(on_focus);
+    take_question(true);
 }
 
 void standin_terminate(void)
 {
+    if (!standin()->is_loaded) {
+        return;
+    }
     CALL(on_terminate);
     reset_document();
     world->is_loaded = world->is_on_screen = world->is_session_writable = false;
@@ -2923,48 +3009,85 @@ void standin_terminate(void)
 
 void standin_leave(void)
 {
-    CALL(on_blur);
+    if (!standin()->is_loaded) {
+        return;
+    }
+    if (world->is_on_screen) {
+        CALL(on_blur);
+    }
     world->is_on_screen = false;
     standin_terminate();
 }
 
-static void button(int32_t pressed, int32_t action)
+void standin_button_event(int32_t pressed, int32_t action)
 {
-    CALL(on_button, BTN_EVENT(pressed, action));
+    standin_t *host = standin();
+    if (!host->is_on_screen || host->is_leaving) {
+        return;
+    }
+    if (pressed == BTN_BACK && action == BTN_LONG_PRESSED) {
+        close_scene();
+        return;
+    }
+    if (pressed == BTN_OK && host->question != 0) {
+        if (action == BTN_KEYDOWN) {
+            host->ok_question = host->shown_question == host->question ? host->question : 0;
+            return;
+        }
+        bool began_here = host->ok_question == host->question;
+        if (action == BTN_PRESSED || action == BTN_LONG_PRESSED) {
+            host->ok_question = 0;
+        }
+        if (!began_here) {
+            return;
+        }
+    }
+    if (pressed == BTN_BACK && action == BTN_PRESSED) {
+        if (standin_handlers.on_back != NULL) {
+            CALL(on_back);
+        } else {
+            close_scene();
+        }
+    } else {
+        CALL(on_button, BTN_EVENT(pressed, action));
+    }
 }
 
 void standin_press(int32_t pressed)
 {
-    button(pressed, BTN_KEYDOWN);
-    button(pressed, BTN_KEYUP);
-    if (pressed != BTN_BACK) {
-        button(pressed, BTN_PRESSED);
-    } else if (standin_handlers.on_back != NULL) {
-        CALL(on_back);
-    } else {
-        /* BACK is the way out and needs no code. */
-        world->is_leaving = true;
-    }
+    standin_button_event(pressed, BTN_KEYDOWN);
+    standin_button_event(pressed, BTN_KEYUP);
+    standin_button_event(pressed, BTN_PRESSED);
 }
 
 void standin_long_press(int32_t pressed)
 {
-    button(pressed, BTN_KEYDOWN);
-    /* A long BACK is the menu's: no application is told. */
-    if (pressed != BTN_BACK) {
-        button(pressed, BTN_LONG_PRESSED);
-        button(pressed, BTN_KEYUP);
+    standin_button_event(pressed, BTN_KEYDOWN);
+    if (pressed == BTN_BACK) {
+        /* Physical long BACK acts at release, and the release is consumed by Perinkpheral OS. */
+        if (standin()->is_on_screen && !world->is_leaving) {
+            close_scene();
+        }
+    } else {
+        standin_button_event(pressed, BTN_LONG_PRESSED);
+        standin_button_event(pressed, BTN_KEYUP);
     }
 }
 
 void standin_timer(int32_t id)
 {
-    standin()->timer_due_ms[id] = 0;
+    if (!standin()->is_on_screen || world->is_leaving) {
+        return;
+    }
+    world->timer_due_ms[id] = 0;
     CALL(on_timer, id);
 }
 
 void standin_alarm(int32_t id)
 {
+    if (standin()->is_leaving) {
+        return;
+    }
     standin_alarm_t *alarm = &standin()->alarms[id];
     if (alarm->kind == STANDIN_ALARM_EVERY) {
         /* As app_host.c keeps it: a period after the uptime it was due, or a period from now
@@ -2984,6 +3107,9 @@ void standin_alarm(int32_t id)
 
 void standin_intent(int32_t intent)
 {
+    if (standin()->is_leaving) {
+        return;
+    }
     standin();
     if (intent == HOST_INTENT_NETWORK_UP) {
         for (int poll = 0; poll < standin_subject.poll_count; poll++) {
@@ -2999,6 +3125,9 @@ void standin_intent(int32_t intent)
 
 void standin_settings(void)
 {
+    if (standin()->is_leaving) {
+        return;
+    }
     if ((doc_reader.active || doc_reader.ended) && doc_reader.request < HOST_REQUEST_FIRST)
         doc_reader = (document_reader_t){0};
     CALL(on_settings);
@@ -3019,6 +3148,10 @@ void standin_updated_as_loaded(void)
 uint64_t standin_draw(void)
 {
     standin_t *host = standin();
+    if (host->is_leaving) {
+        return host->picture;
+    }
+    take_question(false);
     host->redraw_flags = 0;
     host->picture = 0xcbf29ce484222325u;
     host->draw_calls = 0;
@@ -3028,8 +3161,26 @@ uint64_t standin_draw(void)
     CALL(on_draw);
     host->redraw_flags = 0;
     host->is_drawing = false;
+    host->question_dirty = false;
+    host->question_flags = 0;
+    host->shown_question = host->question;
     host->draws++;
     return host->picture;
+}
+
+const char *standin_header_text(int32_t side, int32_t *icon)
+{
+    standin_t *host = standin();
+    *icon = HOST_ICON_NONE;
+    if (standin_subject.is_fullscreen || side < HOST_HEADER_LEFT || side > HOST_HEADER_RIGHT) {
+        return "";
+    }
+    bool has_status = host->status_icon[side] != HOST_ICON_NONE || host->status_text[side][0] != '\0';
+    if (has_status && (side == HOST_HEADER_RIGHT || host->header_text[side][0] == '\0')) {
+        *icon = host->status_icon[side];
+        return host->status_text[side];
+    }
+    return host->header_text[side];
 }
 
 uint64_t standin_screen(uint64_t frame)
@@ -3037,13 +3188,12 @@ uint64_t standin_screen(uint64_t frame)
     standin_t *host = standin();
     uint64_t picture = host->picture;
     host->picture = frame;
-    /* The header Perinkpheral OS draws above the frame, unless the application is fullscreen,
-     * and the inversion of the whole screen. */
     if (!standin_subject.is_fullscreen) {
         for (int side = 0; side < 2; side++) {
-            mix_field(host->header_text[side], sizeof host->header_text[side]);
-            mix_field(host->status_text[side], sizeof host->status_text[side]);
-            mix_number(host->status_icon[side]);
+            int32_t icon;
+            const char *text = standin_header_text(side, &icon);
+            mix(text, strlen(text));
+            mix_number(icon);
         }
     }
     mix_number(host->is_inverted);

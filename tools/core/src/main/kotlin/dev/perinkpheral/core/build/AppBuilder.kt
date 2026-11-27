@@ -298,8 +298,12 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
         if ((manifest["intents"] as? List<*>)?.isNotEmpty() == true && "app_on_intent" !in exports) {
             throw BuildError("${wasm.path}: the manifest asks for intents and the module has no app_on_intent()")
         }
-        val measuring = Regex("""(_width|_height|_ascent|_fit|_visible|_first)$""")
-        if (called.any { (it.startsWith("gfx_") || it.startsWith("ui_")) && !measuring.containsMatchIn(it) } &&
+        val graphics = called.filter { it.startsWith("gfx_") || it.startsWith("ui_") }
+        check(graphics.all { it in DRAWING_CALLS || it in MEASURING_CALLS || it == "gfx_draw_qr" }) {
+            "classify every graphics import as drawing, measuring or QR's combined operation"
+        }
+        // A QR import may only measure (cell 0); its runtime argument decides whether it draws.
+        if (graphics.any { it in DRAWING_CALLS } &&
             "app_on_draw" !in exports) {
             throw BuildError("${wasm.path} draws and has no app_on_draw(): drawing calls work only there")
         }
@@ -373,6 +377,17 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
     }
 
     companion object {
+        internal val MEASURING_CALLS = setOf(
+            "gfx_width", "gfx_height", "gfx_text_width", "gfx_text_ink", "gfx_fit_text",
+            "gfx_font_height", "gfx_font_ascent", "gfx_font_cap_height", "gfx_icon_ink", "gfx_map_point",
+            "ui_list_visible", "ui_list_first", "ui_text_width", "ui_text_height", "ui_value_width", "ui_cell_fit")
+        internal val DRAWING_CALLS = setOf(
+            "gfx_set_color", "gfx_draw_text", "gfx_draw_rect", "gfx_draw_line", "gfx_draw_bitmap",
+            "gfx_draw_bitmap_file", "gfx_draw_icon", "gfx_draw_picture", "gfx_draw_map", "gfx_draw_map_radius",
+            "ui_draw_list_row", "ui_draw_notice", "ui_draw_text", "ui_draw_text_lines", "ui_draw_title",
+            "ui_draw_icon", "ui_draw_button", "ui_draw_actions", "ui_draw_bar", "ui_draw_value", "ui_draw_reason",
+            "ui_draw_frame", "ui_draw_cell", "ui_draw_chart", "ui_draw_picker", "ui_draw_date")
+
         // Installer bounds in catalog.h and web_apps.c include generated files.
         private const val PACKAGE_FILES_MAX = 8
         private const val MANIFEST_MAX_BYTES = 8192

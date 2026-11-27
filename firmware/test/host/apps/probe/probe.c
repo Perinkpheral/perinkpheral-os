@@ -64,6 +64,8 @@ static size_t memory_end(void)
 }
 
 static int32_t presses;
+static bool geometry_at_load, header_during_draw;
+static int32_t manifest_height;
 static int32_t fired_timer = -1;
 static int32_t result_outside_draw;
 static int32_t found_on_start;
@@ -142,6 +144,11 @@ void app_on_settings(void)
 }
 void app_on_load(void)
 {
+    host_list_t list = { .count = 100, .selected = 99 };
+    host_cell_t cell = { .width = 400, .height = 300, .value = "7" };
+    manifest_height = gfx_height();
+    geometry_at_load = gfx_width() == 400 && (manifest_height == 260 || manifest_height == 300) &&
+        ui_list_visible(&list) > 0 && ui_list_first(&list) > 0 && ui_cell_fit(&cell, 0, HOST_ICON_NONE) == 1;
     document_buffer_set(small_document, sizeof small_document);
     uint8_t kept;
     found_on_start = kv_get("kept", 4, &kept, sizeof kept) == 1 && kept == 7;
@@ -194,6 +201,11 @@ void app_on_button(int32_t event)
     }
     if (button == BUTTON_CLEAR_SCENE) {
         clears_scene = session_set(scene_data, 0) == HOST_OK && session_get(scene_data, 0) == 0;
+        return;
+    }
+    if (button == 102) {
+        header_during_draw = true;
+        screen_redraw(HOST_REDRAW_NORMAL);
         return;
     }
     if (button == BUTTON_INVERT || button == BUTTON_NORMAL) {
@@ -493,6 +505,26 @@ void app_on_timer(int32_t id)
 void app_on_draw(void)
 {
     if (text_contract_cases()) { mark(14, ROW_SCENE_STATE); }
+
+    if (geometry_at_load) {
+        mark(25, 5);
+        mark(manifest_height == 300 ? 27 : 29, 5);
+    }
+    if (header_during_draw) {
+        header_set_text(HOST_HEADER_LEFT, "Draw header", 11);
+        header_set_text(HOST_HEADER_RIGHT, "Draw right", 10);
+    }
+    host_chart_t validation_chart = { .width = 1, .height = 1, .count = 1,
+        .flags = HOST_CHART_FIXED_RANGE, .minimum = 0, .maximum = 10 };
+    const int32_t chart_value = 1;
+    bool valid_chart = ui_draw_chart(&validation_chart, &chart_value) == HOST_OK;
+    validation_chart.maximum = 0;
+    bool invalid_chart = ui_draw_chart(&validation_chart, &chart_value) == HOST_ERR_ARGUMENT;
+    validation_chart.maximum = 10; validation_chart.flags |= 64;
+    if (valid_chart && invalid_chart && ui_draw_chart(&validation_chart, &chart_value) == HOST_ERR_ARGUMENT) {
+        mark(31, 5);
+    }
+
     if (document_registration == 1)
         mark(10, ROW_SCENE_STATE);
     if (document_registration == -1)
@@ -526,6 +558,7 @@ void app_on_draw(void)
      * what is not a list or not the application's to give is refused */
     static const host_list_t at_its_start = { .count = 100, .selected = 0 };
     static const host_list_t at_its_end = { .count = 100, .selected = 99 };
+    static const host_list_t off_surface = { .count = 100, .selected = 99, .top = OFF_THE_SURFACE };
     static const host_list_t not_a_list = { .count = -1 };
     static const host_list_t three = { .count = 3 };
     int32_t visible = ui_list_visible(&at_its_start);
@@ -534,6 +567,8 @@ void app_on_draw(void)
         ui_draw_list_row(&not_a_list, 0, "a", 1, "", 0, HOST_ICON_NONE) == HOST_ERR_ARGUMENT &&
         ui_draw_list_row(&three, 0, "a", 1, "", 0, 999) == HOST_ERR_ARGUMENT &&
         ui_list_visible((const host_list_t *)0xFFFFFF00u) == HOST_ERR_ARGUMENT &&
+        ui_draw_list_row(&off_surface, INT32_MIN, "a", 1, "", 0, HOST_ICON_NONE) == HOST_OK &&
+        ui_draw_list_row(&off_surface, INT32_MAX, "a", 1, "", 0, HOST_ICON_NONE) == HOST_OK &&
         ui_draw_notice((const host_notice_t *)0xFFFFFF00u) == HOST_ERR_ARGUMENT) {
         mark(0, ROW_UI);
     }

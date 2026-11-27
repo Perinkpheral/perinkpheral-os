@@ -100,6 +100,7 @@ typedef enum {
 #define KIT_CHART_RANGE     4 /* the greatest and the least value as captions at the left */
 #define KIT_CHART_MARK_LAST 8 /* a mark at the last value; line kinds only */
 #define KIT_CHART_RANGE_RIGHT 16 /* the same captions as KIT_CHART_RANGE, at the right */
+#define KIT_CHART_FIXED_RANGE 32 /* minimum/maximum override automatic scaling and FROM_ZERO */
 typedef struct {
     int              left, top, width, height;
     const int32_t   *values;
@@ -107,6 +108,7 @@ typedef struct {
     kit_chart_kind_t kind;
     int              flags;
     int              decimals;   /* of the captions: 215 with 1 is "21.5" */
+    int32_t          minimum, maximum;
     int              fill_shade; /* KIT_CHART_AREA: shade of the area, 0 - GFX_SHADE_SOLID */
 } kit_chart_t;
 

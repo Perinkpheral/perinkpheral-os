@@ -15,8 +15,8 @@
  *
  * The ui_* calls draw the parts that Perinkpheral OS screens are built from. The
  * drawing code is in Perinkpheral OS and is the same code that draws the menu
- * and Perinkpheral OS questions. Drawing calls, ui_list_visible(),
- * ui_list_first() and ui_cell_fit() require app_on_draw(). ui_text_width(),
+ * and Perinkpheral OS questions. Drawing calls require app_on_draw().
+ * ui_list_visible(), ui_list_first(), ui_cell_fit(), ui_text_width(),
  * ui_text_height() and ui_value_width() work in any handler. */
 
 /* List.
@@ -196,7 +196,8 @@ HOST_IMPORT(ui_draw_frame, int32_t ui_draw_frame(int32_t x, int32_t y, int32_t w
  * A cell covering the whole surface tries size classes 1..5; other cells
  * try 3..5. The smallest class is used if none fits.
  * Picture size: HOST_UI_CELL_PICTURE_LARGE pixels in a cell that covers
- * the whole surface, HOST_UI_CELL_PICTURE_SMALL otherwise.
+ * the whole surface, HOST_UI_CELL_PICTURE_SMALL otherwise. Pictures larger
+ * than the square are downsampled to fit; smaller pictures use integer enlargement.
  * `picture` is a picture in gfx_draw_picture() format, or 0; `icon` is one of
  * Perinkpheral OS's icons (HOST_ICON_*) drawn in its place, or HOST_ICON_NONE.
  * Cells shown together should use one size: ui_cell_fit() returns the
@@ -218,7 +219,11 @@ HOST_IMPORT(ui_cell_fit, int32_t ui_cell_fit(const host_cell_t *cell, const uint
 HOST_IMPORT(ui_draw_cell, int32_t ui_draw_cell(const host_cell_t *cell, const uint8_t *picture, int32_t icon));
 
 /* Chart of a series of integers in a box. The vertical scale spans the
- * least and the greatest value of the series.
+ * least and the greatest value of the series, unless HOST_CHART_FIXED_RANGE
+ * selects `minimum` and `maximum`. The fixed range requires minimum < maximum;
+ * it overrides HOST_CHART_FROM_ZERO. Values and marks are clipped to the box.
+ * Fixed-range captions show minimum and maximum. Automatic captions show
+ * the series extrema. Unknown flag bits are refused.
  * `values`: `count` numbers, 1 to HOST_CHART_VALUES_MAX, oldest first.
  * A value of HOST_CHART_NO_VALUE is a gap in the series.
  * decimals must be 0..9. width and height must be positive.
@@ -242,6 +247,7 @@ HOST_IMPORT(ui_draw_cell, int32_t ui_draw_cell(const host_cell_t *cell, const ui
 #define HOST_CHART_RANGE     4
 #define HOST_CHART_MARK_LAST 8
 #define HOST_CHART_RANGE_RIGHT 16
+#define HOST_CHART_FIXED_RANGE 32
 #define HOST_CHART_VALUES_MAX 128
 #define HOST_CHART_NO_VALUE   INT32_MIN
 typedef struct host_chart {
@@ -250,8 +256,9 @@ typedef struct host_chart {
     int32_t flags;
     int32_t decimals;
     int32_t count;
+    int32_t minimum, maximum; /* used only with HOST_CHART_FIXED_RANGE */
 } host_chart_t;
-HOST_LAYOUT(host_chart_t, 32);
+HOST_LAYOUT(host_chart_t, 40);
 HOST_IMPORT(ui_draw_chart, int32_t ui_draw_chart(const host_chart_t *chart, const int32_t *values));
 
 /* Picker: one value of a sequence, on the whole surface. The selected

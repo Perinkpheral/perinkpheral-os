@@ -38,6 +38,15 @@ poll uses its declared method.
 
 The stand-in arena uses eight-byte alignment, as does the device allocator.
 
+Screen helpers model handler exits, scene-session closure, load-time inversion and QUESTION
+press generations. `standin_button_event(button, action)` delivers one event without drawing,
+so tests can hold OK across a question change. `standin_draw()` marks its frame as shown.
+Notification validation and copying follow the firmware. `pending_notice_count` counts the
+four retained slots; `notices` counts all acceptances. `standin_notice_dismiss()` releases the
+oldest slot and `standin_notices_clear()` releases all slots, without changing acceptance counts.
+Header comparisons and visible-failure checks use scene-left precedence, kept-right precedence
+and fullscreen suppression; hidden text cannot satisfy a visible-failure requirement.
+
 ## Known differences from the device
 
 The stand-in is not the device. A finding that rests only on one of these differences is not a

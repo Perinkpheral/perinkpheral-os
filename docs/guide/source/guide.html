@@ -476,8 +476,8 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 
 <h2 id="screen-surface">Surface and colour</h2>
 <ul>
-  <li>The origin is the top left corner of the surface. <code>gfx_width()</code> and <code>gfx_height()</code> return its size. Use these values for layout.</li>
-  <li>Drawing calls work inside <code>app_on_draw()</code>. The surface is white at the start of each call. In any other handler, the drawing calls of <code>gfx_*</code> and <code>ui_*</code> return <code>HOST_ERR_NOT_DRAWING</code>; measuring text and fonts works anywhere. Drawing is clipped to the surface.</li>
+  <li>The origin is the top left corner of the surface. <code>gfx_width()</code> and <code>gfx_height()</code> return its manifest size in any handler, including <code>app_on_load()</code> and background delivery. Use these values for layout.</li>
+  <li>Drawing calls work inside <code>app_on_draw()</code>. The surface is white at the start of each call. In any other handler, drawing calls return <code>HOST_ERR_NOT_DRAWING</code>. Text and font measurements, <code>gfx_fit_text()</code>, ink bounds, map-point queries, <code>ui_list_visible()</code>, <code>ui_list_first()</code> and <code>ui_cell_fit()</code> work in any handler. <code>gfx_draw_qr()</code> measures in any handler when its cell size is zero. Drawing is clipped to the surface.</li>
   <li><code>gfx_set_color()</code> sets the colour for the following calls, from <code>HOST_PAPER</code> (0) to <code>HOST_INK</code> (16). The colour is <code>HOST_INK</code> at the start of each <code>app_on_draw()</code>. Intermediate values are dithered greys. Use greys for filled areas only: thin lines and small text become unreadable.</li>
   <li>The standard margin is <code>HOST_UI_MARGIN</code> (16 px). Use it at the left and right edges.</li>
 </ul>
@@ -496,7 +496,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <h2 id="screen-fonts">Fonts</h2>
 <p>A font constant selects a size. The typeface is a user setting: Departure Mono (monospaced) or Jersey (proportional). Character widths differ between the two, so layout is based on measured widths.</p>
 <p>Measure text with <code>gfx_text_width()</code>, <code>gfx_font_height()</code>, <code>gfx_font_ascent()</code> and <code>gfx_font_cap_height()</code>.</p>
-<p>Each cell gives the value for Departure Mono, then for Jersey.</p>
+<p>Each cell gives the current measured value for Departure Mono, then for Jersey. Font metrics, panel durations and dithering patterns are informative, not fixed ABI guarantees. Measure the selected font for layout.</p>
 <table>
   <tr><th style="width:24%">Constant</th><th>Capital height, px</th><th>Line height, px</th><th>Digits per 400 px</th><th style="width:34%">Typical use</th></tr>
   <tr><td class="c">HOST_FONT_SMALL</td><td>8 / 10</td><td>15 / 21</td><td>57 / 50</td><td>Units, captions</td></tr>
@@ -510,7 +510,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 <ul>
   <li>The <code>y</code> argument of <code>gfx_draw_text()</code> is the top of the line. The baseline is at <code>y + ascent</code>; the top of the capitals is at <code>y + ascent - cap_height</code>.</li>
   <li>Add <code>HOST_FONT_TABULAR</code> to the font for numbers that change in place, such as a clock or a countdown. All digits then have the same width. Every call that takes a font accepts the flag. Pass the same flag when measuring.</li>
-  <li><code>gfx_fit_text()</code> shortens a text to a given width and appends "...". It cuts between characters, so the result is valid UTF-8.</li>
+  <li><code>gfx_fit_text()</code> shortens a text to a given width and appends "...". The result may contain only "..."; it is empty when the dots do not fit. It cuts between characters, so the result is valid UTF-8. Ink measurements, including the degree sign, exclude spacing around visible marks.</li>
 </ul>
 
 <h2 id="screen-letters">Text beyond ASCII</h2>
@@ -578,7 +578,7 @@ response:  { "quote": { "name": "Apple Inc.", "closes": [356.11, 356.40, null, 3
 gfx_draw_picture(x, y, PICTURE_DROP, 4);    /* 44 px: cell size 4 */
 gfx_draw_picture(x, y, PICTURE_DROP, 2);    /* 22 px: cell size 2 */</pre>
 
-<p>PNG files must be non-interlaced and use at most 8 bits per channel. PBM files must use P1 or P4. A text-picture name must match <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.</p>
+<p>PNG files must be non-interlaced and use at most 8 bits per channel. Transparency includes alpha channels and grayscale, RGB and palette <code>tRNS</code> keys; transparent pixels become paper. PBM files must use P1 or P4. A text-picture name must match <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.</p>
 <p>Rules for text files:</p>
 <ul>
   <li>A line of the form <code>name:</code> starts a picture.</li>
@@ -654,18 +654,19 @@ if (gfx_map_point(&amp;map, 34917100, 33629700, &amp;point) == HOST_OK &amp;&amp
 <p>The <code>kit</code> application in the catalog provides example pages for common UI parts, including a page combining several primitives.</p>
 
 <div class="keep">
+<p>Header setters called during <code>app_on_draw()</code> affect that same frame. Perinkpheral OS collects application text after drawing, composes the effective header, then applies whole-screen inversion.</p>
 <h2 id="screen-refresh">Requesting a refresh</h2>
 <table>
   <tr><th style="width:27%">Flag</th><th>Perinkpheral OS behaviour</th><th style="width:36%">Use</th></tr>
   <tr><td class="c">HOST_REDRAW_NORMAL</td><td>From a button handler: immediate by default, subject to the configured minimum button-refresh interval. Other handlers follow the refresh policy, normally once a minute; settings changes use the urgent policy described below</td><td>Default</td></tr>
   <tr><td class="c">HOST_REDRAW_SOON</td><td>Bypasses the normal data interval; waits until at least one second after the preceding refresh</td><td>Data the user is waiting for, such as the result of a manual refresh; a rhythm the user started with a press, such as a rotation or a countdown</td></tr>
-  <tr><td class="c">HOST_REDRAW_CLEAN</td><td>Full refresh: 2 - 3 s, one flash, removes ghosting. Waits until at least one second after the preceding refresh</td><td>Images that must be clean; the end of a frame sequence</td></tr>
+  <tr><td class="c">HOST_REDRAW_CLEAN</td><td>Full refresh, including an unchanged frame. Waits until at least one second after the preceding refresh; typical measured duration is 2 - 3 s</td><td>Images that must be clean; the end of a frame sequence</td></tr>
   <tr><td class="c">HOST_REDRAW_NO_BLINK</td><td>Immediate; excluded from the periodic full refresh</td><td>List navigation; values that change every second</td></tr>
   <tr><td class="c">HOST_REDRAW_QUESTION</td><td>OK reaches the application only when it is pressed after this frame is on the panel. Pending flags are combined with OR. Each consumed redraw with QUESTION starts a new question; one without it ends the question. NORMAL cannot clear a pending QUESTION</td><td>A question that OK answers: removal, reset, anything that cannot be undone</td></tr>
 </table>
 <p>Settings changes and deliveries to that application for the next 30 seconds use the urgent refresh policy while it is on screen. Other data, timer, alarm and intent redraws use the normal data policy.</p>
 <p>Redraw requests made inside <code>app_on_draw()</code> are cleared when it returns and do not schedule another frame.</p>
-<p>Redraw requests are unlimited.</p>
+<p>Redraw requests are unlimited. Explicit refresh policies survive pending input and data causes: CLEAN takes precedence over NO_BLINK, then SOON. Scene switches still require a full refresh.</p>
 </div>
 <p>Each refresh uses battery energy and wears the panel. Frequent changes also make the device distracting. See section 13 for guidelines.</p>
 
@@ -1079,6 +1080,7 @@ int32_t length = text_fill(app_string(STR_STARTS_IN), app_text_length(app_string
   <tr><td class="c">tools/perinkpheral app-check &lt;folder&gt;</td><td>Builds applications and runs capability checks and their <code>test/*.c</code> tests with sanitizers. Supply test state and mocked responses in <code>test/check.json</code>. Requires a C compiler and wasi-sdk. Applications declaring <code>"system": true</code> are built but skip these native checks</td></tr>
   <tr><td class="c">tools/perinkpheral sim-test &lt;folder&gt;</td><td>Runs simulator scenarios from <code>scenario.json</code> and compares captured frames with expected PNGs</td></tr>
 </table>
+<p>The native stand-in retains four notifications separately from its cumulative acceptance count. Application tests can dismiss one with <code>standin_notice_dismiss()</code> or clear occupancy with <code>standin_notices_clear()</code>. It models scene closure after each input or timer handler, load-time inversion, pending redraw flags and QUESTION press generations. Frame comparisons and visible-failure checks use only the effective header and suppress it for full-screen applications. Pixel clipping and panel refreshes remain simulator and firmware tests.</p>
 <p>For <code>app-check</code>, mock responses in <code>test/check.json</code> accept <code>"headers": {"ETag": "v1", "Set-Cookie": ["a=1", "b=2"]}</code>. Repeated fields retain their order; lookup is case-insensitive. The stand-in uses the firmware header storage and fixed metadata parser for streamed and picked delivery: invalid received names or more than 1024 aggregate bytes make every <code>answer_header()</code> lookup fail with <code>HOST_ERR_NO_SPACE</code>, independently of <code>answer_info()</code>. Content-Length comes from the mock header, or is -1 when absent. Mocks describe the final response; they do not simulate redirects, TLS, timeouts, transfer decoding, automatic headers or Content-Length/body consistency. See <code>sdk/check/README.md</code> for other stand-in differences.</p>
 <p>Native checks read complete response fixtures and mutation files, including streamed bodies above 256 KB, and support more than 64 mocks. Unreadable or incomplete files fail explicitly. Delivery enforces the 256 KB picked and 4 MB streamed limits; an oversized stream terminates with HOST_DATA_FAILED and HOST_FAILED_TOO_LARGE, never a successful LAST for a truncated fixture. HEAD method belongs to each response; direct raw HEAD fixtures must call standin_answer_method(HOST_HTTP_HEAD) before standin_data().</p>
 <p>Log bytes outside printable ASCII, including UTF-8 bytes and line breaks, are replaced with "?".</p>
@@ -1279,7 +1281,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">ui_draw_value(x, y, font, value, value_length, unit, unit_length)</td><td>Value with its unit on the baseline. Returns the total width</td></tr>
   <tr><td class="c">ui_value_width(font, value, value_length, unit, unit_length)</td><td>Width of a value with its unit</td></tr>
   <tr><td class="c">ui_draw_cell(cell, picture, icon)</td><td>Cell from a <code>host_cell_t</code> (x, y, width, height, name[48], value[48], size) with an optional picture (0: none) or a built-in icon (<code>HOST_ICON_NONE</code>: none). Picture size: 88 px in a full-surface cell, 44 px otherwise</td></tr>
-  <tr><td class="c">ui_cell_fit(cell, picture, icon)</td><td>Returns the size class that fits the cell; 1 is the largest. Use the largest returned number for all cells of a screen</td></tr>
+  <tr><td class="c">ui_cell_fit(cell, picture, icon)</td><td>Returns the size class that fits the cell in any handler; 1 is the largest. Use the largest returned number for all cells of a screen. Pictures fit inside their reserved 44 or 88 px square: smaller pictures use integer enlargement, oversized pictures are downsampled</td></tr>
   <tr><td class="c">ui_draw_bar(x, y, width, value, maximum)</td><td>Bar, 14 px high: <code>value</code> of <code>maximum</code></td></tr>
   <tr><td class="c">ui_draw_chart(chart, values)</td><td>Draws a series of integers using host_chart_t; missing values use HOST_CHART_NO_VALUE</td></tr>
   <tr><td class="c">ui_draw_frame(x, y, width, height, arrows)</td><td>Frame with optional arrows: <code>HOST_UI_ARROW_UP</code>, <code>HOST_UI_ARROW_DOWN</code></td></tr>
@@ -1292,8 +1294,9 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><th>Field</th><th>Meaning</th></tr>
   <tr><td class="c">x, y, width, height</td><td>Chart rectangle on the application surface</td></tr>
   <tr><td class="c">kind</td><td>HOST_CHART_LINE, HOST_CHART_AREA, HOST_CHART_BARS or HOST_CHART_STEPS</td></tr>
-  <tr><td class="c">count</td><td>1 - 128 integers, oldest first. Scale spans the least and greatest value</td></tr>
+  <tr><td class="c">count</td><td>1 - 128 integers, oldest first. Automatic scale spans the least and greatest value</td></tr>
   <tr><td class="c">decimals</td><td>0 - 9 decimals in range captions</td></tr>
+  <tr><td class="c">minimum, maximum</td><td>Fixed scale limits with HOST_CHART_FIXED_RANGE; minimum must be less than maximum. Ignored in automatic mode</td></tr>
   <tr><td class="c">flags</td><td>Combine flags below with OR</td></tr>
 </table>
 <table>
@@ -1303,6 +1306,7 @@ gh repo create OWNER/my-perink-apps --public</pre>
   <tr><td class="c">HOST_CHART_RANGE</td><td>Least and greatest value as captions, using decimals</td></tr>
   <tr><td class="c">HOST_CHART_RANGE_RIGHT</td><td>Range captions at the right; series starts at the left edge</td></tr>
   <tr><td class="c">HOST_CHART_MARK_LAST</td><td>Mark at the last value</td></tr>
+  <tr><td class="c">HOST_CHART_FIXED_RANGE</td><td>Uses minimum and maximum, overriding FROM_ZERO. Values and marks are clipped to the chart rectangle; captions use the fixed limits. Unknown chart flag bits return HOST_ERR_ARGUMENT</td></tr>
 </table>
 <h1 id="ref-scene">20. Application services</h1>
 <h2 id="ref-navigation">Navigation and session</h2>
@@ -1511,7 +1515,7 @@ void            app_date_draw(const app_date_t *date);
 /* calendar seconds as if UTC; see conversion below */
 int64_t         app_date_seconds(const app_date_t *date);
 </pre>
-<p>Lists have at most 10000 rows. app_list_button() pages by the most recently measured matching list, using app_list_first(). Before measurement, or after another list was measured, it uses five rows.</p>
+<p>Lists have at most 10000 rows. app_list_button() measures the current list geometry in the button handler for long-press paging, including before the first draw. A list with no visible rows moves one row. app_list_first() works in any handler. Drawing an index outside the list or its visible range succeeds without drawing that row.</p>
 <p>To handle BACK on these screens, export <code>app_on_back()</code> and pass <code>BTN_BACK_PRESSED</code> from it to the same button function.</p>
 <p>app_date_seconds() returns calendar seconds as if the selected fields were UTC. For actual Unix time, pass those fields in a host_local_time_t to time_from_local(&amp;parts, &amp;unix_time) and check for HOST_OK. Perinkpheral OS applies the local zone, moves skipped times forward by the gap and chooses the earlier occurrence of repeated times.</p>
 <h2 id="lib-alloc">app_alloc.h: arena allocation</h2>

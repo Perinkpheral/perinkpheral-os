@@ -291,23 +291,54 @@ static void chart_label(char *text, size_t size, int32_t value, int decimals)
 }
 
 /* The row of a value: `high` at `top`, `low` at the last of `rows` rows. */
-static int chart_row(int32_t value, int32_t low, int32_t high, int top, int rows)
+static int64_t chart_row(int32_t value, int32_t low, int32_t high, int top, int rows)
 {
-    long long span = (long long)high - low;
-    return top + rows - 1 - (int)(((long long)value - low) * (rows - 1) / span);
+    int64_t span = (int64_t)high - low;
+    return top + rows - 1 - ((int64_t)value - low) * (rows - 1) / span;
 }
 
-static void chart_column(gfx_t *g, int x, int y, int other_y, int width)
+static void chart_column(gfx_t *g, int x, int64_t y, int64_t other_y, int width)
 {
-    int first = y < other_y ? y : other_y;
-    int last = y < other_y ? other_y : y;
-    gfx_fill(g, x, first, width, last - first + 1, true);
+    int64_t first = y < other_y ? y : other_y;
+    int64_t last = y < other_y ? other_y : y;
+    int top = g->clip_y0 - g->origin_y, bottom = g->clip_y1 - g->origin_y - 1;
+    first = first < top ? top : first;
+    last = last > bottom ? bottom : last;
+    if (first <= last) {
+        gfx_fill(g, x, (int)first, width, (int)(last - first + 1), true);
+    }
+}
+
+/* Clip before narrowing: a fixed range can put a valid int32 value far beyond the box. */
+static void chart_line(gfx_t *g, int x0, int64_t y0, int x1, int64_t y1)
+{
+    int top = g->clip_y0 - g->origin_y, bottom = g->clip_y1 - g->origin_y - 1;
+    if ((y0 < top && y1 < top) || (y0 > bottom && y1 > bottom)) {
+        return;
+    }
+    if (y0 < top || y0 > bottom) {
+        int edge = y0 < top ? top : bottom;
+        x0 += (int)((int64_t)(x1 - x0) * (edge - y0) / (y1 - y0));
+        y0 = edge;
+    }
+    if (y1 < top || y1 > bottom) {
+        int edge = y1 < top ? top : bottom;
+        x1 += (int)((int64_t)(x0 - x1) * (edge - y1) / (y0 - y1));
+        y1 = edge;
+    }
+    gfx_draw_line(g, x0, (int)y0, x1, (int)y1, true);
+}
+
+static void chart_mark(gfx_t *g, int x, int64_t row, int side)
+{
+    chart_column(g, x, row, row + side - 1, side);
 }
 
 void kit_chart(gfx_t *g, const kit_chart_t *chart)
 {
     if (chart == NULL || chart->values == NULL || chart->count <= 0 || chart->width <= 0 ||
-        chart->height <= CHART_LINE_WIDTH) {
+        chart->height <= CHART_LINE_WIDTH ||
+        ((chart->flags & KIT_CHART_FIXED_RANGE) && chart->minimum >= chart->maximum)) {
         return;
     }
     bool    has_value = false;
@@ -325,6 +356,21 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
     }
     if (!has_value) {
         return;
+    }
+    gfx_t clipped = *g;
+    int clip_left = g->origin_x + chart->left, clip_top = g->origin_y + chart->top;
+    int clip_right = clip_left + chart->width, clip_bottom = clip_top + chart->height;
+    clipped.clip_x0 = clip_left > g->clip_x0 ? clip_left : g->clip_x0;
+    clipped.clip_y0 = clip_top > g->clip_y0 ? clip_top : g->clip_y0;
+    clipped.clip_x1 = clip_right < g->clip_x1 ? clip_right : g->clip_x1;
+    clipped.clip_y1 = clip_bottom < g->clip_y1 ? clip_bottom : g->clip_y1;
+    if (clipped.clip_x0 >= clipped.clip_x1 || clipped.clip_y0 >= clipped.clip_y1) {
+        return;
+    }
+    g = &clipped;
+    if (chart->flags & KIT_CHART_FIXED_RANGE) {
+        low = chart->minimum;
+        high = chart->maximum;
     }
     int left = chart->left, width = chart->width;
     if (chart->flags & (KIT_CHART_RANGE | KIT_CHART_RANGE_RIGHT)) {
@@ -353,7 +399,7 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
             return;
         }
     }
-    if (chart->flags & KIT_CHART_FROM_ZERO) {
+    if (!(chart->flags & KIT_CHART_FIXED_RANGE) && (chart->flags & KIT_CHART_FROM_ZERO)) {
         low = low > 0 ? 0 : low;
         high = high < 0 ? 0 : high;
     }
@@ -370,7 +416,7 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
     /* The line is CHART_LINE_WIDTH thick downwards: its room is kept. */
     int     rows = chart->height - (CHART_LINE_WIDTH - 1);
     int32_t base_value = low <= 0 && high >= 0 ? 0 : low;
-    int     base_row = chart_row(base_value, low, high, chart->top, rows);
+    int64_t base_row = chart_row(base_value, low, high, chart->top, rows);
     uint8_t shade = g->shade;
 
     if (chart->kind == KIT_CHART_BARS) {
@@ -382,14 +428,15 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
             int to = left + (int)((long long)(i + 1) * width / chart->count);
             int slot = to - from;
             int gap = slot >= CHART_WIDE_BAR ? 2 : slot >= CHART_NARROW_BAR ? 1 : 0;
-            int row = chart_row(chart->values[i], low, high, chart->top, rows);
+            int64_t row = chart_row(chart->values[i], low, high, chart->top, rows);
             chart_column(g, from, row, base_row + CHART_LINE_WIDTH - 1, slot - gap > 0 ? slot - gap : 1);
         }
     } else {
         /* The area first, the line over it. */
         for (int pass = chart->kind == KIT_CHART_AREA ? 0 : 1; pass < 2; pass++) {
             bool has_previous = false;
-            int  previous_x = 0, previous_row = 0;
+            int previous_x = 0;
+            int64_t previous_row = 0;
             for (int i = 0; i < chart->count; i++) {
                 if (chart->values[i] == KIT_CHART_NO_VALUE) {
                     has_previous = false;
@@ -398,7 +445,7 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
                 int x = chart->count > 1
                             ? left + (int)((long long)i * (width - CHART_LINE_WIDTH) / (chart->count - 1))
                             : left + width / 2;
-                int row = chart_row(chart->values[i], low, high, chart->top, rows);
+                int64_t row = chart_row(chart->values[i], low, high, chart->top, rows);
                 bool is_alone = !has_previous && (i + 1 >= chart->count ||
                                                   chart->values[i + 1] == KIT_CHART_NO_VALUE);
                 if (pass == 0) {
@@ -406,7 +453,7 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
                                          : chart->fill_shade > GFX_SHADE_SOLID ? GFX_SHADE_SOLID
                                          : chart->fill_shade);
                     for (int at = has_previous ? previous_x : x; at <= x; at++) {
-                        int at_row = has_previous && x > previous_x
+                        int64_t at_row = has_previous && x > previous_x
                                          ? previous_row + (row - previous_row) * (at - previous_x) /
                                                               (x - previous_x)
                                          : row;
@@ -414,20 +461,19 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
                     }
                     g->shade = shade;
                 } else if (is_alone) {
-                    gfx_fill(g, x - 1, row - 1, CHART_LINE_WIDTH + 2, CHART_LINE_WIDTH + 2, true);
+                    chart_mark(g, x - 1, row - 1, CHART_LINE_WIDTH + 2);
                 } else if (has_previous && chart->kind == KIT_CHART_STEPS) {
-                    gfx_fill(g, previous_x, previous_row, x - previous_x + CHART_LINE_WIDTH,
-                             CHART_LINE_WIDTH, true);
+                    chart_column(g, previous_x, previous_row, previous_row + CHART_LINE_WIDTH - 1,
+                                 x - previous_x + CHART_LINE_WIDTH);
                     chart_column(g, x, previous_row, row + CHART_LINE_WIDTH - 1, CHART_LINE_WIDTH);
                 } else if (has_previous) {
                     for (int thick = 0; thick < CHART_LINE_WIDTH; thick++) {
-                        gfx_draw_line(g, previous_x, previous_row + thick, x, row + thick, true);
-                        gfx_draw_line(g, previous_x + thick, previous_row, x + thick, row, true);
+                        chart_line(g, previous_x, previous_row + thick, x, row + thick);
+                        chart_line(g, previous_x + thick, previous_row, x + thick, row);
                     }
                 }
                 if (pass == 1 && i == last_index && (chart->flags & KIT_CHART_MARK_LAST)) {
-                    gfx_fill(g, x - CHART_MARK_SIDE / 2, row - CHART_MARK_SIDE / 2, CHART_MARK_SIDE,
-                             CHART_MARK_SIDE, true);
+                    chart_mark(g, x - CHART_MARK_SIDE / 2, row - CHART_MARK_SIDE / 2, CHART_MARK_SIDE);
                 }
                 has_previous = true;
                 previous_x = x;
@@ -436,7 +482,8 @@ void kit_chart(gfx_t *g, const kit_chart_t *chart)
         }
     }
     if (chart->flags & KIT_CHART_AXIS) {
-        gfx_fill(g, left, base_row + CHART_LINE_WIDTH - 1, axis_width, 1, true);
+        chart_column(g, left, base_row + CHART_LINE_WIDTH - 1,
+                     base_row + CHART_LINE_WIDTH - 1, axis_width);
     }
 }
 
@@ -666,9 +713,28 @@ void kit_cell(gfx_t *g, const kit_cell_t *cell)
          * middle of its square. */
         int width = gfx_picture_width(cell->picture), height = gfx_picture_height(cell->picture);
         int longest = width > height ? width : height;
-        int pixels = longest > 0 && side / longest > 0 ? side / longest : 1;
-        gfx_draw_picture(g, row_left + (side - width * pixels) / 2, middle - height * pixels / 2,
-                    cell->picture, pixels, true);
+        if (longest <= side) {
+            int pixels = longest > 0 ? side / longest : 1;
+            gfx_draw_picture(g, row_left + (side - width * pixels) / 2, middle - height * pixels / 2,
+                             cell->picture, pixels, true);
+        } else {
+            int target_width = width * side / longest;
+            int target_height = height * side / longest;
+            target_width = target_width > 0 ? target_width : 1;
+            target_height = target_height > 0 ? target_height : 1;
+            int stride = gfx_row_bytes(width);
+            const uint8_t *bits = cell->picture + GFX_PICTURE_HEADER;
+            for (int row = 0; row < target_height; row++) {
+                for (int column = 0; column < target_width; column++) {
+                    int source_x = column * width / target_width;
+                    int source_y = row * height / target_height;
+                    if ((bits[source_y * stride + source_x / 8] & gfx_bit_of(source_x)) != 0) {
+                        gfx_pixel(g, row_left + (side - target_width) / 2 + column,
+                                  middle - target_height / 2 + row, true);
+                    }
+                }
+            }
+        }
         row_left += side + CELL_PICTURE_GAP;
     }
     gfx_text_tabular(g, row_left, middle + gfx_font_cap_height(font) / 2, font, value, true);

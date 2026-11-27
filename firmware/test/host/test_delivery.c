@@ -1017,6 +1017,30 @@ static void test_headers_across_background_unloads(void)
     app_scene_destroy(owner);
 }
 
+static void test_header_set_during_draw(void)
+{
+    uint8_t frame[400 / 8 * 300];
+    gfx_t surface;
+    gfx_init(&surface, frame, 400, 300);
+    start_on(&menu.scene);
+    char *text = app_store_read_manifest("build", "probe");
+    app_manifest_t manifest;
+    CHECK(text != NULL && app_manifest_parse(text, &manifest) == APP_MANIFEST_OK);
+    free(text);
+    app_services_t services = SERVICES;
+    services.firmware_version = current_firmware;
+    scene_t *owner = app_scene_create(&manifest, "build", &services);
+    CHECK(owner != NULL);
+    wm_open(&wm, owner);
+    app_button(app_scene_app(owner), 102, BTN_PRESSED);
+    wm_scene_reacted(&wm, owner, app_scene_take_reaction(owner), WM_CHANGED_BY_INPUT);
+    wm_draw(&wm, &surface);
+    CHECK_STR(owner->header_left != NULL ? owner->header_left : "", "Draw header");
+    CHECK_STR(owner->header_right != NULL ? owner->header_right : "", "Draw right");
+    wm_close(&wm, owner);
+    app_scene_destroy(owner);
+}
+
 static void test_scene_inversion_lifetime(void)
 {
     start_on(&menu.scene);
@@ -1225,6 +1249,7 @@ int main(void)
     test_a_scene_that_is_not_an_application();
     test_scene_state_lifetime();
     test_headers_across_background_unloads();
+    test_header_set_during_draw();
     test_scene_inversion_lifetime();
     test_question_survives_background_delivery();
     REPORT();

@@ -171,6 +171,7 @@ extern standin_handlers_t standin_handlers;
 #define STANDIN_MARKS        64
 #define STANDIN_NOTE_BYTES   200
 #define STANDIN_NOTES        16
+#define STANDIN_NOTICES      4
 #define STANDIN_URL_BYTES    512
 #define STANDIN_DRAW_TEXT_BYTES 8192
 
@@ -247,6 +248,8 @@ typedef struct {
     /* The session: kept while the application is in the stack. */
     uint8_t session[HOST_SESSION_MAX];
     int32_t session_length;
+    bool    session_is_closed;
+    bool    inversion_was_set;
     bool    session_inverted; /* the screen's inversion, kept with the session */
 
     /* Where the instance is. */
@@ -264,6 +267,11 @@ typedef struct {
     bool    is_leaving, wants_screen, is_inverted;
     int32_t notices;
     host_notice_t last_notice;
+    host_notice_t pending_notices[STANDIN_NOTICES];
+    int32_t pending_notice_count; /* retained occupancy; notices is cumulative acceptance */
+    uint32_t question, shown_question, next_question, ok_question;
+    int32_t question_flags;
+    bool question_dirty;
     char    header_text[2][HOST_HEADER_TEXT_MAX + 1];
     char    status_text[2][HOST_STATUS_TEXT_MAX + 1];
     int32_t status_icon[2];
@@ -368,6 +376,7 @@ void standin_focus(void);      /* it has the screen: app_on_focus() */
 void standin_leave(void);      /* app_on_blur(), app_on_terminate(); its timers stop */
 void standin_terminate(void);  /* an instance loaded off the screen ends */
 void standin_press(int32_t button);      /* KEYDOWN, KEYUP, PRESSED; BACK as the device takes it */
+void standin_button_event(int32_t button, int32_t action); /* one raw/interpreted event; no draw */
 void standin_long_press(int32_t button); /* KEYDOWN, LONG_PRESSED, KEYUP; BACK: KEYDOWN only */
 void standin_timer(int32_t id);          /* app_on_timer(), the timer no longer waiting */
 void standin_alarm(int32_t id);
@@ -376,6 +385,9 @@ void standin_settings(void);
 void standin_updated(void);              /* another package: the alarms of the old one are gone, app_on_updated() */
 void standin_updated_as_loaded(void);    /* app_on_updated() of an instance loaded after they went */
 uint64_t standin_draw(void);             /* app_on_draw(): what the frame was made of */
+void standin_notice_dismiss(void); /* dismiss the oldest retained notice, if any */
+void standin_notices_clear(void);
+const char *standin_header_text(int32_t side, int32_t *icon); /* effective visible application text */
 uint64_t standin_screen(uint64_t frame); /* the frame with the header and the inversion around it */
 
 /* ---- Answers ---- */

@@ -32,6 +32,8 @@ APP_EXPORT(app_on_draw, void app_on_draw(void));
  * afterwards use the urgent refresh policy while it is on screen.
  *
  * Explicit redraw flags select their documented refresh policies.
+ * Panel durations and frame rates below are informative measurements,
+ * not ABI guarantees.
  * Flags:
  *   HOST_REDRAW_NORMAL    Default. Use after a button press and for data
  *                         that can wait.
@@ -45,6 +47,9 @@ APP_EXPORT(app_on_draw, void app_on_draw(void));
  *                         that change every second.
  *
  * SOON and CLEAN wait until at least one second after the preceding refresh.
+ * CLEAN refreshes an unchanged frame too. Explicit CLEAN > NO_BLINK > SOON
+ * policies remain in force across pending input and data causes; scene
+ * switches still require a full refresh.
  *
  * Frame sequences (NO_BLINK). A partial refresh takes about 0.5 s plus
  * the time of app_on_draw(); the maximum rate is about three frames in
@@ -98,6 +103,7 @@ HOST_IMPORT(screen_set_inverted, int32_t screen_set_inverted(int32_t inverted));
 #define HOST_HEADER_LEFT     0
 #define HOST_HEADER_RIGHT    1
 #define HOST_HEADER_TEXT_MAX 63
+/* Text set during app_on_draw() belongs to that frame, before inversion. */
 HOST_IMPORT(header_set_text, int32_t header_set_text(int32_t side, const char *text, int32_t length));
 
 /* Sets a status in Perinkpheral OS header: an icon and a short text shown above
@@ -112,8 +118,9 @@ HOST_IMPORT(header_set_text, int32_t header_set_text(int32_t side, const char *t
  * HOST_ICON_NONE releases the side, if this application still owns it.
  * The side is also released when the application is removed and when the
  * device restarts, or an update changes the application's id.
- * Callable from any handler, on and off the screen. A change is shown as
- * a data-driven redraw. */
+ * Callable from any handler, on and off the screen. A setter during
+ * app_on_draw() affects the header of that frame, before inversion.
+ * A change is shown as a data-driven redraw. */
 #define HOST_STATUS_TEXT_MAX 31
 HOST_IMPORT(header_set_status, int32_t header_set_status(int32_t side, int32_t icon, const char *text,
                                                  int32_t length));

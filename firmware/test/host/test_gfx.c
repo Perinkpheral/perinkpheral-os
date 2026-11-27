@@ -291,6 +291,32 @@ static void test_degree_sign(void)
     CHECK(!gfx_get(&g, 2 + 2, baseline - capitals + 2)); /* its hole */
     CHECK(gfx_get(&g, 2 + 5, baseline - capitals + 5));
     CHECK(!gfx_get(&g, 2 + 6, baseline - capitals));
+    for (int family = GFX_FAMILY_DEPARTURE_MONO; family <= GFX_FAMILY_JERSEY; family++) {
+        gfx_font_use((gfx_family_t)family);
+        for (int size = GFX_FONT_TEXT; size <= GFX_FONT_SMALL; size++) {
+            const gfx_font_t *measured = gfx_font(size);
+            const char *texts[] = { "\xC2\xB0", "\xC2\xB0" "C", "A\xC2\xB0", "A\xC2\xB0" "C" };
+            for (size_t index = 0; index < sizeof texts / sizeof texts[0]; index++) {
+                uint8_t pixels[400 / 8 * 300];
+                gfx_t surface;
+                gfx_init(&surface, pixels, 400, 300);
+                gfx_clear(&surface, false);
+                gfx_text_font(&surface, 0, 200, measured, texts[index], true);
+                int first, end, actual_first = 400, actual_end = 0;
+                gfx_text_font_ink(measured, texts[index], &first, &end);
+                for (int x = 0; x < 400; x++) {
+                    for (int y = 0; y < 300; y++) {
+                        if (gfx_get(&surface, x, y)) {
+                            actual_first = x < actual_first ? x : actual_first;
+                            actual_end = x + 1 > actual_end ? x + 1 : actual_end;
+                        }
+                    }
+                }
+                CHECK(first == actual_first && end == actual_end);
+            }
+        }
+    }
+    gfx_font_use(GFX_FAMILY_DEPARTURE_MONO);
 }
 
 /* A picture: two bytes of size, then a bit a cell; drawn a cell so many
@@ -415,8 +441,10 @@ static void test_text_fit(void)
     CHECK_STR(fitted, "Saint...");
     gfx_fit_text(font, "Berlin", 4 * character, fitted, sizeof fitted);
     CHECK_STR(fitted, "B...");
-    /* not even one character and the dots: nothing */
+    /* The dots alone fit, even without a prefix. */
     gfx_fit_text(font, "Berlin", 3 * character, fitted, sizeof fitted);
+    CHECK_STR(fitted, "...");
+    gfx_fit_text(font, "Berlin", 3 * character - 1, fitted, sizeof fitted);
     CHECK_STR(fitted, "");
     gfx_fit_text(font, "", 0, fitted, sizeof fitted);
     CHECK_STR(fitted, "");

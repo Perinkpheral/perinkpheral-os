@@ -11,7 +11,12 @@
  * still waiting for the panel stays a switch after one more key press. */
 static void mark_changed(wm_t *wm, wm_change_t change)
 {
-    if (change > wm->change) {
+    if (change == WM_CHANGED_CLEANLY || change == WM_CHANGED_IN_A_ROW ||
+        change == WM_CHANGED_URGENTLY) {
+        if (change > wm->redraw_policy) {
+            wm->redraw_policy = change;
+        }
+    } else if (change > wm->change) {
         wm->change = change;
     }
 }
@@ -199,6 +204,7 @@ void wm_init(wm_t *wm, scene_t *home, scene_t *first, wm_draw_header_fn draw_hea
     wm->current = NULL;
     wm->depth = 0;
     wm->change = WM_CLEAN;
+    wm->redraw_policy = WM_CLEAN;
     wm->suspended = false;
     wm->forgotten_count = 0;
     wm->draw_header = draw_header;
@@ -339,7 +345,8 @@ void wm_invalidate(wm_t *wm, wm_change_t change)
 
 wm_change_t wm_pending_change(const wm_t *wm)
 {
-    return wm->change;
+    return wm->change == WM_CHANGED_BY_SWITCH ? wm->change
+           : wm->redraw_policy != WM_CLEAN ? wm->redraw_policy : wm->change;
 }
 
 void wm_close(wm_t *wm, const scene_t *scene)
@@ -392,8 +399,8 @@ void wm_draw(wm_t *wm, gfx_t *screen)
     } else {
         gfx_t header, content;
         wm_split(screen, &header, &content);
-        wm->draw_header(&header, wm->current, wm->header_context);
         wm->current->ops->draw(wm->current, &content);
+        wm->draw_header(&header, wm->current, wm->header_context);
     }
     if (wm->current->inverted) {
         gfx_invert(screen);
@@ -403,4 +410,5 @@ void wm_draw(wm_t *wm, gfx_t *screen)
 void wm_shown(wm_t *wm)
 {
     wm->change = WM_CLEAN;
+    wm->redraw_policy = WM_CLEAN;
 }
