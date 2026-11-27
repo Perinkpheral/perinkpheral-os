@@ -26,8 +26,8 @@ No packages or glyph packs are downloaded by the computer.
 |---|---|---|
 | A: web server | 4 and 12 parallel GETs, 2 screenshots, 4 slow clients, 6 idle sockets; one client per oversized header, URI and body case | GETs 4/8/12/16/24/32/48/64; screenshots 1/2/4/6/8/12; slow clients 4/8/12/16/24; idle sockets 6/12/16/24/32; malformed clients 1/4/8, declared 1 GB bodies 1/4 |
 | B: host memory | Two 5 s levels: catalog/install/glyph/page workers 1/1/1/2 and 2/2/2/4 | Seven 150 s levels: each heavy operation alone, 1/1/1/0, 2/2/2/2, 4/4/4/8, 8/8/8/16 |
-| C: hostile polls | Eight cases: pick oversized/nesting/lying length; document oversized/endless; XML 65 attributes; raw 5 MB/endless; 1.5 s hold after observed request | All 50 prototype cases; ordinary holds 30 s, trickle/stall 70 s, endless 90 s, 4/5 MB streams 120 s; document abandonment and long-BACK stream release timing |
-| D: application faults | All 12 modes/cases, 1.5 s observation each | Same cases, 60 s each: queue refill, stalled queue, file/KV quota, 1 ms timers/redraw, recursion, bad pointer, endless handler/data handler, 62 KB memory |
+| C: hostile polls | Eight cases: pick oversized/nesting/lying length; document oversized/endless; XML 65 attributes; raw 5 MB/endless; 1.5 s hold after observed request | All 51 cases; ordinary holds 30 s, trickle/stall 70 s, endless 90 s, 4/5 MB streams 120 s; document abandonment and long-BACK stream release timing |
+| D: application faults | All 12 modes/cases, 1.5 s observation each | Same cases, 60 s each: queue refill, stalled queue, file/KV quota, 1 ms timers/redraw, recursion, bad pointer, endless handler/data handler, 62.2 KB memory (builder report: 8.0 KB stack and 54.2 KB data) |
 | E: navigation | Open, UP/DOWN, BACK-held switching and mixed actions; gaps 200/0 ms, 1.5 s per level | Same actions; gaps 2000/1000/500/200/50/0 ms, 120 s per level; fixed seed |
 | F: storage | Up to three approximately 42 KB modules or the first storage refusal | Modules until storage refusal or 24 attempts; reload and open after each successful upload |
 | G: clock/restarts | +1 day, -1 day, 2099; two single restarts, two concurrent, one during catalog read if reachable | +1 day, -1 day, +1 year, 2099, 2026, +5 hours, current time; eight single restarts, two concurrent, one during catalog read |
@@ -40,22 +40,36 @@ elapsed time and console fault lines. Each axis stops at its first failure; rema
 selected axes continue. Readiness requires status and the page to answer within
 three minutes. Refused connections and HTTP refusals during A are load observations.
 Memory/busy refusals during B are observations; HTTP 500, new failed allocations,
-new panic records, unexpected restarts and console faults fail the axis.
+new panic records, unexpected restarts and console faults fail the axis. Requested
+restarts require software reset reason 3. Status and console checks also cover the
+gaps between steps and cleanup; uptime must advance with elapsed monotonic time
+(with two seconds of slack). The panic comparison ignores its starts-since counter,
+but that counter must rise across a requested restart.
 
 B uses only the device's own catalog source 0. If unreachable, catalog/install work
 is skipped and glyph/page work proceeds. Reinstalls use an initially absent, small,
 non-system two-file catalog package; installed applications and retained stores are
-excluded. If no such package is available, the install part is skipped. Installed
-applications keep their existing polls and settings. No TLS endpoints or credentials
+excluded. If no such package is available, or the retained-store list has all 16 entries
+and may omit protected names, the install part is skipped. Installed applications keep
+their existing polls and settings. No TLS endpoints or credentials
 are created. Glyph uploads use `stressbench`, preserving installed packs; that part
-is skipped if its name is present or spare glyph space is insufficient.
+is skipped if its name is present, spare glyph space is insufficient, or the 12-face
+table cannot hold another pack. The current API omits face counts, so existing packs
+are conservatively treated as potentially filling that table. Pack names and sizes
+are recorded at the start and checked after cleanup. Full C includes a document of
+exactly HOST_DOCUMENT_MAX (12,288 bytes) and the first byte over that limit.
 
 The runner never calls factory reset or Wi-Fi routes and never injects OK. Settings
 and focus activate the bench application's fault modes. It protects installed names
 and retained application stores, removes every temporary package with `forget=1`,
 removes its glyph pack, restores the current clock and original `time_auto` value,
-and compares the installed application list, versions, exposed settings and device
-settings after cleanup. The original manual clock value is not preserved. A partial
+and compares the installed application list, versions, exposed settings, glyph packs
+and device settings after cleanup. Clock restoration runs first. Each cleanup has a
+five-minute overall deadline, including requests; Ctrl-C shares the remaining cleanup
+budget and the shutdown hook waits at most that budget plus 15 seconds. A catalog
+install that outlives its request is allowed up to three minutes to settle before
+removal; cleanup then checks that the name stays absent for five seconds. The original
+manual clock value is not preserved. A partial
 development upload may require completing a small package and restarting before the
 public removal route can remove it. Cleanup runs after failures and Ctrl-C; a device
 that remains unreachable can prevent it. Unfinished cleanup is reported as failure
@@ -66,9 +80,20 @@ Outputs are `steps.jsonl`, optional `serial.log`, `cleanup.json` and `report.md`
 Use a new empty output directory per run; keep it private because it contains device
 and application settings. The exit code is 1 for an axis failure, interruption or
 cleanup error, otherwise 0. Skipped coverage is listed in the report. Console capture
-opens the supplied port read-only, without configuring it or touching DTR/RTS; it
-reopens that path after disconnection. If enumeration changes its name, restart the
+configures the supplied tty with `stty -f/-F <port> raw -echo clocal`, before capture
+and while holding it open, on every reopen. If configuration fails, capture stops
+and the report says "console not captured". An open with no bytes after ten seconds
+is reported the same way. The runner never writes bytes to the port or explicitly
+sets modem-control lines; opening and closing a tty can change DTR/RTS. It reopens
+that path after disconnection. If enumeration changes its name, restart the
 run with the new port. Without `--serial`, console-only faults cannot be detected.
+
+Development runs change the remembered last application. If status or settings expose
+the owner's open or remembered application, cleanup opens it again. Current firmware
+exposes neither; the report says that the device will start into the menu or the
+default application after bench packages are removed. G's restarts re-arm automatic
+application updates when `app_auto_update` is on; an update may change an installed
+version and fail the final comparison.
 
 These ramps do not qualify L1-L10, two-root TLS, controlled network outages, physical
 buttons, power loss, panel behavior or long-term stability. No firmware is flashed.

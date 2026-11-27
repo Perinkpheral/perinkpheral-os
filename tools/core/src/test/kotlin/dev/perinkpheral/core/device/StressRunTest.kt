@@ -15,15 +15,17 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 object StressRunTest {
-    private val baseline = mapOf("uptime_s" to 500L, "failed_allocations" to 0L, "last_panic" to "")
+    private val baseline = mapOf("uptime_s" to 500L, "failed_allocations" to 0L, "last_panic" to "", "reset_reason" to 3L)
 
     @JvmStatic fun main(args: Array<String>) {
         if (args.firstOrNull() == "child") {
             val code = StressRun(DeviceClient(args[1]), File(args[2]),
-                StressRun.Options("127.0.0.1", listOf('d'), quick = true), ::build, { ByteArray(31964) }).run()
+                StressRun.Options("127.0.0.1", listOf('d'), quick = true), ::build, { glyphPack() }).run()
             kotlin.system.exitProcess(code)
         }
+        serialCapture()
         verdicts()
+        regressions()
         runAxes()
         releaseAndFailures()
         failedUpload()
@@ -44,11 +46,203 @@ object StressRunTest {
                 "rst:0xc (SW_CPU),boot:0x7f", "Stack canary watchpoint triggered", "Interrupt wdt timeout")) {
             check(StressRun.verdict(baseline, baseline, listOf(line)).isNotEmpty()) { line }
         }
+        val oldPanic = baseline + ("last_panic" to "5 \"fault\" main pc 1234")
+        val agedPanic = baseline + ("last_panic" to "6 \"fault\" main pc 1234")
+        check(StressRun.verdict(oldPanic, agedPanic, emptyList(), true).isEmpty())
+        check(StressRun.verdict(oldPanic, oldPanic, emptyList(), true).isNotEmpty())
+        check(StressRun.verdict(agedPanic, oldPanic, emptyList(), true).isNotEmpty())
+        check(StressRun.verdict(baseline, baseline + ("uptime_s" to 501L), emptyList(), elapsedMs = 10_000).isNotEmpty())
+        check(StressRun.verdict(baseline, baseline + ("uptime_s" to 508L), emptyList(), elapsedMs = 10_000).isEmpty())
+        check(StressRun.verdict(baseline, baseline + ("reset_reason" to 1), emptyList()).isNotEmpty())
+        check(StressRun.verdict(baseline, baseline, listOf("first: worst: thirst:0x7")).isEmpty())
         // The task watchdog only prints; a step with it does not fail.
         check(StressRun.verdict(baseline, baseline,
             listOf("E (617989) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:")).isEmpty())
         check(StressRun.verdict(baseline, baseline + ("uptime_s" to 1), listOf("rst:0xc (SW_CPU),boot:0x7f (SPI_FAST_FLASH_BOOT)"), true).isEmpty())
         check(StressRun.verdict(baseline, baseline, listOf("rst:0x7 (TG0WDT_SYS_RESET)"), true).isNotEmpty())
+    }
+
+    private fun glyphPack() = ByteArray(31964).apply { this[6] = 4 }
+
+    private fun serialCapture() {
+        val source = Files.createTempFile("stress-console", ".txt").toFile().apply { writeText("first: 1234 qwer p\n") }
+        val output = Files.createTempFile("stress-capture", ".txt").toFile()
+        try {
+            val commands = CopyOnWriteArrayList<List<String>>()
+            StressSerial(source.path, output, { commands += it; true }).use { capture ->
+                val deadline = System.nanoTime() + 2_000_000_000
+                while (output.length() == 0L && System.nanoTime() < deadline) Thread.sleep(10)
+                check(output.readText() == source.readText())
+                check(!capture.diagnostic.contains("not captured"))
+            }
+            check(commands.size == 2)
+            val flag = if (System.getProperty("os.name").lowercase().contains("mac")) "-f" else "-F"
+            check(commands.all { it == listOf("stty", flag, source.path, "raw", "-echo", "clocal") })
+            check(source.readText() == "first: 1234 qwer p\n")
+            for (failure in 1..2) {
+                var calls = 0
+                StressSerial(source.path, output, { ++calls != failure }).use { capture ->
+                    val deadline = System.nanoTime() + 2_000_000_000
+                    while (!capture.diagnostic.contains("cannot disable") && System.nanoTime() < deadline) Thread.sleep(10)
+                    check(capture.diagnostic.contains("console not captured: cannot disable"))
+                    check(output.length() == 0L)
+                    check(calls == failure)
+                }
+            }
+            source.delete()
+            commands.clear()
+            StressSerial(source.path, output, { commands += it; true }).use { capture ->
+                val deadline = System.nanoTime() + 3_000_000_000
+                while (!capture.diagnostic.contains("unavailable") && System.nanoTime() < deadline) Thread.sleep(10)
+                source.writeText("reconnected\n")
+                while (output.length() == 0L && System.nanoTime() < deadline) Thread.sleep(10)
+                check(output.readText() == "reconnected\n")
+                check(commands.size == 2)
+            }
+            source.writeText("")
+            StressSerial(source.path, output, { true }, silenceMs = 20).use { capture ->
+                Thread.sleep(100)
+                check(capture.diagnostic.contains("console not captured: no bytes received after opening"))
+            }
+        } finally { source.delete(); output.delete() }
+    }
+
+    private fun regressions() {
+        fun exercise(axes: List<Char> = listOf('b'), expected: Int = 1,
+                     setup: (FakeDevice, File) -> Unit = { _, _ -> },
+                     say: (FakeDevice, File, String) -> Unit = { _, _, _ -> },
+                     verify: (FakeDevice, File) -> Unit) {
+            FakeDevice().use { fake ->
+                val out = Files.createTempDirectory("stress-regression").toFile()
+                val clock = java.util.concurrent.atomic.AtomicLong(0)
+                fake.now = { clock.get() }
+                fake.resetClock()
+                fake.advanceTime = { clock.addAndGet(it) }
+                try {
+                    setup(fake, out)
+                    val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", axes, quick = true),
+                        ::build, ::glyphPack, { say(fake, out, it) },
+                        StressRun.Timing(scale = 0.0001, now = { clock.get() }, sleep = { clock.addAndGet(it.coerceAtLeast(1)) },
+                            recoveryMs = 1000, cleanupMs = 30_000, installMs = 20_000, absentMs = 2000)).run()
+                    check(code == expected) { out.resolve("report.md").readText() + fake.calls.takeLast(20).joinToString("\n") }
+                    verify(fake, out)
+                } finally { out.deleteRecursively() }
+            }
+        }
+        for (reason in listOf(1, 4, 5, 6, 7, 9)) exercise(listOf('g'), setup = { fake, _ -> fake.restartReason = reason }) { _, out ->
+            check("expected 3" in out.resolve("report.md").readText()) { out.resolve("report.md").readText() }
+        }
+        exercise(listOf('g'), setup = { fake, _ -> fake.freezePanicCounter = true }) { _, out ->
+            check("counter did not rise" in out.resolve("report.md").readText())
+        }
+        exercise(setup = { fake, _ -> fake.statusChange = { count, sample ->
+            if (count >= 3) sample + ("reset_reason" to 9) else sample
+        } }) { _, out -> check("reset_reason changed" in out.resolve("report.md").readText()) }
+        exercise(setup = { fake, _ -> fake.statusChange = { count, sample ->
+            // The second before-sample follows the first after-sample with no step covering the gap.
+            if (count >= 4) sample + ("last_panic" to "1 \"new fault\" main pc 5678") else sample
+        } }) { _, out -> check("before workers" in out.resolve("report.md").readText()) }
+        exercise(say = { _, out, line ->
+            if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("rst:0x7 (TG0WDT_SYS_RESET)\n")
+        }) { _, out -> check("console: rst:0x7" in out.resolve("report.md").readText()) }
+        exercise(setup = { fake, out -> fake.onCall = { call ->
+            if (call.startsWith("POST /api/glyphs/remove")) out.resolve("serial.log").appendText("abort() called during cleanup\n")
+        } }) { _, out -> check("abort() called during cleanup" in out.resolve("report.md").readText()) }
+        exercise(expected = 0, say = { _, out, line ->
+            if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("first: 123 worst:456\n")
+        }) { fake, _ -> fake.assertRestored() }
+        exercise(listOf('e'), setup = { fake, _ -> fake.releaseFailures = 2 }) { fake, _ ->
+            check(fake.calls.count { "button=4&press=up" in it } >= 3)
+            check(!fake.backHeld)
+        }
+        for (cancel in listOf(false, true)) exercise(expected = if (cancel) 1 else 0,
+            setup = { fake, _ -> fake.dropInstall = true; fake.removeBusy = 4 },
+            say = { fake, _, line -> if (cancel && fake.pendingInstall && line.contains("=2/2/2/4")) throw InterruptedException() }
+        ) { fake, _ ->
+            check(fake.busyProbes == 4)
+            check(fake.calls.count { it == "POST /api/apps/install" } >= 5)
+            fake.assertRestored()
+        }
+        exercise(expected = 0, setup = { fake, _ -> fake.reappear = true }) { fake, _ ->
+            check(fake.calls.count { "POST /api/apps/remove?app=sample" in it } >= 4)
+            fake.assertRestored()
+        }
+        exercise(listOf('b', 'g'), say = { _, _, line -> if (line.startsWith("G clock")) throw InterruptedException() }) { fake, _ ->
+            val removedAt = fake.calls.indexOfFirst { it.startsWith("POST /api/apps/remove") }
+            val restoredAt = fake.calls.indexOfLast { it == "POST /api/settings" }
+            check(restoredAt in 0 until removedAt)
+            fake.assertRestored()
+        }
+        exercise(setup = { fake, _ -> fake.onCall = { call ->
+            if (call.startsWith("POST /api/glyphs/remove")) fake.advanceTime(40_000)
+        } }) { _, out -> check("cleanup deadline expired" in out.resolve("report.md").readText()) }
+        exercise(expected = 0, setup = { fake, _ ->
+            fake.packs["greek"] = mapOf("name" to "greek", "bytes" to 100L, "faces" to 4)
+            fake.packs["cyrillic"] = mapOf("name" to "cyrillic", "bytes" to 100L, "faces" to 4)
+        }) { fake, out ->
+            check(fake.calls.none { it == "POST /api/glyphs" })
+            check("face table" in out.resolve("report.md").readText())
+        }
+        exercise(expected = 0, setup = { fake, _ -> fake.exposeFaces = false }) { fake, _ ->
+            check(fake.calls.none { it == "POST /api/glyphs" })
+        }
+        exercise(setup = { fake, _ -> fake.onCall = { call ->
+            if (call.startsWith("POST /api/glyphs/remove")) fake.packs["latin"] = mapOf("name" to "latin", "bytes" to 999L, "faces" to 4)
+        } }) { _, out -> check("installed glyph packs changed" in out.resolve("report.md").readText()) }
+        exercise(expected = 0, setup = { fake, _ -> fake.removed = List(16) { "retained$it" } }) { fake, out ->
+            check(fake.calls.none { "/api/apps/install?" in it })
+            check("retained-store list is full" in out.resolve("report.md").readText())
+        }
+        exercise(expected = 0, setup = { fake, _ -> fake.exposeApplication = true }) { fake, _ ->
+            check(fake.currentApp == "keeper" && fake.remembered == "keeper")
+        }
+        exercise(listOf('d'), expected = 0, setup = { fake, _ -> fake.exposeApplication = true }) { fake, _ ->
+            check(fake.currentApp == "keeper" && fake.remembered == "keeper")
+        }
+        exercise(expected = 0, setup = { fake, _ -> fake.onCall = { call ->
+            if (call == "GET /") fake.advanceTime(10_000)
+        } }) { fake, _ -> fake.assertRestored() }
+        exercise(setup = { fake, _ -> fake.statusChange = { count, sample ->
+            if (count == 3) fake.advanceTime(10_000)
+            if (count >= 3) sample + ("uptime_s" to 500L + count) else sample
+        } }) { _, out -> check("uptime fell behind elapsed time" in out.resolve("report.md").readText()) }
+        exercise(setup = { fake, _ -> fake.statusChange = { count, sample ->
+            if (count >= 4) sample + ("uptime_s" to 500L + count) else sample
+        } }, say = { fake, _, line -> if (line.contains("=2/2/2/4")) fake.advanceTime(10_000) }) { _, out ->
+            check("uptime fell behind elapsed time" in out.resolve("report.md").readText())
+        }
+        // A console marker may be split between two observations.
+        exercise(setup = { fake, out -> fake.onCall = { call ->
+            if (call == "GET /api/apps" && fake.calls.count { it == "GET /api/apps" } == 2)
+                out.resolve("serial.log").appendText("partial rst:")
+        } }, say = { _, out, line -> if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("0x7 (TG0WDT_SYS_RESET)\n") }) { _, out ->
+            check("console: partial rst:0x7" in out.resolve("report.md").readText())
+        }
+        FakeDevice().use { fake ->
+            val out = Files.createTempDirectory("stress-full-c").toFile()
+            try {
+                check(StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", listOf('c')),
+                    ::build, ::glyphPack, { if (it.contains("connection release")) fake.repeatPolls = true },
+                    StressRun.Timing(scale = 0.002, recoveryMs = 1000)).run() == 0) {
+                    out.resolve("report.md").readText()
+                }
+                val steps = out.resolve("steps.jsonl").readText()
+                check("doc endless connection release" in steps && "raw endless connection release" in steps)
+                for ((path, case) in StressServer.POLL_CASES) check("$path/$case" in steps)
+                fake.assertRestored()
+            } finally { out.deleteRecursively() }
+        }
+        FakeDevice().use { fake ->
+            val out = Files.createTempDirectory("stress-wrong-release").toFile()
+            try {
+                val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", listOf('c')),
+                    ::build, ::glyphPack, { if (it.contains("doc endless connection release")) { fake.wrongReleasePath = true; fake.repeatPolls = true } },
+                    StressRun.Timing(scale = 0.002, recoveryMs = 1000)).run()
+                check(code == 1)
+                check("no doc/ok request" in out.resolve("report.md").readText()) { out.resolve("report.md").readText() }
+                fake.assertRestored()
+            } finally { out.deleteRecursively() }
+        }
     }
 
     private fun build(kind: String, out: File) {
@@ -63,7 +257,7 @@ object StressRunTest {
             val out = Files.createTempDirectory("stress-axes").toFile()
             try {
                 val code = StressRun(DeviceClient(fake.host), out,
-                    StressRun.Options("127.0.0.1", quick = true), ::build, { ByteArray(31964) }, {},
+                    StressRun.Options("127.0.0.1", quick = true), ::build, { glyphPack() }, {},
                     StressRun.Timing(scale = 0.01, recoveryMs = 1000)).run()
                 check(code == 0) { out.resolve("report.md").readText() }
                 fake.assertRestored()
@@ -85,7 +279,7 @@ object StressRunTest {
             try {
                 val code = StressRun(DeviceClient(fake.host), out,
                     StressRun.Options("127.0.0.1", axes = listOf('a', 'b', 'd', 'e', 'f', 'g')),
-                    ::build, { ByteArray(31964) }, {}, StressRun.Timing(scale = 0.0001, recoveryMs = 1000)).run()
+                    ::build, { glyphPack() }, {}, StressRun.Timing(scale = 0.0001, recoveryMs = 1000, absentMs = 20)).run()
                 check(code == 0) { out.resolve("report.md").readText() }
                 val steps = out.resolve("steps.jsonl").readText()
                 check("parallel GETs=64" in steps && "workers catalog/install/glyph/page=8/8/8/16" in steps)
@@ -100,7 +294,7 @@ object StressRunTest {
             val out = Files.createTempDirectory("stress-release").toFile()
             try {
                 val code = StressRun(DeviceClient(fake.host), out, StressRun.Options(quick = true), ::build,
-                    { ByteArray(31964) }, {}, StressRun.Timing(scale = 0.0001, recoveryMs = 1000)).run()
+                    { glyphPack() }, {}, StressRun.Timing(scale = 0.0001, recoveryMs = 1000)).run()
                 check(code == 0) { out.resolve("report.md").readText() }
                 check(fake.calls.none { "/api/dev/" in it || "/api/apps/install?" in it })
                 check(out.resolve("report.md").readText().split("requires /api/dev").size == 5)
@@ -168,6 +362,7 @@ object StressRunTest {
                 ProcessBuilder("kill", "-INT", process.pid().toString()).start().waitFor()
                 check(process.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)) { "SIGINT cleanup did not finish" }
                 fake.assertRestored()
+                check(process.exitValue() == 1) { "SIGINT exit was ${process.exitValue()}" }
                 check(out.resolve("report.md").isFile)
             } finally {
                 process.destroyForcibly()
@@ -189,17 +384,47 @@ object StressRunTest {
         @Volatile var failAllocations = false
         @Volatile var failUpload = false
         @Volatile var timeAuto = true
-        private var glyphInstalled = false
+        @Volatile var resetReason = 1
+        @Volatile var restartReason = 3
+        @Volatile var freezePanicCounter = false
+        @Volatile var statusChange: (Int, Map<String, Any?>) -> Map<String, Any?> = { _, sample -> sample }
+        @Volatile var onCall: (String) -> Unit = {}
+        var advanceTime: (Long) -> Unit = {}
+        @Volatile var now: () -> Long = { System.nanoTime() / 1_000_000 }
+        private var bootAt = now()
+        fun resetClock() { bootAt = now() }
+        private val panicCounter = AtomicInteger(5)
+        var removed = listOf("retained")
+        val packs = ConcurrentHashMap<String, Map<String, Any?>>()
+        var exposeFaces = true
+        var exposeApplication = false
+        var remembered = "keeper"
+        var currentApp = "keeper"
+        var dropInstall = false
+        @Volatile var pendingInstall = false
+        var busyProbes = 0
+        var removeBusy = 0
+        var reappear = false
+        private var absentPolls = 0
+        var releaseFailures = 0
+        var backHeld = false
+        @Volatile var wrongReleasePath = false
+        @Volatile var repeatPolls = false
+        private val polling = ConcurrentHashMap<String, Int>()
+        private val generations = AtomicInteger()
         private val keeper = mapOf("name" to "keeper", "version" to "1.0.0", "values" to mapOf("secret" to true, "city" to "", "url" to "http://saved"))
         val host get() = "127.0.0.1:${server.address.port}"
 
         init {
             installed["keeper"] = keeper
+            packs["latin"] = mapOf("name" to "latin", "bytes" to 1000L, "faces" to 4)
             server.executor = workers
             server.createContext("/") { exchange ->
                 val uri = exchange.requestURI
                 val path = uri.path
-                calls += "${exchange.requestMethod} $uri"
+                val call = "${exchange.requestMethod} $uri"
+                calls += call
+                onCall(call)
                 val query = uri.rawQuery.orEmpty().split('&').mapNotNull { part ->
                     val pair = part.split('=', limit = 2)
                     if (pair.size == 2) pair[0] to URLDecoder.decode(pair[1], Charsets.UTF_8) else null
@@ -212,30 +437,57 @@ object StressRunTest {
                 when {
                     path == "/api/status" -> {
                         val count = statusCalls.incrementAndGet()
-                        response = baseline + mapOf("dev_tools" to dev, "uptime_s" to uptime.incrementAndGet(),
-                            "failed_allocations" to if (failAllocations && count > 2) 1L else 0L)
+                        val sample = baseline + mapOf("dev_tools" to dev, "uptime_s" to uptime.incrementAndGet() + (now() - bootAt) / 1000,
+                            "reset_reason" to resetReason, "last_panic" to "${panicCounter.get()} \"old fault\" main pc 1234",
+                            "failed_allocations" to if (failAllocations && count > 2) 1L else 0L) +
+                            if (exposeApplication) mapOf("current_app" to currentApp) else emptyMap()
+                        response = statusChange(count, sample)
                     }
                     path == "/api/settings" -> {
                         if (exchange.requestMethod == "POST") {
                             if (body == null) code = 400
                             else timeAuto = body["time_auto"] as? Boolean ?: timeAuto
                         }
-                        response = mapOf("time_auto" to timeAuto, "wifi_ssid" to "saved", "menu_order" to listOf("keeper"))
+                        response = mapOf("time_auto" to timeAuto, "wifi_ssid" to "saved", "menu_order" to listOf("keeper")) +
+                            if (exposeApplication) mapOf("last_app" to remembered) else emptyMap()
                     }
-                    path == "/api/apps" -> response = installed.values.toList()
-                    path == "/api/apps/removed" -> response = listOf("retained")
-                    path == "/api/glyphs" -> if (exchange.requestMethod == "GET") response = mapOf("packs" to emptyList<Any>(), "free" to 65536) else {
+                    path == "/api/apps" -> {
+                        if (absentPolls > 0 && --absentPolls == 0)
+                            installed["sample"] = mapOf("name" to "sample", "version" to "1", "values" to emptyMap<String, Any>())
+                        response = installed.values.toList()
+                    }
+                    path == "/api/apps/removed" -> response = removed
+                    path == "/api/glyphs" -> if (exchange.requestMethod == "GET") response = mapOf("packs" to packs.values.map {
+                        if (exposeFaces) it else it - "faces"
+                    }, "free" to 65536) else {
                         check(bytes.copyOfRange(12, 24).toString(Charsets.US_ASCII).trimEnd('\u0000') == "stressbench")
-                        glyphInstalled = true
+                        packs["stressbench"] = mapOf("name" to "stressbench", "bytes" to bytes.size, "faces" to 4)
                     }
-                    path == "/api/glyphs/remove" -> glyphInstalled = false
+                    path == "/api/glyphs/remove" -> packs.remove(name)
                     path == "/api/catalog" -> {
                         if (!catalogAvailable) { code = 502; response = mapOf("error" to "offline") }
                         else response = mapOf("apps" to listOf(keeper + mapOf("files" to files()), mapOf("name" to "sample", "version" to "1", "files" to files())))
                     }
-                    path == "/api/apps/install" -> if (body == null || name.isEmpty()) code = 400 else {
-                        check(name == "sample")
-                        installed[name] = mapOf("name" to name, "version" to "1", "values" to emptyMap<String, Any>())
+                    path == "/api/apps/install" -> {
+                        if (pendingInstall) {
+                            code = 503
+                            if (name.isEmpty() && ++busyProbes == 4) {
+                                installed["sample"] = mapOf("name" to "sample", "version" to "1", "values" to emptyMap<String, Any>())
+                                pendingInstall = false
+                            }
+                        } else if (body == null || name.isEmpty()) code = 400
+                        else {
+                            check(name == "sample")
+                            if (dropInstall) {
+                                dropInstall = false
+                                pendingInstall = true
+                                exchange.close()
+                                return@createContext
+                            }
+                            installed[name] = mapOf("name" to name, "version" to "1", "values" to emptyMap<String, Any>())
+                            currentApp = name
+                            remembered = name
+                        }
                     }
                     path == "/api/dev/app" -> {
                         check(name != "keeper" && name != "retained")
@@ -247,7 +499,9 @@ object StressRunTest {
                         for ((app, packageFiles) in staged) if ("app.wasm" in packageFiles && "manifest.json" in packageFiles) {
                             installed[app] = mapOf("name" to app, "version" to "0.1.0", "values" to (values[app] ?: emptyMap<String, String>()))
                         }
-                        uptime.set(0)
+                        remembered = name
+                        currentApp = name
+                        restart()
                     }
                     path == "/api/apps/settings" -> {
                         if (name.isEmpty() || body == null) code = 400 else {
@@ -255,20 +509,41 @@ object StressRunTest {
                             val saved = values.getOrDefault(name, emptyMap()) + body.entries.associate { it.key.toString() to it.value.toString() }
                             values[name] = saved
                             installed.computeIfPresent(name) { _, old -> old + ("values" to saved) }
-                            saved["server"]?.takeIf { it.isNotEmpty() }?.let { poll(it) }
+                            polling.remove(name)
+                            saved["server"]?.takeIf { it.isNotEmpty() }?.let { url ->
+                                poll(url)
+                                val generation = generations.incrementAndGet()
+                                polling[name] = generation
+                                if (repeatPolls) workers.submit {
+                                    while (polling[name] == generation) {
+                                        Thread.sleep(20)
+                                        poll(url, if (wrongReleasePath) listOf("pick") else listOf("pick", "doc", "xml", "raw"))
+                                    }
+                                }
+                            }
                         }
                     }
-                    path == "/api/dev/open" -> opened.incrementAndGet()
+                    path == "/api/dev/open" -> { opened.incrementAndGet(); currentApp = name; remembered = name }
+                    path == "/api/dev/button" -> when (query["press"]) {
+                        "down" -> backHeld = true
+                        "up" -> if (releaseFailures > 0) { releaseFailures--; code = 503 } else backHeld = false
+                    }
                     path == "/api/apps/remove" -> {
                         check(query["forget"] == "1" && name != "keeper")
-                        if (installed.remove(name) == null) code = 404
-                        else { staged.remove(name); values.remove(name) }
+                        if (removeBusy > 0) { removeBusy--; code = 503 }
+                        else if (installed.remove(name) == null) code = 404
+                        else {
+                            staged.remove(name); values.remove(name); polling.remove(name)
+                            if (name == "sample" && reappear) { reappear = false; absentPolls = 2 }
+                        }
+                        if (remembered == name && code == 200) remembered = ""
                     }
-                    path == "/api/restart" -> uptime.set(0)
+                    path == "/api/restart" -> restart()
                     path == "/api/clock" -> if (body == null) code = 400
                 }
                 val reply = Json.write(response).toByteArray()
                 try {
+                    exchange.responseHeaders.set("Connection", "close")
                     exchange.sendResponseHeaders(code, reply.size.toLong())
                     exchange.responseBody.use { it.write(reply) }
                 } catch (_: java.io.IOException) { } finally { exchange.close() }
@@ -276,9 +551,15 @@ object StressRunTest {
             server.start()
         }
         private fun files() = listOf(mapOf("name" to "app.wasm", "size" to 100), mapOf("name" to "manifest.json", "size" to 100))
-        private fun poll(url: String) {
+        private fun restart() {
+            uptime.set(0)
+            bootAt = now()
+            resetReason = restartReason
+            if (!freezePanicCounter) panicCounter.incrementAndGet()
+        }
+        private fun poll(url: String, paths: List<String> = listOf("pick", "doc", "xml", "raw")) {
             val uri = URI(url)
-            val requests = listOf("pick", "doc", "xml", "raw").map { path -> workers.submit {
+            val requests = paths.map { path -> workers.submit {
                 runCatching {
                     Socket(uri.host, uri.port).use { socket ->
                         socket.soTimeout = 1000
@@ -291,9 +572,10 @@ object StressRunTest {
         }
         fun assertRestored() {
             check(installed == mapOf("keeper" to keeper)) { "applications changed: $installed" }
-            check(!glyphInstalled)
+            check(packs == mapOf("latin" to mapOf("name" to "latin", "bytes" to 1000L, "faces" to 4))) { "glyph packs changed: $packs" }
+            check(!backHeld)
             check(timeAuto)
         }
-        override fun close() { server.stop(0); workers.shutdownNow() }
+        override fun close() { polling.clear(); server.stop(0); workers.shutdownNow() }
     }
 }

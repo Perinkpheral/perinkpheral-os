@@ -2,7 +2,6 @@
 package dev.perinkpheral.core.device
 
 import dev.perinkpheral.core.Json
-import dev.perinkpheral.core.build.AppBuilder
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -35,7 +34,8 @@ class StressRun(
                        val serial: String? = null, val quick: Boolean = false)
     /** Tests use the same ramps with a monotonic virtual clock and zero-duration holds. */
     class Timing(val scale: Double = 1.0, val now: () -> Long = { System.nanoTime() / 1_000_000 },
-                 val sleep: (Long) -> Unit = { Thread.sleep(it) }, val recoveryMs: Long = 180_000)
+                 val sleep: (Long) -> Unit = { Thread.sleep(it) }, val recoveryMs: Long = 180_000,
+                 val cleanupMs: Long = 300_000, val installMs: Long = 180_000, val absentMs: Long = 5000)
 
     private class AxisFailed : Exception()
     private data class Axis(var reached: String = "none", var outcome: String = "not run", var first: String = "",
@@ -62,8 +62,24 @@ class StressRun(
     private var installChecked = false
     private var glyphBytes: ByteArray? = null
     private var benchUrl = ""
-    private var changedApps = false
+    @Volatile private var changedApps = false
     private var owner: Thread? = null
+    @Volatile private var exitCode = 1
+    private var previous: Map<*, *>? = null
+    private var previousAt = 0L
+    private var sampledAt = 0L
+    private var serialOffset = 0L
+    private var serialTail = ""
+    private var observedConsole = emptyList<String>()
+    private var restartRequested = false
+    private var backDown = false
+    private var removedListFull = false
+    private var originalGlyphs: Map<String, Long>? = null
+    private var originalOpen: String? = null
+    private var originalLast: String? = null
+    private var cleanupDeadline: Long? = null
+    private var cleanupWallDeadline = 0L
+    private val cleanupRequests = Executors.newVirtualThreadPerTaskExecutor()
 
     init {
         require(options.axes.isNotEmpty() && options.axes.all { it in 'a'..'g' } && options.axes.distinct() == options.axes) { "axes must be distinct letters a,b,c,d,e,f,g" }
@@ -80,21 +96,30 @@ class StressRun(
             cancelled.set(true)
             owner?.interrupt()
             sockets.toList().forEach { runCatching { it.close() } }
-            done.await()
+            if (!done.await((timing.cleanupMs + 15_000).coerceAtLeast(1000), TimeUnit.MILLISECONDS)) {
+                System.err.println("stress-run cleanup deadline expired")
+            }
+            Runtime.getRuntime().halt(exitCode)
         }, "stress cleanup")
         Runtime.getRuntime().addShutdownHook(hook)
         try {
             serial = options.serial?.let { StressSerial(it, File(directory, "serial.log")) }
             val initial = status()
             require(initial["mode"] != "recovery") { "stress-run requires main firmware" }
+            previous = initial
+            previousAt = sampledAt
             settings = json("/api/settings") as? Map<*, *> ?: error("invalid settings")
             require(settings!!["time_auto"] is Boolean) { "settings has no time_auto" }
             originalApps = apps()
-            protectedNames = originalApps.map { it["name"].toString() }.toSet() +
-                (json("/api/apps/removed") as List<*>).map { it.toString() }
+            val removed = json("/api/apps/removed") as List<*>
+            removedListFull = removed.size >= REMOVED_LISTED_MAX
+            protectedNames = originalApps.map { it["name"].toString() }.toSet() + removed.map { it.toString() }
+            originalGlyphs = glyphInventory(json("/api/glyphs") as Map<*, *>)
+            originalOpen = (initial["current_app"] ?: settings!!["current_app"]) as? String
+            originalLast = (settings!!["last_app"] ?: initial["last_app"]) as? String
             note(mapOf("event" to "start", "options" to mapOf("axes" to options.axes.map { it.toString() }, "quick" to options.quick),
                 "host" to client.host, "status" to initial, "settings" to settings,
-                "apps" to originalApps))
+                "apps" to originalApps, "glyphs" to originalGlyphs))
             if (initial["dev_tools"] == true && options.axes.any { it in "cdef" }) {
                 val address = options.bench ?: benchAddress()
                 server = StressServer(address) { note(mapOf("event" to "hostile_hit") + it) }
@@ -125,7 +150,12 @@ class StressRun(
                     fail(axis, "setup", error.message ?: error.javaClass.simpleName)
                 } finally {
                     server?.clear()
-                    if (axis in "cdef") removeBench()
+                    cleanup {
+                        restoreClock()
+                        releaseBack()
+                        if (axis in "cdef") removeBench()
+                        checkCleanupObservation()
+                    }
                 }
             }
         } catch (_: InterruptedException) {
@@ -138,20 +168,31 @@ class StressRun(
         } finally {
             Thread.interrupted()
             try {
-                server?.close()
-                removeBench()
-                restoreClock()
-                removeGlyph()
-                verifyOriginalApps()
+                cleanup {
+                    restoreClock()
+                    releaseBack()
+                    server?.close()
+                    removeBench()
+                    removeGlyph()
+                    restoreApplication()
+                    verifyGlyphs()
+                    verifyOriginalApps()
+                    checkCleanupObservation()
+                }
             } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
-            try { serial?.close() } catch (error: Exception) { cleanupErrors += "Serial: ${error.message}" }
+            try {
+                serial?.close()
+                previous?.let { cleanupErrors += verdict(it, it, readConsole(final = true)).map { line -> "Final console: $line" } }
+            } catch (error: Exception) { cleanupErrors += "Serial: ${error.message}" }
             temporary?.deleteRecursively()
             try { writeReport() } finally {
+                cleanupRequests.shutdownNow()
+                exitCode = if (cancelled.get() || cleanupErrors.isNotEmpty() || results.values.any { it.outcome == "failed" }) 1 else 0
                 done.countDown()
                 try { Runtime.getRuntime().removeShutdownHook(hook) } catch (_: IllegalStateException) { }
             }
         }
-        return if (cancelled.get() || cleanupErrors.isNotEmpty() || results.values.any { it.outcome == "failed" }) 1 else 0
+        return exitCode
     }
 
     @Synchronized private fun note(value: Map<String, Any?>) {
@@ -161,8 +202,14 @@ class StressRun(
     private fun pause(ms: Long) { checkCancelled(); timing.sleep((ms * timing.scale).toLong()); checkCancelled() }
     private fun encode(value: String) = URLEncoder.encode(value, Charsets.UTF_8)
     private fun request(path: String, method: String = "GET", body: ByteArray? = null,
-                        type: String = "application/json", timeout: Int = 10_000): DeviceClient.Answer =
-        client.raw(path, method, timeout, body, type)
+                        type: String = "application/json", timeout: Int = 10_000): DeviceClient.Answer {
+        if (method == "POST" && (path.startsWith("/api/dev/run?") || path == "/api/restart")) restartRequested = true
+        if (cleanupDeadline == null) return try { client.raw(path, method, timeout, body, type) }
+        catch (error: IOException) { throw IOException("$method $path: ${error.message}", error) }
+        val left = cleanupRemaining()
+        val task = cleanupRequests.submit<DeviceClient.Answer> { client.raw(path, method, minOf(timeout.toLong(), left).toInt().coerceAtLeast(1), body, type) }
+        return try { task.get(left, TimeUnit.MILLISECONDS) } finally { task.cancel(true) }
+    }
     private fun successful(answer: DeviceClient.Answer): DeviceClient.Answer {
         if (answer.status !in 200..299) throw IOException("HTTP ${answer.status}: ${answer.body.toString(Charsets.UTF_8).take(160)}")
         return answer
@@ -171,13 +218,14 @@ class StressRun(
     private fun json(path: String): Any? = Json.parse(successful(request(path)).body.toString(Charsets.UTF_8))
     private fun status(): Map<*, *> {
         val sample = json("/api/status") as? Map<*, *> ?: throw IOException("invalid status")
-        require(sample["uptime_s"] is Number && sample["failed_allocations"] is Number) { "status lacks uptime_s or failed_allocations" }
+        sampledAt = timing.now()
+        require(sample["uptime_s"] is Number && sample["failed_allocations"] is Number && sample["reset_reason"] is Number) { "status lacks uptime_s, failed_allocations or reset_reason" }
         return sample
     }
     private fun apps(): List<Map<*, *>> = (json("/api/apps") as List<*>).map { it as Map<*, *> }
     private fun waitBack(): Map<*, *> {
         val deadline = timing.now() + timing.recoveryMs
-        var error: Exception? = null
+        var error: Exception
         do {
             try {
                 val sample = status()
@@ -187,17 +235,21 @@ class StressRun(
             checkCancelled()
             timing.sleep(minOf(2000, (deadline - timing.now()).coerceAtLeast(0)))
         } while (timing.now() < deadline)
-        throw IOException("page did not answer for ${timing.recoveryMs / 1000} s: ${error?.message}")
+        throw IOException("page did not answer for ${timing.recoveryMs / 1000} s: ${error.message}")
     }
-    private fun serialSince(mark: Long): List<String> {
+    private fun readConsole(final: Boolean = false): List<String> {
         val file = File(directory, "serial.log")
         if (!file.exists()) return emptyList()
-        return RandomAccessFile(file, "r").use {
-            it.seek(mark)
-            val bytes = ByteArray(minOf(it.length() - mark, 4 * 1024 * 1024).toInt())
+        val text = RandomAccessFile(file, "r").use {
+            it.seek(serialOffset)
+            val bytes = ByteArray(minOf(it.length() - serialOffset, 4 * 1024 * 1024).toInt())
             it.readFully(bytes)
-            String(bytes, Charsets.UTF_8).lines()
+            serialOffset += bytes.size
+            serialTail + String(bytes, Charsets.UTF_8)
         }
+        val lines = text.split('\n')
+        serialTail = if (final) "" else lines.last().takeLast(16_384)
+        return if (final) lines else lines.dropLast(1)
     }
     private fun fail(axis: Char, conditions: String, reason: String) {
         val result = results.getValue(axis)
@@ -222,7 +274,12 @@ class StressRun(
         checkCancelled()
         say("${axis.uppercaseChar()} $conditions")
         val before = waitBack()
-        val mark = File(directory, "serial.log").length()
+        val gapFailures = observe(before)
+        if (gapFailures.isNotEmpty()) {
+            fail(axis, "before $conditions", gapFailures.joinToString("; "))
+            throw AxisFailed()
+        }
+        restartRequested = false
         val started = timing.now()
         var detail: Any? = null
         var actionError: String? = null
@@ -231,13 +288,14 @@ class StressRun(
         } catch (error: Exception) { actionError = error.message ?: error.toString() }
         val after = try { if (interrupted) status() else waitBack() } catch (error: InterruptedException) { throw error
         } catch (error: Exception) { mapOf("error" to error.message) }
-        val lines = serialSince(mark)
-        val failures = verdict(before, after, lines, restart).toMutableList()
+        val expectedRestart = restart && restartRequested
+        val failures = observe(after, expectedRestart).toMutableList()
+        val lines = observedConsole
         actionError?.let { failures += it }
         note(mapOf("axis" to axis.toString(), "conditions" to conditions, "before" to before,
             "after" to after, "serial" to lines.filter { CONSOLE_FAILURE.containsMatchIn(it) }.take(40),
             "warnings" to lines.filter { CONSOLE_WARNING.containsMatchIn(it) }.take(10),
-            "requested_restart" to restart, "duration_ms" to timing.now() - started,
+            "requested_restart" to expectedRestart, "duration_ms" to timing.now() - started,
             "result" to detail, "failures" to failures))
         if (interrupted) {
             fail(axis, conditions, "interrupted")
@@ -246,6 +304,27 @@ class StressRun(
         if (failures.isNotEmpty()) { fail(axis, conditions, failures.joinToString("; ")); throw AxisFailed() }
         results.getValue(axis).reached = conditions
         results.getValue(axis).loads[conditions.substringBefore("=")] = conditions
+    }
+
+    private fun observe(sample: Map<*, *>, restart: Boolean = false): List<String> {
+        val now = sampledAt
+        val lines = readConsole()
+        observedConsole = lines
+        val failures = previous?.let { verdict(it, sample, lines, restart, now - previousAt) }.orEmpty()
+        previous = sample
+        previousAt = now
+        restartRequested = false
+        return failures
+    }
+
+    private fun checkCleanupObservation(restart: Boolean = false) {
+        cleanupAttempt("check status and console after cleanup") {
+            val failures = observe(status(), restart)
+            if (failures.isNotEmpty()) {
+                cleanupErrors += failures.map { "Cleanup observation: $it" }
+                note(mapOf("event" to "cleanup_observation", "failures" to failures))
+            }
+        }
     }
 
     private fun parallel(count: Int, action: (Int) -> String): Map<String, Int> {
@@ -335,6 +414,11 @@ class StressRun(
     private fun installer(): Map<*, *>? {
         if (installChecked) return installEntry
         installChecked = true
+        if (removedListFull) {
+            coverage('b', "install part skipped: retained-store list is full; unlisted names may be protected")
+            source()
+            return null
+        }
         installEntry = source()?.filter { entry ->
             val name = entry["name"] as? String ?: return@filter false
             val files = entry["files"] as? List<*> ?: return@filter false
@@ -353,7 +437,15 @@ class StressRun(
         val names = (state["packs"] as List<*>).map { (it as Map<*, *>)["name"].toString() }.toSet()
         glyphName = "stressbench"
         if (glyphName in names) { coverage('b', "glyph part skipped: stressbench is already installed"); return null }
+        // The current API omits face counts. Unknown packs may consume the entire table.
+        val faces = (state["packs"] as List<*>).sumOf { ((it as Map<*, *>)["faces"] as? Number)?.toInt() ?: GLYPH_FACES_MAX }
         val bytes = glyphs().copyOf()
+        val benchFaces = bytes.getOrNull(6)?.toInt()?.and(255) ?: GLYPH_FACES_MAX
+        require(benchFaces in 1..GLYPH_FACES_MAX) { "invalid generated glyph face count" }
+        if (faces + benchFaces > GLYPH_FACES_MAX) {
+            coverage('b', "glyph part skipped: face table is full or its headroom is unavailable")
+            return null
+        }
         require(bytes.size in 24..32768) { "invalid generated Latin glyph pack size" }
         bytes.fill(0, 12, 24)
         glyphName.toByteArray().copyInto(bytes, 12)
@@ -387,8 +479,11 @@ class StressRun(
                     checkCancelled()
                     val answer = when (work[index]) {
                         "catalog" -> request("/api/catalog?source=0", timeout = 120_000)
-                        "install" -> request("/api/apps/install?source=0&app=${encode(entry!!["name"].toString())}", "POST",
-                            Json.write(mapOf("version" to entry["version"], "files" to entry["files"], "approved_authorities" to 0)).toByteArray(), timeout = 120_000)
+                        "install" -> {
+                            changedApps = true
+                            request("/api/apps/install?source=0&app=${encode(entry!!["name"].toString())}", "POST",
+                                Json.write(mapOf("version" to entry["version"], "files" to entry["files"], "approved_authorities" to 0)).toByteArray(), timeout = 120_000)
+                        }
                         "glyph" -> request("/api/glyphs", "POST", pack, "application/octet-stream", 120_000)
                         else -> request("/api/apps")
                     }
@@ -491,10 +586,8 @@ class StressRun(
             if (path == "raw") { pause(8000); press(4, "long") }
             val releasedAt = timing.now()
             val next = server!!.hits.size
-            val deadline = timing.now() + duration(400_000)
-            while (server!!.hits.size == next && timing.now() < deadline) pause(200)
+            served(path, "ok", next, 400_000)
             val gap = timing.now() - releasedAt
-            if (server!!.hits.size == next) throw IOException("no poll after release for 400 s")
             server!!.clear()
             mapOf("next_request_after_ms" to gap)
         }
@@ -525,9 +618,9 @@ class StressRun(
         var index = 0
         val random = java.util.Random(7)
         fun chord() {
-            press(4, "down")
-            try { pause(50); press(if (random.nextBoolean()) 1 else 3); pause(50) }
-            finally { post("/api/dev/button?button=4&press=up") }
+            backDown = true
+            try { press(4, "down"); pause(50); press(if (random.nextBoolean()) 1 else 3); pause(50) }
+            finally { post("/api/dev/button?button=4&press=up"); backDown = false }
         }
         for (mode in listOf("open", "updown", "held", "mixed")) {
             val gaps = if (options.quick) listOf(200L, 0L) else listOf(2000L, 1000L, 500L, 200L, 50L, 0L)
@@ -580,7 +673,7 @@ class StressRun(
             for (jump in jumps) step('g', "clock unix=$jump") {
                 post("/api/clock", mapOf("unix" to jump)); pause(if (options.quick) 500 else 20_000); "saved"
             }
-        } finally { restoreClock() }
+        } finally { cleanup { restoreClock() } }
         repeat(if (options.quick) 2 else 8) { index ->
             step('g', "restart ${index + 1}", restart = true) { post("/api/restart"); pause(3000); waitBack() }
         }
@@ -596,6 +689,41 @@ class StressRun(
         } else coverage('g', "restart during catalog skipped: source 0 unavailable")
     }
 
+    private fun cleanup(action: () -> Unit) {
+        if (Thread.interrupted()) cancelled.set(true)
+        if (cleanupDeadline == null) {
+            cleanupDeadline = timing.now() + timing.cleanupMs
+            cleanupWallDeadline = System.nanoTime() / 1_000_000 + timing.cleanupMs
+        }
+        try { action() } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
+        finally { if (!cancelled.get()) cleanupDeadline = null }
+    }
+    private fun cleanupRemaining(): Long {
+        val left = minOf((cleanupDeadline ?: Long.MAX_VALUE) - timing.now(),
+            cleanupWallDeadline - System.nanoTime() / 1_000_000)
+        if (left <= 0) throw IOException("cleanup deadline expired")
+        return left
+    }
+    private fun cleanupSleep(ms: Long) {
+        timing.sleep(if (cleanupDeadline == null) ms else minOf(ms, cleanupRemaining()))
+    }
+    private fun releaseBack() {
+        if (backDown) cleanupAttempt("release BACK") {
+            post("/api/dev/button?button=4&press=up")
+            backDown = false
+        }
+    }
+    private fun restoreApplication() {
+        val name = originalOpen ?: originalLast
+        if (!changedApps || name.isNullOrEmpty()) return
+        cleanupAttempt("restore original application") { open(name) }
+    }
+    private fun glyphInventory(state: Map<*, *>): Map<String, Long> =
+        (state["packs"] as List<*>).associate {
+            val pack = it as Map<*, *>
+            pack["name"].toString() to (pack["bytes"] as Number).toLong()
+        }
+
     private fun restoreClock() {
         if (!timeChanged) return
         cleanupAttempt("restore clock") {
@@ -610,7 +738,12 @@ class StressRun(
         var last: Exception? = null
         repeat(3) {
             try { action(); note(mapOf("event" to "cleanup", "action" to label, "outcome" to "done")); return true }
-            catch (error: Exception) { last = error; Thread.interrupted(); timing.sleep(1000) }
+            catch (error: Exception) {
+                last = error
+                Thread.interrupted()
+                if (cleanupDeadline != null && runCatching { cleanupRemaining() }.isFailure) return@repeat
+                cleanupSleep(1000)
+            }
         }
         cleanupErrors += "$label: ${last?.message}"
         note(mapOf("event" to "cleanup", "action" to label, "error" to last.toString()))
@@ -622,9 +755,11 @@ class StressRun(
         val listed = try { apps().map { it["name"].toString() }.toSet() } catch (_: Exception) { emptySet() }
         // Free complete packages before repairing an unlisted, interrupted upload.
         for (name in owned.toList().sortedBy { if (it in listed) 0 else 1 }) {
+            val deadline = timing.now() + timing.installMs
             if (cleanupAttempt("remove $name with forget=1") {
-                val answer = request("/api/apps/remove?app=${encode(name)}&forget=1", "POST")
-                if (answer.status == 404 && changedApps) {
+                val catalogApp = name == installEntry?.get("name")
+                val answer = removeWhenIdle(name, catalogApp, deadline)
+                if (answer.status == 404 && changedApps && !catalogApp) {
                     // Development uploads do not reload the list. A valid small module makes
                     // a partial upload visible after restart so the public removal can erase it.
                     val packed = packed("stress")
@@ -632,16 +767,54 @@ class StressRun(
                     successful(request("/api/dev/app?name=$name&file=manifest.json", "POST", Json.write(manifest + mapOf("name" to name)).toByteArray()))
                     successful(request("/api/dev/app?name=$name&file=app.wasm", "POST", File(packed, "app.wasm").readBytes(), "application/octet-stream"))
                     // Cleanup must proceed after cancellation; it does not use pause().
-                    post("/api/dev/run?app=$name"); timing.sleep(duration(3000)); cleanupBack()
-                    successful(request("/api/apps/remove?app=${encode(name)}&forget=1", "POST"))
+                    checkCleanupObservation()
+                    post("/api/dev/run?app=$name"); cleanupSleep(duration(3000)); cleanupBack()
+                    checkCleanupObservation(restart = true)
+                    successful(removeWhenIdle(name, false, deadline))
                 } else if (answer.status != 404) successful(answer)
             }) owned -= name
         }
     }
+    private fun removeWhenIdle(name: String, catalogApp: Boolean, deadline: Long): DeviceClient.Answer {
+        if (timing.now() >= deadline) throw IOException("$name removal deadline expired")
+        if (catalogApp) {
+            // An absent name makes remove return 404 even while its install holds the writer.
+            // An invalid install cannot write; its route reports 503 while the waiting slot is held.
+            do {
+                val probe = request("/api/apps/install", "POST")
+                if (probe.status != 503) {
+                    require(probe.status == 400) { "install-idle probe returned HTTP ${probe.status}" }
+                    break
+                }
+                cleanupSleep(1000)
+                if (timing.now() >= deadline) throw IOException("install still busy after ${timing.installMs / 1000} s")
+            } while (true)
+        }
+        var absentSince: Long? = null
+        var last: DeviceClient.Answer? = null
+        do {
+            val answer = request("/api/apps/remove?app=${encode(name)}&forget=1", "POST")
+            last = answer
+            if (answer.status == 503) absentSince = null
+            else {
+                if (answer.status != 404) successful(answer)
+                if (!catalogApp) return answer
+                // asked_app can return 404 before an in-flight install commits its manifest.
+                if (apps().any { it["name"] == name }) absentSince = null
+                else {
+                    if (absentSince == null) absentSince = timing.now()
+                    if (timing.now() - absentSince >= timing.absentMs) return answer
+                }
+            }
+            cleanupSleep(1000)
+        } while (timing.now() < deadline)
+        throw IOException("$name did not settle after removal (HTTP ${last.status})")
+    }
+
     private fun cleanupBack() {
         val deadline = timing.now() + timing.recoveryMs
         do {
-            try { status(); return } catch (_: Exception) { timing.sleep(1000) }
+            try { status(); return } catch (_: Exception) { cleanupSleep(1000) }
         } while (timing.now() < deadline)
         throw IOException("device unavailable during cleanup")
     }
@@ -651,6 +824,13 @@ class StressRun(
             val answer = request("/api/glyphs/remove?name=${encode(glyphName)}", "POST")
             if (answer.status != 404) successful(answer)
             glyphOwned = false
+        }
+    }
+    private fun verifyGlyphs() {
+        if (originalGlyphs == null) return
+        cleanupAttempt("verify original glyph packs") {
+            val current = glyphInventory(json("/api/glyphs") as Map<*, *>).filterKeys { !glyphOwned || it != glyphName }
+            require(current == originalGlyphs) { "installed glyph packs changed" }
         }
     }
     private fun verifyOriginalApps() {
@@ -679,7 +859,9 @@ class StressRun(
             if (cancelled.get()) append("Interrupted.\n\n")
             if (cleanupErrors.isNotEmpty()) append("## Cleanup and run errors\n\n" + cleanupErrors.joinToString("\n") { "- $it" } + "\n\n")
             append("Steps and HTTP outcomes: `steps.jsonl`. Cleanup inventory: `cleanup.json`.\n")
-            append(if (options.serial == null) "USB console was not observed.\n" else "USB console: `serial.log`; capture reconnects to the supplied port without configuring it.\n")
+            append(if (options.serial == null) "USB console was not observed.\n" else "${serial?.diagnostic ?: "console not captured"}\n")
+            if (changedApps && originalOpen == null && originalLast == null)
+                append("The API exposes neither the open nor the remembered application. The device will start into the menu or the default application.\n")
             append("This run does not qualify endurance, power loss, physical buttons, panel timing or TLS with two roots.\n")
         }
         File(directory, "report.md").writeText(text)
@@ -692,21 +874,41 @@ class StressRun(
     }
 
     companion object {
+        private const val REMOVED_LISTED_MAX = 16
+        private const val GLYPH_FACES_MAX = 12
+        private const val UPTIME_SLACK_S = 2L
         private val BENCH_NAMES = setOf("stress", "stressfat", "stressdoc", "stressbig")
         /** A reset, a panic or an abort fails a step. The task watchdog only prints in both builds
          * (CONFIG_ESP_TASK_WDT_PANIC is off): it is recorded as a warning, not a failure. */
-        private val CONSOLE_FAILURE = Regex("Guru Meditation|panic'ed|abort\\(\\)|rst:|Stack canary|Interrupt wdt|\\bWDT\\b reset", RegexOption.IGNORE_CASE)
+        private val CONSOLE_FAILURE = Regex("Guru Meditation|panic'ed|abort\\(\\)|\\brst:0x|Stack canary|Interrupt wdt|\\bWDT\\b reset", RegexOption.IGNORE_CASE)
         private val CONSOLE_WARNING = Regex("task_wdt: Task watchdog got triggered", RegexOption.IGNORE_CASE)
         /** Expected software restart banners are allowed only in explicitly marked steps. */
-        fun verdict(before: Map<*, *>, after: Map<*, *>, console: List<String>, requestedRestart: Boolean = false): List<String> {
+        fun verdict(before: Map<*, *>, after: Map<*, *>, console: List<String>, requestedRestart: Boolean = false, elapsedMs: Long = 0): List<String> {
             val failures = mutableListOf<String>()
             fun number(sample: Map<*, *>, key: String) = (sample[key] as? Number)?.toLong() ?: 0L
             if (after["error"] != null) failures += after["error"].toString()
-            if (!requestedRestart && number(after, "uptime_s") < number(before, "uptime_s")) failures += "uptime decreased: restart"
+            val reset = number(after, "reset_reason")
+            if (requestedRestart && reset != 3L) failures += "requested restart has reset_reason $reset, expected 3"
+            if (reset != number(before, "reset_reason")) {
+                if (!requestedRestart || reset in 4L..7L || reset == 9L) failures += "reset_reason changed to $reset: restart"
+            }
+            if (!requestedRestart && (number(after, "uptime_s") < number(before, "uptime_s") ||
+                    number(after, "uptime_s") < number(before, "uptime_s") + elapsedMs / 1000 - UPTIME_SLACK_S))
+                failures += "uptime fell behind elapsed time: restart"
             if (number(after, "failed_allocations") > number(before, "failed_allocations")) failures += "failed_allocations increased"
-            if (after["last_panic"] != null && after["last_panic"] !in listOf("", false, 0L) && after["last_panic"] != before["last_panic"]) failures += "last_panic changed: ${after["last_panic"]}"
+            fun panic(sample: Map<*, *>) = (sample["last_panic"] as? String).orEmpty()
+            val oldPanic = panic(before)
+            val newPanic = panic(after)
+            val counter = Regex("^(\\d+)\\s+(\".*)$")
+            val oldRecord = counter.matchEntire(oldPanic)
+            val newRecord = counter.matchEntire(newPanic)
+            if (newPanic.isNotEmpty() && ((newRecord?.groupValues?.get(2) ?: newPanic) !=
+                    (oldRecord?.groupValues?.get(2) ?: oldPanic) ||
+                    (requestedRestart && oldRecord != null && newRecord != null &&
+                        newRecord.groupValues[1].toLong() <= oldRecord.groupValues[1].toLong())))
+                failures += "last_panic changed or counter did not rise: $newPanic"
             console.filter { line -> CONSOLE_FAILURE.containsMatchIn(line) &&
-                !(requestedRestart && "rst:" in line && Regex("SW_CPU|SW_SYS|SW_RESET|software", RegexOption.IGNORE_CASE).containsMatchIn(line))
+                !(requestedRestart && Regex("\\brst:0x", RegexOption.IGNORE_CASE).containsMatchIn(line) && Regex("SW_CPU|SW_SYS|SW_RESET|software", RegexOption.IGNORE_CASE).containsMatchIn(line))
             }.take(40).forEach { failures += "console: $it" }
             return failures
         }

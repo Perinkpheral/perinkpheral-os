@@ -97,9 +97,11 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
     }
 
     companion object {
+        private const val DOCUMENT_MAX = 12288 // HOST_DOCUMENT_MAX
+
         val PICK_CASES = listOf("big255", "big300", "nest64", "nest65", "nest20000", "opennest50000", "objnest5000", "list", "manykeys", "longstr", "surrogates", "garbage", "badutf8", "liar", "shortlen", "neglen", "hugelen", "headers", "redirect", "status", "reset", "trickle", "stall", "endless")
         val POLL_CASES = PICK_CASES.map { "pick" to it } +
-            listOf("doc12k", "doc13k", "nest64", "nest65", "nest20000", "objnest5000", "manykeys", "garbage", "surrogates", "liar", "headers", "endless").map { "doc" to it } +
+            listOf("doc12k", "doc12k+1", "doc13k", "nest64", "nest65", "nest20000", "objnest5000", "manykeys", "garbage", "surrogates", "liar", "headers", "endless").map { "doc" to it } +
             listOf("xmldeep", "xml65", "xmlattrs", "xmlent", "xmljunk", "xmlname", "garbage", "badutf8", "liar").map { "xml" to it } +
             listOf("stream4m", "stream5m", "endless", "garbage", "headers").map { "raw" to it }
         val CASES = (POLL_CASES.map { it.second } + listOf("ok", "silent")).toSet()
@@ -121,7 +123,8 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
                 case == "badutf8" -> return "{\"a\":{\"b\":\"".toByteArray() + ByteArray(128 * 300) { (128 + it % 128).toByte() } + "\"}}".toByteArray()
                 case == "liar" -> "{\"a\":{\"b\":1"
                 case == "shortlen" -> "{\"a\":{\"b\":1},\"z\":\"${"z".repeat(50000)}\"}"
-                case == "doc12k" -> "{\"p\":\"${"a".repeat(12288 - 9)}\"}"
+                case == "doc12k" -> "{\"p\":\"${"a".repeat(DOCUMENT_MAX - 8)}\"}"
+                case == "doc12k+1" -> "{\"p\":\"${"a".repeat(DOCUMENT_MAX + 1 - 8)}\"}"
                 case == "doc13k" -> "{\"p\":\"${"a".repeat(13000)}\"}"
                 case == "headers" -> "{\"a\":{\"b\":1}}"
                 case == "xmldeep" -> "<a>".repeat(20000) + "</a>".repeat(20000)

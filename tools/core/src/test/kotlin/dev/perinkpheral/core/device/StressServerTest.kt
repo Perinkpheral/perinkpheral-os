@@ -10,7 +10,7 @@ import java.net.SocketTimeoutException
 object StressServerTest {
     @JvmStatic fun main(args: Array<String>) {
         StressServer("127.0.0.1").use { server ->
-            check(StressServer.POLL_CASES.size == 50)
+            check(StressServer.POLL_CASES.size == 51)
             for (case in StressServer.CASES) {
                 server.select("pick", case)
                 Socket("127.0.0.1", server.port).use { socket ->
@@ -62,6 +62,8 @@ object StressServerTest {
                 }
                 server.clear()
             }
+            check(StressServer.body("doc", "doc12k").size == 12288)
+            check(StressServer.body("doc", "doc12k+1").size == 12289)
             // The case belongs to the path; another path keeps its ordinary answer.
             server.select("doc", "liar")
             Socket("127.0.0.1", server.port).use { socket ->
