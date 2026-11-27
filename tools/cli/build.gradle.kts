@@ -69,3 +69,10 @@ val argumentsTest by tasks.registering(JavaExec::class) {
 }
 tasks.check { dependsOn(argumentsTest) }
 tasks.test { failOnNoDiscoveredTests.set(false) }
+
+val graphicsToolsTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.GraphicsToolsTest")
+}
+tasks.check { dependsOn(graphicsToolsTest) }

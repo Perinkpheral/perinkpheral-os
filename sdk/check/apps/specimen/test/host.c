@@ -106,6 +106,9 @@ static void test_session(void)
     /* Gone when the application leaves the stack, and at a restart. */
     standin_forget_session();
     assert(session_get(&read, sizeof read) == 0);
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_ARGUMENT);
+    standin_load();
+    standin_focus();
     assert(session_set(&kept, sizeof kept) == HOST_OK);
     standin_restart();
     assert(session_get(&read, sizeof read) == 0);
@@ -455,6 +458,9 @@ static void test_refusals_and_metadata(void)
     assert(session_set(larger, sizeof larger) == HOST_OK);
     standin_refuse_session(HOST_ERR_NO_SPACE);
     standin_forget_session();
+    assert(session_set(&kept, sizeof kept) == HOST_ERR_ARGUMENT);
+    standin_load();
+    standin_focus();
     assert(session_set(&kept, sizeof kept) == HOST_ERR_NO_SPACE);
     standin_refuse_session(HOST_OK);
     assert(session_set(larger, sizeof larger) == HOST_OK);

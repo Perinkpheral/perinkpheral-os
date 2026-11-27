@@ -5,6 +5,7 @@
 #include "kit.h"
 #include "wm.h"
 #include "back_switch.h"
+#include "list.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -262,10 +263,10 @@ static void test_how_a_scene_wants_to_be_shown(void)
     CHECK(wm_pending_change(&wm) == WM_CHANGED_URGENTLY);
     wm_shown(&wm);
 
-    /* under a finger it is shown at once anyway */
+    /* Explicit policy still applies under a finger. */
     app.next_reaction.kind = SCENE_REDRAW_SOON;
     press(SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
-    CHECK(wm_pending_change(&wm) == WM_CHANGED_BY_INPUT);
+    CHECK(wm_pending_change(&wm) == WM_CHANGED_URGENTLY);
     wm_shown(&wm);
 
     /* a clean picture is asked for from anywhere, and a switch is still more */
@@ -897,8 +898,138 @@ static void test_beside(void)
     CHECK(wm.depth == 0 && page.discarded == 1 && app.discarded == 1);
 }
 
+
+static void test_explicit_redraw_precedence(void)
+{
+    const wm_change_t policies[] = { WM_CHANGED_URGENTLY, WM_CHANGED_IN_A_ROW, WM_CHANGED_CLEANLY };
+    for (size_t index = 0; index < sizeof policies / sizeof policies[0]; index++) {
+        for (int order = 0; order < 2; order++) {
+            start(&app.scene);
+            wm_shown(&wm);
+            wm_invalidate(&wm, order ? policies[index] : WM_CHANGED_BY_INPUT);
+            wm_invalidate(&wm, order ? WM_CHANGED_BY_INPUT : policies[index]);
+            wm_invalidate(&wm, WM_CHANGED_BY_DATA);
+            CHECK(wm_pending_change(&wm) == policies[index]);
+        }
+    }
+    wm_invalidate(&wm, WM_CHANGED_URGENTLY);
+    wm_invalidate(&wm, WM_CHANGED_IN_A_ROW);
+    CHECK(wm_pending_change(&wm) == WM_CHANGED_CLEANLY);
+    wm_shown(&wm);
+    CHECK(wm_pending_change(&wm) == WM_CLEAN);
+    wm_invalidate(&wm, WM_CHANGED_BY_INPUT);
+    CHECK(wm_pending_change(&wm) == WM_CHANGED_BY_INPUT);
+}
+
+static void draw_sets_header(scene_t *scene, gfx_t *surface)
+{
+    scene->header_left = "Same frame";
+    scene->inverted = true;
+    gfx_pixel(surface, 0, 0, true);
+}
+
+static void draw_updated_header(gfx_t *surface, const scene_t *scene, void *context)
+{
+    (void)context;
+    CHECK_STR(scene->header_left, "Same frame");
+    gfx_pixel(surface, 1, 0, true);
+}
+
+static void test_header_after_drawing(void)
+{
+    start(&page.scene);
+    static const scene_ops_t ops = { .draw = draw_sets_header, .button = probe_button };
+    page.scene.ops = &ops;
+    wm.draw_header = draw_updated_header;
+    wm_draw(&wm, &screen);
+    CHECK(!gfx_get(&screen, 1, 0));
+    CHECK(gfx_get(&screen, 0, 0));
+    CHECK(!gfx_get(&screen, 0, WM_HEADER_HEIGHT));
+}
+
+static void test_chart_bounds_and_fixed_range(void)
+{
+    uint8_t pixels[200 / 8 * 150];
+    gfx_t surface;
+    gfx_init(&surface, pixels, 200, 150);
+    int32_t values[] = { INT32_MIN + 1, 0, INT32_MAX };
+    kit_chart_t chart = { .left = 30, .top = 20, .width = 120, .height = 90,
+        .values = values, .count = 3, .minimum = -10, .maximum = 10,
+        .flags = KIT_CHART_FIXED_RANGE | KIT_CHART_MARK_LAST, .fill_shade = 4 };
+    for (int kind = KIT_CHART_LINE; kind <= KIT_CHART_STEPS; kind++) {
+        chart.kind = (kit_chart_kind_t)kind;
+        gfx_clear(&surface, false);
+        kit_chart(&surface, &chart);
+        CHECK(ink_in(&surface, 30, 20, 120, 90) > 0);
+        for (int y = 0; y < 150; y++) {
+            for (int x = 0; x < 200; x++) {
+                CHECK(!gfx_get(&surface, x, y) || (x >= 30 && x < 150 && y >= 20 && y < 110));
+            }
+        }
+    }
+    values[0] = 0; values[1] = KIT_CHART_NO_VALUE; values[2] = 10;
+    chart.minimum = 0; chart.maximum = 20; chart.kind = KIT_CHART_LINE;
+    gfx_clear(&surface, false);
+    kit_chart(&surface, &chart);
+    CHECK(ink_in(&surface, 30, 20, 120, 30) == 0);
+    CHECK(ink_in(&surface, 30, 105, 6, 5) > 0);
+    CHECK(ink_in(&surface, 140, 55, 10, 20) > 0);
+    chart.minimum = chart.maximum;
+    gfx_clear(&surface, false);
+    kit_chart(&surface, &chart);
+    CHECK(ink_in(&surface, 0, 0, 200, 150) == 0);
+}
+
+static void test_cell_picture_bounds(void)
+{
+    uint8_t pixels[400 / 8 * 300];
+    uint8_t picture[2 + 32 * 255];
+    memset(picture, 0xFF, sizeof picture);
+    gfx_t surface;
+    gfx_init(&surface, pixels, 400, 300);
+    const int dimensions[][2] = { {255,255}, {255,1}, {1,255}, {45,90}, {22,11} };
+    for (int large = 0; large < 2; large++) {
+        int side = large ? KIT_CELL_PICTURE_LARGE : KIT_CELL_PICTURE_SMALL;
+        kit_cell_t cell = { .left = 0, .top = 0, .width = large ? 400 : 200,
+            .height = large ? 300 : 200, .value = "", .picture = picture, .icon = -1 };
+        for (size_t index = 0; index < sizeof dimensions / sizeof dimensions[0]; index++) {
+            picture[0] = (uint8_t)dimensions[index][0];
+            picture[1] = (uint8_t)dimensions[index][1];
+            gfx_clear(&surface, false);
+            kit_cell(&surface, &cell);
+            int first_x = 400, end_x = 0, first_y = 300, end_y = 0;
+            for (int y = 0; y < 300; y++) {
+                for (int x = 0; x < 400; x++) {
+                    if (gfx_get(&surface, x, y)) {
+                        first_x = x < first_x ? x : first_x; end_x = x + 1 > end_x ? x + 1 : end_x;
+                        first_y = y < first_y ? y : first_y; end_y = y + 1 > end_y ? y + 1 : end_y;
+                    }
+                }
+            }
+            CHECK(end_x > first_x && end_y > first_y);
+            CHECK(end_x - first_x <= side && end_y - first_y <= side);
+        }
+    }
+}
+
+static void test_list_extreme_indices(void)
+{
+    start(&page.scene);
+    list_t list = { .count = 100, .selected = 99, .first = 50 };
+    list_row_t row = { .label = "Invisible", .icon = LIST_NO_ICON };
+    gfx_clear(&screen, false);
+    list_draw_row(&screen, &list, INT32_MIN, &row, false);
+    list_draw_row(&screen, &list, INT32_MAX, &row, false);
+    CHECK(ink_in(&screen, 0, 0, SCREEN_W, SCREEN_H) == 0);
+}
+
 int main(void)
 {
+    test_explicit_redraw_precedence();
+    test_header_after_drawing();
+    test_chart_bounds_and_fixed_range();
+    test_cell_picture_bounds();
+    test_list_extreme_indices();
     test_back_switch();
     test_back_switch_after_a_chord();
     test_beside();

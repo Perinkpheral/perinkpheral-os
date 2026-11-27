@@ -14,7 +14,7 @@
  * Drawing calls require app_on_draw(). Text measurements, font metrics,
  * gfx_fit_text(), gfx_icon_ink() and gfx_map_point() work in any handler. gfx_draw_qr()
  * works in any handler when cell is 0. gfx_width() and gfx_height()
- * require app_on_draw(). */
+ * return the application's manifest surface size in any handler. */
 
 /* Surface size: 400 x 300 for a full-screen application, 400 x 260 below
  * Perinkpheral OS header otherwise. The origin is the top left corner. The
@@ -42,6 +42,7 @@ HOST_IMPORT(gfx_height, int32_t gfx_height(void));
  * differ, so layout must use measured widths: gfx_text_width(),
  * gfx_font_height(), gfx_font_ascent(), gfx_font_cap_height().
  *
+ * The following metrics describe the current fonts, not fixed ABI values.
  * Sizes in pixels, Departure Mono / Jersey:
  *                       capitals   line       digits per 400 px
  *   HOST_FONT_SMALL      8 / 10    15 / 21    57 / 50
@@ -105,8 +106,9 @@ HOST_IMPORT(gfx_font_cap_height, int32_t gfx_font_cap_height(int32_t font));
 
 /* Sets the colour for the following calls: HOST_PAPER (0) to HOST_INK
  * (16). The colour is HOST_INK at the start of every app_on_draw().
- * Intermediate values are greys produced by dithering: N of every 16
- * pixels are inked, in a fixed 4 x 4 pattern. When the user disables
+ * Intermediate values are greys produced by dithering. The current
+ * implementation inks N of every 16 pixels in a 4 x 4 pattern; the
+ * pattern is informative, not part of the ABI. When the user disables
  * dithering, 1..7 become paper and 8..15 ink. Use greys for filled areas
  * only; thin lines and small text become unreadable. */
 #define HOST_PAPER 0

@@ -117,6 +117,56 @@ static void test_mocks(const char *state)
     assert(load_mocks());
 }
 
+static int question_events;
+
+static scene_reaction_t record_question_button(scene_t *scene, scene_button_t button, scene_press_t action)
+{
+    (void)scene; (void)button; (void)action;
+    question_events++;
+    return (scene_reaction_t){ .kind = SCENE_IGNORED };
+}
+
+static void draw_test_scene(scene_t *scene, gfx_t *surface)
+{
+    (void)scene; (void)surface;
+}
+
+static void draw_test_header(gfx_t *surface, const scene_t *scene, void *context)
+{
+    (void)surface; (void)scene; (void)context;
+}
+
+static void test_question_and_long_back(void)
+{
+    static const scene_ops_t ops = { .button = record_question_button, .draw = draw_test_scene };
+    scene_t home = { .ops = &ops }, question = { .ops = &ops, .question = 1 };
+    uint8_t frame[400 / 8 * 300];
+    gfx_init(&s_screen, frame, 400, 300);
+    s_question_press = (question_press_t){0};
+    s_back_switch = (back_switch_state_t){0};
+    wm_init(&s_wm, &home, &question, draw_test_header, NULL);
+    show();
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_DOWN);
+    assert(question_events == 0);
+    question.question++;
+    wm_invalidate(&s_wm, WM_CHANGED_BY_DATA);
+    show();
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_UP);
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    assert(question_events == 0);
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_DOWN);
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_UP);
+    button_event(SCENE_BUTTON_OK, SCENE_PRESS_SHORT);
+    assert(question_events == 2);
+    question_events = 0;
+    press(3, true);
+    assert(s_wm.current == &home && question_events == 1);
+    s_wm = (wm_t){0};
+    s_question_press = (question_press_t){0};
+    s_back_switch = (back_switch_state_t){0};
+    s_screen = (gfx_t){0};
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -125,6 +175,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_question_and_long_back();
     test_network_icon();
     test_mocks(state);
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["

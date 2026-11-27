@@ -38,7 +38,7 @@ SOURCES := sim.c \
            $(APPSYS)/app_scene.c $(APPSYS)/app_delivery.c $(COMP)/appstore/app_store.c \
            $(COMP)/appstore/app_manifest.c $(COMP)/appstore/poll_schedule.c $(COMP)/appstore/json_tree.c $(COMP)/appstore/text_template.c \
            $(SDK)/lib/json_pick.c \
-           $(UI)/wm.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c \
+           $(UI)/wm.c $(UI)/back_switch.c $(FW)/main/question_press.c $(UI)/notice.c $(UI)/kit.c $(UI)/scrollbar.c $(UI)/list.c \
            $(GFX)/gfx.c $(GFX)/gfx_icons.c $(GFX)/gfx_icon_art.c $(COMP)/words/words.c $(GFX)/font_square.c \
            $(MAP)/map_geo.c $(MAP)/map_land.c $(MAP)/map_land_data.c $(MAP)/map_draw.c \
            $(FW)/main/screens.c $(COMP)/appconf/appconf.c $(FW)/main/header.c $(FW)/main/scene_menu.c $(COMP)/deadlines/deadline_table.c $(QR)/qrcodegen/qrcodegen.c

@@ -64,6 +64,7 @@ typedef struct {
     bool     beside[WM_STACK_DEPTH]; /* that entry is one of a row: see wm_open_beside() */
     int      depth;
     wm_change_t change;
+    wm_change_t redraw_policy; /* explicit CLEAN > NO_BLINK > SOON, until shown */
     bool     suspended;   /* see wm_suspend() */
     /* Taken off the stack by the step under way: told so once it is done (scene_ops_t.discard). */
     scene_t *forgotten[WM_STACK_DEPTH + 1];

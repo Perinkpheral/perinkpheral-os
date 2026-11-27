@@ -1291,11 +1291,11 @@ Check event.source against window.opener and validate event.origin against the e
 Surface and colour
 Поверхность и цвет
 
-The origin is the top left corner of the surface. <code>gfx_width()</code> and <code>gfx_height()</code> return its size. Use these values for layout.
-Начало координат - левый верхний угол поверхности. <code>gfx_width()</code> и <code>gfx_height()</code> возвращают её размер. Используйте эти значения для компоновки.
+The origin is the top left corner of the surface. <code>gfx_width()</code> and <code>gfx_height()</code> return its manifest size in any handler, including <code>app_on_load()</code> and background delivery. Use these values for layout.
+Начало координат находится в левом верхнем углу поверхности. <code>gfx_width()</code> и <code>gfx_height()</code> возвращают её размер по манифесту в любом обработчике, включая <code>app_on_load()</code> и фоновую доставку. Используйте эти значения для размещения элементов.
 
-Drawing calls work inside <code>app_on_draw()</code>. The surface is white at the start of each call. In any other handler, the drawing calls of <code>gfx_*</code> and <code>ui_*</code> return <code>HOST_ERR_NOT_DRAWING</code>; measuring text and fonts works anywhere. Drawing is clipped to the surface.
-Вызовы отрисовки работают внутри <code>app_on_draw()</code>. В начале каждого вызова поверхность белая. В любом другом обработчике вызовы отрисовки <code>gfx_*</code> и <code>ui_*</code> возвращают <code>HOST_ERR_NOT_DRAWING</code>; измерение текста и шрифтов работает везде. Отрисовка обрезается по границам поверхности.
+Drawing calls work inside <code>app_on_draw()</code>. The surface is white at the start of each call. In any other handler, drawing calls return <code>HOST_ERR_NOT_DRAWING</code>. Text and font measurements, <code>gfx_fit_text()</code>, ink bounds, map-point queries, <code>ui_list_visible()</code>, <code>ui_list_first()</code> and <code>ui_cell_fit()</code> work in any handler. <code>gfx_draw_qr()</code> measures in any handler when its cell size is zero. Drawing is clipped to the surface.
+Вызовы рисования работают внутри <code>app_on_draw()</code>. В начале каждого вызова поверхность белая. В других обработчиках вызовы рисования возвращают <code>HOST_ERR_NOT_DRAWING</code>. Измерение текста и шрифтов, <code>gfx_fit_text()</code>, границы чернил, проекция точки карты, <code>ui_list_visible()</code>, <code>ui_list_first()</code> и <code>ui_cell_fit()</code> работают в любом обработчике. <code>gfx_draw_qr()</code> измеряет в любом обработчике при нулевом размере ячейки. Рисование ограничено поверхностью.
 
 <code>gfx_set_color()</code> sets the colour for the following calls, from <code>HOST_PAPER</code> (0) to <code>HOST_INK</code> (16). The colour is <code>HOST_INK</code> at the start of each <code>app_on_draw()</code>. Intermediate values are dithered greys. Use greys for filled areas only: thin lines and small text become unreadable.
 <code>gfx_set_color()</code> задаёт цвет для последующих вызовов, от <code>HOST_PAPER</code> (0) до <code>HOST_INK</code> (16). В начале каждого <code>app_on_draw()</code> цвет равен <code>HOST_INK</code>. Промежуточные значения - оттенки серого, получаемые дизерингом. Используйте серый только для заливок: тонкие линии и мелкий текст становятся нечитаемыми.
@@ -1312,8 +1312,8 @@ A font constant selects a size. The typeface is a user setting: Departure Mono (
 Measure text with <code>gfx_text_width()</code>, <code>gfx_font_height()</code>, <code>gfx_font_ascent()</code> and <code>gfx_font_cap_height()</code>.
 Измеряйте текст вызовами <code>gfx_text_width()</code>, <code>gfx_font_height()</code>, <code>gfx_font_ascent()</code> и <code>gfx_font_cap_height()</code>.
 
-Each cell gives the value for Departure Mono, then for Jersey.
-В каждой ячейке значение для Departure Mono, затем для Jersey.
+Each cell gives the current measured value for Departure Mono, then for Jersey. Font metrics, panel durations and dithering patterns are informative, not fixed ABI guarantees. Measure the selected font for layout.
+В каждой ячейке приведено текущее измеренное значение для Departure Mono, затем для Jersey. Метрики шрифтов, длительность обновления панели и узоры дизеринга носят справочный характер и не закреплены в ABI. Для размещения элементов измеряйте выбранный шрифт.
 
 Constant
 Константа
@@ -1372,8 +1372,8 @@ The <code>y</code> argument of <code>gfx_draw_text()</code> is the top of the li
 Add <code>HOST_FONT_TABULAR</code> to the font for numbers that change in place, such as a clock or a countdown. All digits then have the same width. Every call that takes a font accepts the flag. Pass the same flag when measuring.
 Добавляйте <code>HOST_FONT_TABULAR</code> к шрифту для чисел, меняющихся на месте, например часов или обратного отсчёта. Все цифры получают одинаковую ширину. Флаг принимает любой вызов с аргументом шрифта. При измерении передавайте тот же флаг.
 
-<code>gfx_fit_text()</code> shortens a text to a given width and appends "...". It cuts between characters, so the result is valid UTF-8.
-<code>gfx_fit_text()</code> сокращает текст до заданной ширины и добавляет "...". Обрезка идёт по границе символа, поэтому результат остаётся корректным UTF-8.
+<code>gfx_fit_text()</code> shortens a text to a given width and appends "...". The result may contain only "..."; it is empty when the dots do not fit. It cuts between characters, so the result is valid UTF-8. Ink measurements, including the degree sign, exclude spacing around visible marks.
+<code>gfx_fit_text()</code> сокращает текст до заданной ширины и добавляет "...". Результат может состоять только из "..."; если точки не помещаются, он пуст. Обрезка проходит между символами, поэтому результат остаётся корректным UTF-8. Измерение границ чернил, в том числе знака градуса, не включает отступы вокруг видимых знаков.
 
 Text beyond ASCII
 Текст за пределами ASCII
@@ -2020,8 +2020,8 @@ Data the user is waiting for, such as the result of a manual refresh; a rhythm t
 HOST_REDRAW_CLEAN
 =
 
-Full refresh: 2 - 3 s, one flash, removes ghosting. Waits until at least one second after the preceding refresh
-Полное обновление: 2 - 3 с, одно мигание, убирает остаточные изображения. Ждёт не менее секунды после предыдущего обновления
+Full refresh, including an unchanged frame. Waits until at least one second after the preceding refresh; typical measured duration is 2 - 3 s
+Полное обновление, в том числе неизменившегося кадра. Ожидает не менее секунды после предыдущего обновления; типичная измеренная длительность составляет 2 - 3 с
 
 Images that must be clean; the end of a frame sequence
 Изображения, которые должны быть чистыми; конец последовательности кадров
@@ -2050,8 +2050,8 @@ Settings changes and deliveries to that application for the next 30 seconds use 
 Redraw requests made inside <code>app_on_draw()</code> are cleared when it returns and do not schedule another frame.
 Запросы перерисовки, сделанные внутри <code>app_on_draw()</code>, сбрасываются после его возврата и не планируют новый кадр.
 
-Redraw requests are unlimited.
-Число запросов перерисовки не ограничено.
+Redraw requests are unlimited. Explicit refresh policies survive pending input and data causes: CLEAN takes precedence over NO_BLINK, then SOON. Scene switches still require a full refresh.
+Число запросов перерисовки не ограничено. Явные правила обновления сохраняются при ожидающих событиях ввода и данных: CLEAN имеет приоритет над NO_BLINK, затем SOON. Смена сцены по-прежнему требует полного обновления.
 
 Each refresh uses battery energy and wears the panel. Frequent changes also make the device distracting. See section 13 for guidelines.
 Каждое обновление расходует заряд батареи и изнашивает панель. Частые изменения также делают устройство отвлекающим. Рекомендации - в разделе 13.
@@ -3541,8 +3541,8 @@ Cell from a <code>host_cell_t</code> (x, y, width, height, name[48], value[48], 
 ui_cell_fit(cell, picture, icon)
 =
 
-Returns the size class that fits the cell; 1 is the largest. Use the largest returned number for all cells of a screen
-Возвращает класс размера, подходящий ячейке; 1 - наибольший. Для всех ячеек экрана используйте наибольшее из возвращённых чисел
+Returns the size class that fits the cell in any handler; 1 is the largest. Use the largest returned number for all cells of a screen. Pictures fit inside their reserved 44 or 88 px square: smaller pictures use integer enlargement, oversized pictures are downsampled
+Возвращает подходящий класс размера ячейки в любом обработчике; 1 - самый крупный. Для всех ячеек экрана используйте наибольшее полученное число. Рисунки помещаются в отведённый квадрат 44 или 88 пикселей: небольшие увеличиваются в целое число раз, слишком большие уменьшаются
 
 ui_draw_bar(x, y, width, value, maximum)
 =
@@ -3592,8 +3592,8 @@ HOST_CHART_LINE, HOST_CHART_AREA, HOST_CHART_BARS или HOST_CHART_STEPS
 count
 =
 
-1 - 128 integers, oldest first. Scale spans the least and greatest value
-1 - 128 целых чисел, от старых к новым. Шкала охватывает наименьшее и наибольшее значения
+1 - 128 integers, oldest first. Automatic scale spans the least and greatest value
+1 - 128 целых чисел, от старых к новым. Автоматический масштаб охватывает наименьшее и наибольшее значение
 
 decimals
 =
@@ -4093,8 +4093,8 @@ OK: следующая часть; APP_UI_DONE после последней
 calendar seconds as if UTC; see conversion below
 календарные секунды как UTC; преобразование описано ниже
 
-Lists have at most 10000 rows. app_list_button() pages by the most recently measured matching list, using app_list_first(). Before measurement, or after another list was measured, it uses five rows.
-В списке до 10000 строк. app_list_button() берёт размер страницы из последнего измерения этого списка через app_list_first(). До измерения или после измерения другого списка используется пять строк.
+Lists have at most 10000 rows. app_list_button() measures the current list geometry in the button handler for long-press paging, including before the first draw. A list with no visible rows moves one row. app_list_first() works in any handler. Drawing an index outside the list or its visible range succeeds without drawing that row.
+Списки содержат не более 10000 строк. При перелистывании долгим нажатием app_list_button() измеряет текущую геометрию списка в обработчике кнопки, в том числе до первого рисования. Список без видимых строк перемещается на одну строку. app_list_first() работает в любом обработчике. Рисование индекса за пределами списка или видимой области завершается успешно, не рисуя эту строку.
 
 To handle BACK on these screens, export <code>app_on_back()</code> and pass <code>BTN_BACK_PRESSED</code> from it to the same button function.
 Чтобы обрабатывать BACK на этих экранах, экспортируйте <code>app_on_back()</code> и передавайте из него <code>BTN_BACK_PRESSED</code> в ту же функцию обработки кнопок.
@@ -4570,8 +4570,8 @@ Every poll, of any method, is also sent after a device start, after saving appli
 In a poll URL, header or body, <code>{{</code> always opens a store key of 1-15 characters from <code>!</code> to <code>~</code>, closed by <code>}}</code>; the build refuses invalid keys or unclosed placeholders, and a literal "{{" cannot be sent.
 В URL, заголовке или теле опроса <code>{{</code> всегда открывает ключ хранилища длиной 1-15 символов от <code>!</code> до <code>~</code>, закрытый <code>}}</code>; сборка отклоняет неверные ключи и незакрытые подстановки, а буквальное "{{" отправить нельзя.
 
-PNG files must be non-interlaced and use at most 8 bits per channel. PBM files must use P1 or P4. A text-picture name must match <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.
-PNG должен быть без чересстрочной развёртки и содержать не более 8 бит на канал. PBM должен иметь формат P1 или P4. Имя картинки в текстовом файле должно соответствовать <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.
+PNG files must be non-interlaced and use at most 8 bits per channel. Transparency includes alpha channels and grayscale, RGB and palette <code>tRNS</code> keys; transparent pixels become paper. PBM files must use P1 or P4. A text-picture name must match <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.
+PNG должны быть без чересстрочной развёртки и содержать не более 8 бит на канал. Поддерживаются альфа-каналы и ключи прозрачности <code>tRNS</code> для оттенков серого, RGB и палитры; прозрачные пиксели становятся бумагой. PBM должны иметь формат P1 или P4. Имя текстового рисунка должно соответствовать <code>[A-Za-z0-9_][A-Za-z0-9_-]*</code>.
 
 Picked scalar values and individual list elements are limited to 63 bytes and truncated between UTF-8 characters. Short JSON control escapes such as <code>\n</code> and <code>\t</code> become spaces. This does not apply to <code>\uXXXX</code> escapes. Parse streamed responses directly when original string content must be preserved.
 Извлечённые скалярные значения и отдельные элементы списка ограничены 63 байтами и обрезаются по границе символа UTF-8. Краткие управляющие последовательности JSON, например <code>\n</code> и <code>\t</code>, заменяются пробелами. Это не относится к последовательностям <code>\uXXXX</code>. Если нужно сохранить исходное содержимое строки, разбирайте потоковый ответ самостоятельно.
@@ -4693,3 +4693,21 @@ The document result normally follows the final raw piece. If no <code>app_on_dat
 
 Complete JSON documents must be valid UTF-8 and have at most 64 nesting levels. Complete XML documents use the attribute-only subset below and allow at most 64 attributes per element. Duplicate attribute names within an element, or unknown entities anywhere, cause validation to fail, even in fields the application does not query.
 Целый документ JSON должен быть корректным UTF-8 и иметь не более 64 уровней вложенности. Для целых документов XML действует описанное ниже подмножество с атрибутами и не более 64 атрибутов на элемент. Повтор имён атрибутов в одном элементе или неизвестные сущности в любом месте приводят к ошибке проверки, даже если приложение не читает эти поля.
+
+Fixed scale limits with HOST_CHART_FIXED_RANGE; minimum must be less than maximum. Ignored in automatic mode
+Границы фиксированного масштаба при HOST_CHART_FIXED_RANGE; minimum должен быть меньше maximum. В автоматическом режиме не используются
+
+Uses minimum and maximum, overriding FROM_ZERO. Values and marks are clipped to the chart rectangle; captions use the fixed limits. Unknown chart flag bits return HOST_ERR_ARGUMENT
+Использует minimum и maximum вместо FROM_ZERO. Значения и метки обрезаются по прямоугольнику графика; подписи показывают фиксированные границы. Неизвестные биты флагов графика возвращают HOST_ERR_ARGUMENT
+
+Header setters called during <code>app_on_draw()</code> affect that same frame. Perinkpheral OS collects application text after drawing, composes the effective header, then applies whole-screen inversion.
+Вызовы изменения заголовка внутри <code>app_on_draw()</code> действуют в том же кадре. Perinkpheral OS получает текст приложения после рисования, формирует видимый заголовок и затем инвертирует весь экран.
+
+The native stand-in retains four notifications separately from its cumulative acceptance count. Application tests can dismiss one with <code>standin_notice_dismiss()</code> or clear occupancy with <code>standin_notices_clear()</code>. It models scene closure after each input or timer handler, load-time inversion, pending redraw flags and QUESTION press generations. Frame comparisons and visible-failure checks use only the effective header and suppress it for full-screen applications. Pixel clipping and panel refreshes remain simulator and firmware tests.
+Нативная модель хранит четыре уведомления отдельно от общего числа принятых. Тест приложения может убрать одно через <code>standin_notice_dismiss()</code> или очистить очередь через <code>standin_notices_clear()</code>. Модель учитывает закрытие сцены после каждого обработчика ввода или таймера, инверсию при загрузке, ожидающие флаги перерисовки и поколения нажатий QUESTION. Сравнение кадров и проверка видимых ошибок используют только итоговый заголовок и исключают его для полноэкранных приложений. Обрезка пикселей и обновление панели проверяются в симуляторе и тестах прошивки.
+
+minimum, maximum
+minimum, maximum
+
+HOST_CHART_FIXED_RANGE
+HOST_CHART_FIXED_RANGE

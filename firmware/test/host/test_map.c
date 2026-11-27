@@ -543,6 +543,10 @@ static void test_rings(void)
         across += ink_in(x, 0, x, 40) > 0;
     }
     CHECK(across == 400);
+    /* Far-side and antipodal rings can fail individual projections. */
+    fresh(0xFF);
+    map_draw_ring(&screen, &view, -view.lat_e6, view.lon_e6 > 0 ? view.lon_e6 - 180000000 : view.lon_e6 + 180000000, 2000000);
+    CHECK(ink_in(0, 0, 399, 299) == 0);
     /* the colour is the surface's */
     fresh(0xFF);
     screen.shade = 0;

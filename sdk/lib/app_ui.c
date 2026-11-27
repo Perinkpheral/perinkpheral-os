@@ -23,15 +23,10 @@ static int32_t wrapped(int32_t value, int32_t first, int32_t last)
 
 /* ---- a list ---- */
 
-/* How many rows the list showed when it was drawn last: a press, which draws nothing, pages by
- * it. A list not drawn yet pages by a few. */
-#define PAGE_UNKNOWN 5
-static const app_list_t *drawn_list;
-static int32_t           drawn_rows;
-
 static int32_t page_of(const app_list_t *list)
 {
-    return list == drawn_list && drawn_rows > 0 ? drawn_rows : PAGE_UNKNOWN;
+    int32_t rows = ui_list_visible(list);
+    return rows > 0 ? rows : 1;
 }
 
 static int32_t clamped(int32_t value, int32_t low, int32_t high)
@@ -90,8 +85,6 @@ int32_t app_list_first(app_list_t *list)
     if (first >= 0) {
         list->first = first; /* where it stands, for the next step */
     }
-    drawn_list = list;
-    drawn_rows = ui_list_visible(list);
     return first;
 }
 

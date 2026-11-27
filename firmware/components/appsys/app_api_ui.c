@@ -41,14 +41,11 @@ HOST_FUNCTION(ui_list_visible)
     m3ApiReturnType(int32_t);
     m3ApiGetArg(uint32_t, list_offset);
     app_t *app = APP_OF(runtime);
-    if (app->surface == NULL) {
-        m3ApiReturn(app_not_drawing(APP_OF(runtime)));
-    }
     list_t list;
     if (!read_list(runtime, _mem, list_offset, &list)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
-    m3ApiReturn(list_visible_rows(app->surface, &list));
+    m3ApiReturn(list_visible_rows(&app->layout, &list));
 }
 
 HOST_FUNCTION(ui_list_first)
@@ -56,14 +53,11 @@ HOST_FUNCTION(ui_list_first)
     m3ApiReturnType(int32_t);
     m3ApiGetArg(uint32_t, list_offset);
     app_t *app = APP_OF(runtime);
-    if (app->surface == NULL) {
-        m3ApiReturn(app_not_drawing(APP_OF(runtime)));
-    }
     list_t list;
     if (!read_list(runtime, _mem, list_offset, &list)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
-    m3ApiReturn(list_first_row(app->surface, &list));
+    m3ApiReturn(list_first_row(&app->layout, &list));
 }
 
 HOST_FUNCTION(ui_draw_list_row)
@@ -512,15 +506,12 @@ HOST_FUNCTION(ui_cell_fit)
     m3ApiGetArg(int32_t, icon);
 
     app_t *app = APP_OF(runtime);
-    if (app->surface == NULL) {
-        m3ApiReturn(app_not_drawing(APP_OF(runtime)));
-    }
     host_cell_t asked;
     kit_cell_t  cell;
     if (!cell_of(runtime, _mem, cell_offset, picture_offset, icon, &asked, &cell)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
-    m3ApiReturn(kit_cell_fit(app->surface, &cell));
+    m3ApiReturn(kit_cell_fit(&app->layout, &cell));
 }
 
 HOST_FUNCTION(ui_draw_cell)
@@ -548,6 +539,7 @@ _Static_assert(HOST_CHART_LINE == KIT_CHART_LINE && HOST_CHART_AREA == KIT_CHART
                HOST_CHART_AXIS == KIT_CHART_AXIS && HOST_CHART_FROM_ZERO == KIT_CHART_FROM_ZERO &&
                HOST_CHART_RANGE == KIT_CHART_RANGE && HOST_CHART_MARK_LAST == KIT_CHART_MARK_LAST &&
                HOST_CHART_RANGE_RIGHT == KIT_CHART_RANGE_RIGHT &&
+               HOST_CHART_FIXED_RANGE == KIT_CHART_FIXED_RANGE &&
                HOST_CHART_NO_VALUE == KIT_CHART_NO_VALUE,
                "the chart of the contract is the chart of the kit");
 
@@ -570,7 +562,11 @@ HOST_FUNCTION(ui_draw_chart)
     }
     memcpy(&asked, given, sizeof asked);
     if (asked.count < 1 || asked.count > HOST_CHART_VALUES_MAX || asked.kind < HOST_CHART_LINE ||
-        asked.kind > HOST_CHART_STEPS || asked.decimals < 0 || asked.decimals > KIT_CHART_DECIMALS_MAX ||
+        asked.kind > HOST_CHART_STEPS ||
+        (asked.flags & ~(HOST_CHART_AXIS | HOST_CHART_FROM_ZERO | HOST_CHART_RANGE |
+                         HOST_CHART_MARK_LAST | HOST_CHART_RANGE_RIGHT | HOST_CHART_FIXED_RANGE)) != 0 ||
+        ((asked.flags & HOST_CHART_FIXED_RANGE) && asked.minimum >= asked.maximum) ||
+        asked.decimals < 0 || asked.decimals > KIT_CHART_DECIMALS_MAX ||
         !is_drawable(asked.x) || !is_drawable(asked.y) || !is_drawable(asked.width) ||
         !is_drawable(asked.height) || asked.width <= 0 || asked.height <= 0) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
@@ -585,7 +581,7 @@ HOST_FUNCTION(ui_draw_chart)
     memcpy(values, numbers, values_size);
     const kit_chart_t chart = {
         .left = asked.x, .top = asked.y, .width = asked.width, .height = asked.height,
-        .values = values, .count = asked.count,
+        .values = values, .count = asked.count, .minimum = asked.minimum, .maximum = asked.maximum,
         .kind = (kit_chart_kind_t)asked.kind, .flags = asked.flags, .decimals = asked.decimals,
         .fill_shade = app->services->dithers() ? CHART_FILL_SHADE : 0,
     };

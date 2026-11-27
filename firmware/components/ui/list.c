@@ -84,8 +84,11 @@ void list_draw_row(gfx_t *g, const list_t *list, int index, const list_row_t *ro
                    bool has_pictures)
 {
     int visible = list_visible_rows(g, list);
+    if (index < 0 || index >= list->count) {
+        return;
+    }
     int slot = index - list_first_row(g, list);
-    if (index < 0 || index >= list->count || slot < 0 || slot >= visible) {
+    if (slot < 0 || slot >= visible) {
         return;
     }
     const gfx_font_t *font = gfx_font_system();

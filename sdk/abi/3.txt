@@ -35,6 +35,7 @@ constant HOST_API_VERSION	3
 constant HOST_CHART_AREA	1
 constant HOST_CHART_AXIS	1
 constant HOST_CHART_BARS	2
+constant HOST_CHART_FIXED_RANGE	32
 constant HOST_CHART_FROM_ZERO	2
 constant HOST_CHART_LINE	0
 constant HOST_CHART_MARK_LAST	8
@@ -183,6 +184,7 @@ constant HOST_REDRAW_SOON	1
 constant HOST_REQUEST_FIRST	16
 constant HOST_REQUEST_LAST	255
 constant HOST_SESSION_MAX	1024
+constant HOST_SINCE_HOST_CHART_FIXED_RANGE	"0.1.103"
 constant HOST_SINCE_HOST_DOCUMENT_MAX	"0.1.100"
 constant HOST_SINCE_HOST_FORMAT_JSON	"0.1.100"
 constant HOST_SINCE_HOST_FORMAT_RAW	"0.1.100"
@@ -393,6 +395,12 @@ field host_chart_t.height type	int32_t
 field host_chart_t.kind offset	16
 field host_chart_t.kind size	4
 field host_chart_t.kind type	int32_t
+field host_chart_t.maximum offset	36
+field host_chart_t.maximum size	4
+field host_chart_t.maximum type	int32_t
+field host_chart_t.minimum offset	32
+field host_chart_t.minimum size	4
+field host_chart_t.minimum type	int32_t
 field host_chart_t.width offset	8
 field host_chart_t.width size	4
 field host_chart_t.width type	int32_t
@@ -709,7 +717,7 @@ struct host_answer_info_t size	476
 struct host_cell_t align	4
 struct host_cell_t size	116
 struct host_chart_t align	4
-struct host_chart_t size	32
+struct host_chart_t size	40
 struct host_date_t align	4
 struct host_date_t size	92
 struct host_icon_ink_t align	4

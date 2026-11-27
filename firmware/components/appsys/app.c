@@ -558,6 +558,8 @@ app_load_result_t app_load(const char *name, uint32_t abi, const uint8_t *wasm, 
         return APP_ERR_NO_MEMORY;
     }
     app->services = services;
+    app->layout.w = APP_SURFACE_WIDTH;
+    app->layout.h = (grants & APP_GRANT_FULLSCREEN) != 0 ? APP_SURFACE_HEIGHT : APP_CONTENT_HEIGHT;
     app->name = name;
     s_loaded = app;
     app_load_result_t result = load_module(app, wasm, wasm_size);

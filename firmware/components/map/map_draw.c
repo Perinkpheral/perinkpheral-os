@@ -458,8 +458,10 @@ void map_draw_ring(gfx_t *g, const map_view_t *view, int32_t lat_e6, int32_t lon
                 piece256(g, view, ax, ay, bx, by);
             }
         }
-        ax = bx;
-        ay = by;
+        if (has) {
+            ax = bx;
+            ay = by;
+        }
         had = has;
     }
 }

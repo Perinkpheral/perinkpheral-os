@@ -114,11 +114,13 @@ typedef enum {
 /* What a manifest asked for beyond the host API, as app_load() takes it. */
 #define APP_GRANT_SYSTEM 1u /* "system": the sys_* calls */
 #define APP_GRANT_FILES  2u /* "writes_files": file_write() */
+#define APP_GRANT_FULLSCREEN 4u /* "fullscreen": 400 x 300 instead of 400 x 260 */
 
 /* Loads a module and calls app_on_load(). `wasm` and `name` must remain
  * valid until app_unload(). `name` selects the store of kv_*. `grants`:
  * APP_GRANT_* of what may be imported beside the host API; a module that
- * imports more is refused. On failure *loaded is NULL. */
+ * imports more is refused. APP_GRANT_FULLSCREEN selects the manifest's
+ * surface dimensions before app_on_load(). On failure *loaded is NULL. */
 app_load_result_t app_load(const char *name, uint32_t abi, const uint8_t *wasm, size_t wasm_size,
                            unsigned grants, const app_services_t *services, app_t **loaded);
 

@@ -560,7 +560,8 @@ static int glyph_room(const gfx_glyph_t *gl, uint32_t cp, int cell, int *inset)
  * the line; nothing stands after it at the end of one. */
 #define DEGREE_SIGN 0xB0
 
-static int draw_degree(gfx_t *g, int x, int y, const gfx_font_t *font, bool black, bool is_last)
+static int draw_degree(gfx_t *g, int x, int y, const gfx_font_t *font, bool black, bool is_last,
+                       int *first_ink, int *end_ink)
 {
     int capitals = gfx_font_cap_height(font);
     int size = capitals >= 70 ? 20 : capitals >= 40 ? 14 : capitals >= 24 ? 10 : capitals >= 12 ? 6 : 4;
@@ -573,6 +574,8 @@ static int draw_degree(gfx_t *g, int x, int y, const gfx_font_t *font, bool blac
         gfx_fill(g, left, top, stroke, size, black);
         gfx_fill(g, left + size - stroke, top, stroke, size, black);
     }
+    *first_ink = x + gap;
+    *end_ink = x + gap + size;
     return gap + size + (is_last ? 0 : gap);
 }
 
@@ -616,10 +619,13 @@ static int draw_text(gfx_t *g, int x, int y, const gfx_font_t *font, const char 
             /* Its own glyph, in the font or in a pack, comes before all else. */
             gl = glyph_of(font, cp, &bits);
             if (gl == NULL && cp == DEGREE_SIGN) {
-                int room = draw_degree(g, x, y, font, black, *s == '\0');
+                int first, end;
+                int room = draw_degree(g, x, y, font, black, *s == '\0', &first, &end);
                 if (ink != NULL) {
-                    ink[0] = inked ? ink[0] : x - x0;
-                    ink[1] = x - x0 + room;
+                    first -= x0;
+                    end -= x0;
+                    ink[0] = inked && ink[0] < first ? ink[0] : first;
+                    ink[1] = inked && ink[1] > end ? ink[1] : end;
                     inked = true;
                 }
                 x += room;
@@ -748,6 +754,10 @@ void gfx_fit_text(const gfx_font_t *font, const char *text, int max_width, char 
         if (gfx_text_font_width(font, fitted) <= max_width) {
             return;
         }
+    }
+    if (capacity >= sizeof ELLIPSIS && gfx_text_font_width(font, ELLIPSIS) <= max_width) {
+        memcpy(fitted, ELLIPSIS, sizeof ELLIPSIS);
+        return;
     }
     fitted[0] = '\0';
 }

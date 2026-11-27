@@ -51,16 +51,16 @@ typedef host_list_t app_list_t;
  * OK returns APP_UI_DONE, `selected` is the row.
  * Without a selection (`selected` = -1): UP and DOWN scroll by one row;
  * OK is ignored.
- * A long UP or DOWN moves a page - as many rows as the list showed - and
- * stops at the ends. It uses the most recently measured matching list
- * from app_list_first(), or five rows before measurement or after another
- * list was measured. List count is at most 10000.
+ * A long UP or DOWN moves a page using the list's current geometry and
+ * stops at the ends. It measures in the button handler, even before the
+ * first draw. A list with no visible rows moves one row. List count is
+ * at most 10000.
  * BACK returns APP_UI_CANCELLED in both cases. */
 app_ui_result_t app_list_button(app_list_t *list, int32_t event);
 
 /* Returns the first visible row and keeps it in `first`, so that the rows
- * move only when the selection reaches an edge. Call in app_on_draw()
- * before drawing rows. */
+ * move only when the selection reaches an edge. Callable in any handler;
+ * call before drawing rows. */
 int32_t app_list_first(app_list_t *list);
 
 /* ---- Picker ---- */

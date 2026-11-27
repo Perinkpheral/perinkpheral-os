@@ -74,7 +74,7 @@ TESTS   += test_ota_probation
 TESTS   += test_poll_round test_poller test_wifi_credentials test_memory
 TESTS   += test_m3_area test_web_memory
 TESTS   += test_standin_text
-TESTS   += test_standin_contract
+TESTS   += test_standin_contract test_standin_fullscreen test_display
 TESTS   += test_app_storage test_app_kv
 TESTS   += test_wifi_networks test_wifi_search
 TESTS   += test_catalog_stream
@@ -393,3 +393,11 @@ test_catalog_stream: test_catalog_stream.c tinytest.h $(APPSTORE)/catalog_stream
 WEB_POLLER_SRCS := $(APPSTORE)/poll_schedule.c $(APPSTORE)/poll_round.c $(APPSTORE)/request_queue.c $(APPSTORE)/catalog.c $(MANIFEST_SRCS)
 test_web_memory: test_web_memory.c tinytest.h $(MAIN)/web_server.c $(MAIN)/web_apps.c $(MAIN)/poller.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(COMP)/wasm3/m3_area.h $(wildcard $(MAIN)/*.h route_stubs/*.h route_stubs/*/*.h memory_stubs/*.h install_stubs/*.h install_stubs/*/*.h persistence_stubs/*.h poller_stubs/freertos/*.h)
 	$(CC) $(CFLAGS) -O2 -Dasm=__asm__ -pthread -ffunction-sections -fdata-sections -DCONFIG_LWIP_MAX_SOCKETS=12 $(MANIFEST_FLAGS) -Ipoller_stubs -Iroute_stubs -Imemory_stubs -Iinstall_stubs -Ipersistence_stubs -I$(COMP)/wasm3 -I$(APPCONF)/include -I$(DEADLINES)/include -I$(NET)/include -I$(UI)/include -I$(GFX)/include -I$(MAIN) -o $@ test_web_memory.c $(MAIN)/memory.c $(WEB_POLLER_SRCS) $(WORDS)/words.c $(HOST_TEST_LDFLAGS) -lm
+
+
+test_display: test_display.c tinytest.h $(EPD)/display.c $(EPD)/refresh_policy.c $(EPD)/frame_box.c $(wildcard $(EPD)/include/*.h)
+	$(CC) $(CFLAGS) -Ievent_stubs -Ipersistence_stubs -I$(DEADLINES)/include -I$(EPD)/include -o $@ test_display.c $(EPD)/refresh_policy.c $(EPD)/frame_box.c
+
+
+test_standin_fullscreen: test_standin_contract.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
+	$(CC) $(CFLAGS) -D_DARWIN_C_SOURCE -Wno-attributes '-DHOST_IMPORT(name,...)=__VA_ARGS__' '-DAPP_EXPORT(name,...)=__VA_ARGS__' $(MANIFEST_FLAGS) -I$(SDK)/check -I$(MAP)/include -DSTANDIN_FULLSCREEN=1 -o $@ test_standin_contract.c $(STANDIN_SRCS) -lm

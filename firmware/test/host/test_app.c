@@ -936,6 +936,19 @@ static void test_probe_contract(void)
     test_name_subsection_bounds();
 }
 
+static void test_manifest_geometry_in_load(void)
+{
+    app_t *loaded = load_probe();
+    draw(loaded);
+    CHECK(gfx_get(&surface, 25, 5) && gfx_get(&surface, 29, 5) && gfx_get(&surface, 31, 5));
+    app_unload(loaded);
+    CHECK(app_load("fullscreen", HOST_API_VERSION, probe_bytes, probe_size,
+                   APP_GRANT_FILES | APP_GRANT_FULLSCREEN, &SERVICES, &loaded) == APP_OK);
+    draw(loaded);
+    CHECK(gfx_get(&surface, 25, 5) && gfx_get(&surface, 27, 5));
+    app_unload(loaded);
+}
+
 static void test_byte_page_memory(void)
 {
     static const uint8_t at_limit[] = {
@@ -1372,6 +1385,7 @@ int main(int argc, char **argv)
     test_document_delivery();
     test_screen_inversion();
     test_probe_contract();
+    test_manifest_geometry_in_load();
     test_scene_state();
     test_response_headers();
     test_byte_page_memory();

@@ -10,14 +10,14 @@ HOST_FUNCTION(gfx_width)
 {
     m3ApiReturnType(int32_t);
     app_t *app = APP_OF(runtime);
-    m3ApiReturn(app->surface != NULL ? app->surface->w : HOST_ERR_NOT_DRAWING);
+    m3ApiReturn(app->layout.w);
 }
 
 HOST_FUNCTION(gfx_height)
 {
     m3ApiReturnType(int32_t);
     app_t *app = APP_OF(runtime);
-    m3ApiReturn(app->surface != NULL ? app->surface->h : HOST_ERR_NOT_DRAWING);
+    m3ApiReturn(app->layout.h);
 }
 
 HOST_FUNCTION(gfx_draw_text)

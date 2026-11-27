@@ -66,6 +66,8 @@
 #include "scene.h"
 #include "appconf.h"
 #include "header.h"
+#include "question_press.h"
+#include "back_switch.h"
 #include "scenes.h"
 #include "screens.h"
 #include "text_template.h"
@@ -188,6 +190,8 @@ static gfx_t                s_screen;
 static uint32_t             s_frames;
 
 static header_kept_t        s_header_kept;
+static question_press_t s_question_press;
+static back_switch_state_t s_back_switch;
 static appconf_t            s_settings; /* the host's settings, by the device's table */
 /* The simulator stands for one application, which is its id here. */
 #define SIM_APP_ID 1u
@@ -1230,6 +1234,8 @@ static struct {
 } s_notices[NOTICES_MAX];
 static int  s_notice_count;
 static bool s_notice_is_open;
+static bool s_notices_held;
+static bool s_going_home;
 
 static scene_reaction_t notice_button(scene_t *scene, scene_button_t button, scene_press_t press)
 {
@@ -1262,6 +1268,11 @@ static void notice_scene_draw(scene_t *scene, gfx_t *surface)
 static void notice_leave(scene_t *scene)
 {
     (void)scene;
+    if (s_notice_is_open && s_going_home) {
+        memmove(&s_notices[0], &s_notices[1], sizeof s_notices[0] * (size_t)(NOTICES_MAX - 1));
+        s_notice_count--;
+        s_notices_held = true;
+    }
     s_notice_is_open = false;
 }
 
@@ -1284,7 +1295,7 @@ static bool services_notify(const char *first, const char *second, const char *d
 
 static void show_notices(void)
 {
-    if (!s_notice_is_open && s_notice_count > 0 && !s_wm.suspended) {
+    if (!s_notices_held && !s_notice_is_open && s_notice_count > 0 && !s_wm.suspended) {
         s_notice_is_open = true;
         wm_open(&s_wm, &s_notice_scene);
     }
@@ -1465,6 +1476,7 @@ static void show(void)
     }
     wm_draw(&s_wm, &s_screen);
     s_frames++;
+    question_press_shown(&s_question_press, s_wm.current, services_uptime());
     wm_shown(&s_wm);
 }
 
@@ -1773,17 +1785,37 @@ static void answer_status(int socket_fd)
 static const scene_button_t BUTTONS[] = { SCENE_BUTTON_UP, SCENE_BUTTON_OK, SCENE_BUTTON_DOWN,
                                           SCENE_BUTTON_BACK };
 
+static void button_event(scene_button_t role, scene_press_t action)
+{
+    back_switch_t back = back_switch_press(&s_back_switch, role, action, false);
+    if (back == BACK_SWITCH_SWALLOW) {
+        return;
+    }
+    if (back == BACK_SWITCH_LONG_BACK) {
+        action = SCENE_PRESS_LONG;
+    }
+    bool going_home = role == SCENE_BUTTON_BACK && action == SCENE_PRESS_LONG;
+    if (!going_home && !question_press_accepts(&s_question_press, s_wm.current, role,
+                                              action, services_uptime())) {
+        return;
+    }
+    s_going_home = going_home;
+    wm_button(&s_wm, role, action);
+    s_going_home = false;
+}
+
 static void press(int button, bool is_long)
 {
+    s_notices_held = false;
     scene_button_t role = BUTTONS[button];
-    wm_button(&s_wm, role, SCENE_PRESS_DOWN);
+    button_event(role, SCENE_PRESS_DOWN);
     show();
     if (is_long) {
-        wm_button(&s_wm, role, SCENE_PRESS_LONG);
-        wm_button(&s_wm, role, SCENE_PRESS_UP);
+        button_event(role, SCENE_PRESS_LONG);
+        button_event(role, SCENE_PRESS_UP);
     } else {
-        wm_button(&s_wm, role, SCENE_PRESS_UP);
-        wm_button(&s_wm, role, SCENE_PRESS_SHORT);
+        button_event(role, SCENE_PRESS_UP);
+        button_event(role, SCENE_PRESS_SHORT);
     }
 }
 

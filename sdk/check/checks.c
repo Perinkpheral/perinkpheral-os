@@ -117,9 +117,10 @@ static bool visible_failure(void)
     for (int32_t index = 0; index < (int32_t)(sizeof STANDARD / sizeof STANDARD[0]) + standin_subject.failure_text_count; index++) {
         const char *text = index < (int32_t)(sizeof STANDARD / sizeof STANDARD[0]) ? STANDARD[index]
             : standin_subject.failure_text[index - (int32_t)(sizeof STANDARD / sizeof STANDARD[0])];
-        if (strstr(host->draw_text, text) != NULL || strstr(host->status_text[0], text) != NULL ||
-            strstr(host->status_text[1], text) != NULL || strstr(host->header_text[0], text) != NULL ||
-            strstr(host->header_text[1], text) != NULL) {
+        int32_t left_icon, right_icon;
+        if (strstr(host->draw_text, text) != NULL ||
+            strstr(standin_header_text(HOST_HEADER_LEFT, &left_icon), text) != NULL ||
+            strstr(standin_header_text(HOST_HEADER_RIGHT, &right_icon), text) != NULL) {
             return true;
         }
     }
@@ -470,6 +471,9 @@ static bool has_away_failed;
 static void hand(const delivery_t *delivery)
 {
     if (!is_away) {
+        if (standin()->is_leaving) {
+            return;
+        }
         give(delivery);
     } else if (!has_away_failed && !standin_live(given_alone, (void *)delivery)) {
         has_away_failed = true;
@@ -634,7 +638,7 @@ static void scene_run(void *context)
             }
         }
         standin_timer(timer);
-        if (scene->fire == FIRE_TWICE) {
+        if (scene->fire == FIRE_TWICE && !host->is_leaving) {
             standin_timer(timer);
         }
     }
@@ -680,6 +684,7 @@ static void scene_run(void *context)
         host->marks[MARK_DIAGNOSTICS] = host->diagnostics;
         host->refuse_alarms = HOST_OK;
         host->refuse_notices = HOST_OK;
+        standin_notices_clear();
         host->refuse_receipts = false;
         host->refuse_writes = HOST_OK;
         static const int32_t STEPS[] = { 0, 1, 1, 2, 4, 8, 16, 28 };
@@ -1640,7 +1645,9 @@ static void check_notices(void)
             int32_t healthy_repeats = standin()->notices - expected;
             expect(NOTICES, healthy_repeats == 0, "notice-duplicate: unchanged replay after buttons %s posted %d notices", WAYS[way], healthy_repeats);
             standin_reset();
-            standin()->refuse_notices = receipt ? HOST_OK : HOST_ERR_NO_SPACE;
+            if (!receipt) {
+                standin()->pending_notice_count = STANDIN_NOTICES;
+            }
             standin()->refuse_receipts = receipt != 0;
             if (!notice_due(&due, away, WAYS[way])) {
                 continue;
@@ -1651,6 +1658,7 @@ static void check_notices(void)
             }
             exercised++;
             standin()->refuse_notices = HOST_OK;
+            standin_notices_clear();
             standin()->refuse_receipts = false;
             standin()->refuse_writes = HOST_OK;
             if (!play(&repeat)) {
