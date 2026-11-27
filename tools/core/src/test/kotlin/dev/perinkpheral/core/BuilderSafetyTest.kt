@@ -154,11 +154,75 @@ object BuilderSafetyTest {
             check(Pictures.show(listOf(pbm)) == "raster:\n....#.#.\n\n")
 
             System.getenv("WASI_SDK_PATH")?.let { wasi ->
+                // Substitute only the compiler output to exercise declarations the linker never emits.
+                val memorySdk = File(scratch, "memory-sdk/bin").apply { mkdirs() }
+                val memoryFixture = File(scratch, "memory.wasm")
+                fun shellQuoted(value: String) = "'" + value.replace("'", "'\"'\"'") + "'"
+                File(memorySdk, "clang").apply {
+                    writeText("""
+                        #!/bin/sh
+                        output=
+                        while [ "${'$'}#" -gt 0 ]; do
+                            case "${'$'}1" in
+                                -o) shift; output=${'$'}1 ;;
+                                -Wl,-Map=*) : > "${'$'}{1#-Wl,-Map=}" ;;
+                            esac
+                            shift
+                        done
+                        cp ${shellQuoted(memoryFixture.path)} "${'$'}output"
+                    """.trimIndent() + "\n")
+                    check(setExecutable(true))
+                }
+                Files.createSymbolicLink(File(memorySdk, "llvm-objdump").toPath(), File(wasi, "bin/llvm-objdump").toPath())
+                val memorySource = File(scratch, "memory/declaration").apply { mkdirs() }
+                File(memorySource, "manifest.json").writeText("""{"name":"declaration","title":"Declaration","abi":3}""")
+                File(memorySource, "main.c").writeText("/* SPDX-License-Identifier: MIT */\n")
+                val memoryOutput = File(scratch, "memory-built")
+                val memoryBuilder = AppBuilder(Sdk(root), memorySdk.parentFile) {}
+                fun unsigned(value: Long): List<Byte> {
+                    var remaining = value
+                    val bytes = ArrayList<Byte>()
+                    do {
+                        val low = (remaining and 127).toInt()
+                        remaining = remaining ushr 7
+                        bytes += (low or if (remaining != 0L) 128 else 0).toByte()
+                    } while (remaining != 0L)
+                    return bytes
+                }
+                fun declaration(initial: Long?, maximum: Long? = initial, pageLog: Long = 0) {
+                    val header = byteArrayOf(0, 97, 115, 109, 1, 0, 0, 0)
+                    val payload = initial?.let {
+                        listOf(1.toByte(), (8 or if (maximum != null) 1 else 0).toByte()) +
+                            unsigned(it) + (maximum?.let(::unsigned) ?: emptyList()) + unsigned(pageLog)
+                    }
+                    memoryFixture.writeBytes(header + if (payload != null)
+                        byteArrayOf(5) + unsigned(payload.size.toLong()).toByteArray() + payload.toByteArray()
+                        else byteArrayOf())
+                }
+                fun refusedMemory(reason: String) {
+                    try { memoryBuilder.build(memorySource, memoryOutput); error("invalid memory accepted") }
+                    catch (error: BuildError) { check(reason in error.message.orEmpty()) { error.message.orEmpty() } }
+                    check(!File(memoryOutput, "app.wasm").exists())
+                }
+                declaration(65_536)
+                memoryBuilder.build(memorySource, memoryOutput)
+                check(Wasm(File(memoryOutput, "app.wasm")).memoryBytes == 65_536L)
+                declaration(65_537)
+                refusedMemory("memory is 65537 bytes: it must not grow and must be at most 65536")
+                declaration(8192, null)
+                refusedMemory("it must not grow")
+                declaration(8192, 8193)
+                refusedMemory("it must not grow")
+                declaration(null)
+                refusedMemory("the module has no memory")
+                declaration(1, pageLog = 17)
+                refusedMemory("unsupported wasm memory page size")
+
                 // Real modules on either side of the new warning budget still build.
                 val arenaSource = File(scratch, "arena/sizing").apply { mkdirs() }
                 File(arenaSource, "manifest.json").writeText("""{"name":"sizing","title":"Sizing","abi":3}""")
                 val arenaOutput = File(scratch, "arena-built")
-                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 26_000 to null,
+                for ((codeNops, firmware) in listOf(100 to null, 16_000 to null, 24_000 to null, 26_000 to null,
                     16_000 to "0.1.94", 16_000 to "0.1.95")) {
                     File(arenaSource, "manifest.json").writeText(Json.write(mapOf(
                         "name" to "sizing", "title" to "Sizing", "abi" to 3) +
@@ -175,9 +239,12 @@ object BuilderSafetyTest {
                     // The memory is the stack and the data, and counts against the area with the code.
                     val memory = built.memoryBytes!!
                     check(memory in BuildFlags.APP_STACK..BuildFlags.APP_STACK + 1024L && built.memory!!.second == built.memory!!.first)
-                    val overBudget = codeNops == 26_000
+                    val overBudget = codeNops >= 24_000
                     check((memory + estimate > BuildFlags.APP_AREA) == overBudget)
-                    check(messages.any { "of 112.0 KB" in it })
+                    if (codeNops == 24_000) check(estimate <= BuildFlags.APP_AREA)
+                    val totalKb = java.math.BigDecimal((memory + estimate) / 1024.0)
+                        .setScale(1, java.math.RoundingMode.HALF_EVEN).toPlainString()
+                    check(messages.any { "area    about $totalKb KB of 112.0 KB" in it })
                     check(messages.any { "warning: this much memory and code" in it } == overBudget)
                     check(messages.any { "declare \"firmware\": \"0.1.95\"" in it } ==
                         (needsLargerArena && firmware != "0.1.95"))

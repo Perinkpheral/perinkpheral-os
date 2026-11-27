@@ -8,7 +8,7 @@
  */
 #include "app_alloc.h"
 
-APP_ALLOC_ARENA(4096);
+APP_ALLOC_ARENA(4093);
 #include "app_values.h"
 #include "host_api.h"
 #include "json_pick.h"
@@ -55,8 +55,8 @@ APP_ALLOC_ARENA(4096);
 
 /* One past the last byte of this module's memory: the bound every pointer
  * check here leans on. The project links applications with one-byte pages,
- * so `memory.size` already counts bytes; a module linked for another page
- * size would say otherwise, and the host would refuse it before loading. */
+ * so `memory.size` already counts bytes. This helper assumes that linker
+ * configuration. */
 static size_t memory_end(void)
 {
     return (size_t)__builtin_wasm_memory_size(0);
@@ -439,7 +439,7 @@ static bool memory_is_handed_out(void)
     int32_t  before = app_alloc_mark();
     uint8_t *first = app_alloc(100);
     int64_t *second = app_alloc(sizeof(int64_t));
-    if (first == NULL || second == NULL || left_at_first < 1024 ||
+    if (first == NULL || second == NULL || left_at_first != 4096 || before != 0 ||
         (size_t)left_at_first >= memory_end()) {
         return false;
     }
@@ -455,8 +455,10 @@ static bool memory_is_handed_out(void)
     void *all_the_rest = app_alloc(app_alloc_left());
     bool takes_the_last = all_the_rest != NULL && app_alloc_left() == 0 && app_alloc(1) == NULL;
     app_alloc_release(before);
+    bool is_restored = app_alloc_left() == left_at_first && app_alloc(100) == first;
+    app_alloc_release(before);
     return is_apart && is_aligned && is_counted && refuses_too_much && takes_the_last &&
-           app_alloc_left() == left_at_first && app_alloc(100) == first;
+           is_restored;
 }
 
 static bool numbers_parse(void)
