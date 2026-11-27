@@ -7,6 +7,7 @@
 #include "host_api.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #define INT32_MAX_DIGITS 10
 
@@ -110,6 +111,24 @@ bool app_text_starts(const char *text, const char *start)
         }
     }
     return true;
+}
+
+int32_t app_text_fill(const char *pattern, const host_text_argument_t *arguments, int32_t count,
+                      char *text, int32_t size)
+{
+    if (size < 0 || (size > 0 && text == NULL)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    if (size == 0) {
+        return 0;
+    }
+    if (pattern == NULL) {
+        text[0] = '\0';
+        return HOST_ERR_ARGUMENT;
+    }
+    int32_t length = text_fill(pattern, app_text_length(pattern), arguments, count, text, size - 1);
+    text[length >= 0 ? length : 0] = '\0';
+    return length;
 }
 
 int32_t app_time_text(int64_t moment, int32_t style, char *text, int32_t size)

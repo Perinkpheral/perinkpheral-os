@@ -300,6 +300,25 @@ object BuilderSafetyTest {
                     check(Regex("(?m)^\\d+ checks, 0 failed$").containsMatchIn(output)) { output }
                 }
                 val realBuilder = AppBuilder(Sdk(root), File(wasi)) {}
+                val countedStrings = File(scratch, "counted").apply { mkdirs() }
+                File(countedStrings, "manifest.json").writeText("""{"name":"counted","title":"Counted","abi":3}""")
+                File(countedStrings, "strings").mkdirs()
+                File(countedStrings, "strings/en.json").writeText("""{"count":"Count","other":"Other"}""")
+                File(countedStrings, "main.c").writeText("""
+                    /* SPDX-License-Identifier: MIT */
+                    #include "host_api.h"
+                    #include "strings.h"
+                    _Static_assert(APP_STRING_COUNT == 2, "string count");
+                    void app_on_draw(void)
+                    {
+                        gfx_draw_text(0, 0, HOST_FONT_TEXT, app_string(STR_COUNT), 5);
+                        gfx_draw_text(0, 30, HOST_FONT_TEXT, app_string(STR_OTHER), 5);
+                    }
+                """.trimIndent() + "\n")
+                realBuilder.build(countedStrings, File(scratch, "counted-package"))
+                val countedHeaders = File(scratch, "counted-headers")
+                realBuilder.headers(countedStrings, countedHeaders)
+                check("APP_STRING_COUNT" in File(countedHeaders, "strings.h").readText())
                 val built = File(scratch, "built")
                 val sourceFiles = File(source, "files").apply { mkdirs() }
                 File(sourceFiles, "app.wasm.part").writeText("application data")

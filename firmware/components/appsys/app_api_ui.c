@@ -159,10 +159,10 @@ HOST_FUNCTION(ui_draw_text_lines)
     if (app->surface == NULL) {
         m3ApiReturn(app_not_drawing(APP_OF(runtime)));
     }
-    char text[HOST_TEXT_MAX + 1];
+    char text[HOST_UI_TEXT_LINES_MAX + 1];
     if (!is_drawable(x) || !is_drawable(y) || style < HOST_UI_TEXT || style > HOST_UI_VALUE ||
         width <= 0 || !is_drawable(width) || max_lines < 1 || max_lines > HOST_UI_LINES_MAX ||
-        !app_text_copy(runtime, _mem, text_offset, length, text)) {
+        !app_text_copy_sized(runtime, _mem, text_offset, length, text, sizeof text)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     m3ApiReturn(kit_text_lines(app->surface, x, y, (kit_style_t)style, text, width, max_lines));

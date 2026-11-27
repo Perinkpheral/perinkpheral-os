@@ -7,30 +7,40 @@
 #pragma once
 #include "base.h"
 
-/* Each call validates the current document. Node numbers are zero-based
- * preorder ordinals, valid only for the same bytes. No pointers are retained.
+/* Each call validates all current document bytes, including bytes after a NUL.
+ * Node numbers are zero-based preorder ordinals, valid only for the same
+ * document bytes. No pointers are retained.
  * One root, at most 12288 bytes, 256 elements, 16 levels and 64 attributes
- * per element. Duplicate attribute names within an element, or unknown
- * entities anywhere, invalidate the document. Names are ASCII:
- * a letter or underscore followed by letters, digits, underscores, dots,
- * colons or hyphens. The optional XML declaration, whitespace, opening and
- * closing tags and empty tags are supported. Text, DTDs and comments are
- * outside this subset. Names and documents are counted, not NUL-terminated.
+ * per element. Duplicate attribute names or unknown entities anywhere
+ * invalidate the document. Names are ASCII: a letter or underscore followed
+ * by letters, digits, underscores, dots, colons or hyphens.
+ * The optional XML 1.0 declaration, whitespace, opening and closing tags
+ * and empty tags are supported. BOMs, text, DTDs, comments and numeric
+ * character references (decimal or hexadecimal) are unsupported. Attribute
+ * values accept amp, lt, gt, apos and quot; literal tabs, line feeds and
+ * carriage returns in attributes are rejected rather than normalized.
+ * Names are counted text: the first NUL within name_length ends the name.
  * Find the first direct child with ordinal >= from. Use parent -1 for the
- * root, or a zero-length name to match any name. Returns an ordinal, -1 if
- * absent, or -2 for an invalid document or argument. */
+ * root, or an empty name to match any name. Returns an ordinal,
+ * HOST_ERR_NOT_FOUND if absent, or HOST_ERR_ARGUMENT for an invalid document
+ * or argument. A valid parent ordinal need not exist in this document;
+ * it then has no children. */
 HOST_IMPORT(xml_child, int32_t xml_child(const char *doc, int32_t length, int32_t parent,
                                          const char *name, int32_t name_length, int32_t from));
 
-/* Get a single attribute into a disjoint buffer, NUL included in capacity.
- * Found (even empty) returns 1, absence 0, any error -1. A duplicate of the
- * requested attribute is ambiguous. Supports amp, lt, gt, apos and quot.
- * When label is 0 an
- * oversized value fails. With label 1 it is shortened on a UTF-8 boundary,
- * adding three ASCII dots if capacity >= 5. An absent value or error leaves the output untouched. */
+/* Get a single attribute into a buffer disjoint from the document and name.
+ * Returns bytes copied, including 0 for a present empty value, without NUL.
+ * Absence returns HOST_ERR_NOT_FOUND; insufficient capacity without
+ * HOST_XML_LABEL returns HOST_ERR_NO_SPACE. Invalid documents, arguments,
+ * nonexistent nodes and unknown flags return HOST_ERR_ARGUMENT.
+ * Flags are 0 for an exact value or HOST_XML_LABEL for shortening between
+ * UTF-8 characters, with three ASCII dots when capacity >= 4. Capacity 0
+ * is valid: an empty value or a shortened label returns 0; a nonempty exact
+ * value returns HOST_ERR_NO_SPACE. Absence and errors leave output untouched.
+ * A duplicate attribute anywhere invalidates the entire document. */
 HOST_IMPORT(xml_attr, int32_t xml_attr(const char *doc, int32_t length, int32_t node,
-                                       const char *name, int32_t name_length, char *out,
-                                       int32_t capacity, int32_t label));
+                                       const char *name, int32_t name_length, int32_t flags, char *out,
+                                       int32_t capacity));
 
 /* A constant projection, shared by Wasm and native SDK checks. Names must be
  * NUL-terminated within 32 bytes. Offsets are relative to the output buffer.
@@ -50,7 +60,11 @@ HOST_LAYOUT(host_xml_field_t, 40);
 /* Scan once for 1..16 fields of the same node. Returns bit i for every
  * present field, including an empty value. Missing optional fields produce
  * empty strings. REQUIRED demands a present nonempty value. LABEL uses the
- * shortening rule of xml_attr. Document, table and output must be mutually
+ * shortening rule of xml_attr with one byte reserved for NUL.
+ * Returns HOST_ERR_ARGUMENT for invalid input, unknown flags, duplicate
+ * projection names, a nonexistent node, a missing or empty REQUIRED field,
+ * or an exact value that does not fit its field including NUL.
+ * Document, table and output must be mutually
  * disjoint; the table must be aligned to 2 bytes. Invalid input, duplicate
  * keys, or an unsuccessful field leaves the entire output untouched. */
 HOST_IMPORT(xml_attrs, int32_t xml_attrs(const char *doc, int32_t length, int32_t node,

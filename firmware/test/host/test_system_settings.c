@@ -55,6 +55,12 @@ int32_t session_set(const void *data, int32_t length) { (void)data; return lengt
 int32_t time_local(host_local_time_t *now) { *now = (host_local_time_t){0}; return HOST_OK; }
 int32_t time_from_local(const host_local_time_t *parts, int64_t *moment)
 { (void)parts; *moment = 0; return HOST_OK; }
+int32_t text_fill(const char *pattern, int32_t pattern_length, const host_text_argument_t *arguments,
+                  int32_t count, char *text, int32_t capacity)
+{
+    (void)pattern; (void)pattern_length; (void)arguments; (void)count; (void)text; (void)capacity;
+    return HOST_ERR_ARGUMENT;
+}
 int32_t time_text(int64_t time, int32_t style, char *text, int32_t capacity)
 { (void)time; (void)style; (void)text; (void)capacity; return 0; }
 int64_t time_now(void) { return 1794832230; }

@@ -221,7 +221,7 @@ test_scenes: test_scenes.c tinytest.h $(UI)/kit.c $(MAIN)/header.c $(MAIN)/heade
 STANDIN_SRCS := $(SDK)/check/standin.c $(filter-out $(SDK_LIB)/app_alloc.c $(SDK_LIB)/app_runtime.c,$(wildcard $(SDK_LIB)/*.c)) $(MAP)/map_geo.c $(APPSYS)/answer_headers.c $(APPSYS)/xml_query.c $(APPSYS)/document_reader.c $(APPSYS)/json_document.c
 test_standin_network: $(SDK)/check/checks.c
 
-test_standin_text test_standin_contract test_standin_network: %: %.c tinytest.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
+test_standin_text test_standin_contract test_standin_network: %: %.c tinytest.h text_cases.h $(STANDIN_SRCS) $(SDK)/check/standin.h $(wildcard $(SDK)/host/*.h)
 	$(CC) $(CFLAGS) -D_DARWIN_C_SOURCE -Wno-attributes '-DHOST_IMPORT(name,...)=__VA_ARGS__' '-DAPP_EXPORT(name,...)=__VA_ARGS__' $(MANIFEST_FLAGS) -I$(SDK)/check -I$(MAP)/include -o $@ $< $(STANDIN_SRCS) -lm
 
 # The interpreter is upstream code: built once, without our warnings, and
@@ -244,7 +244,7 @@ build/wasm3/m3_compile.o: $(COMP)/wasm3/m3_budget_compile.c $(wildcard $(WASM3)/
 # A file as the bytes of a C array, by POSIX od: xxd is not everywhere.
 c_bytes = od -An -v -tx1 $(1) | sed -e 's/\([0-9a-f][0-9a-f]\)/0x\1,/g'
 
-build/probe/app.wasm: apps/probe/probe.c apps/probe/manifest.json $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(wildcard $(SDK)/lib/*) $(TOOLS)
+build/probe/app.wasm: apps/probe/probe.c text_cases.h apps/probe/manifest.json $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(wildcard $(SDK)/lib/*) $(TOOLS)
 	$(MKAPP) apps/probe --out build/probe
 
 build/settings/app.wasm: $(SETTINGS_APP)/settings.c $(SETTINGS_APP)/manifest.json $(SETTINGS_APP)/cities.h $(wildcard $(SETTINGS_APP)/strings/*.json $(SDK)/host/*.h $(SDK_LIB)/*) $(SDK)/host_api.h $(TOOLS)

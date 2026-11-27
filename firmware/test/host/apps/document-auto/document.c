@@ -93,8 +93,8 @@ void app_on_document(int32_t request, int32_t format, int32_t status, int32_t le
         return;
     }
     if (format == HOST_FORMAT_XML) {
-        char value[3];
-        mark(id, xml_attr((const char *)document, length, 0, "a", 1, value, sizeof value, 0) == 1 &&
+        char value[3] = {0};
+        mark(id, xml_attr((const char *)document, length, 0, "a", 1, 0, value, sizeof value) == 2 &&
                          app_text_equal(value, "ok")
                      ? 1
                      : -1);

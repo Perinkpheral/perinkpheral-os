@@ -299,6 +299,16 @@ static int32_t text_cut(const char *text, int32_t length, int32_t room)
     return cut;
 }
 
+static int32_t counted_text_length(const char *text, int32_t length, int32_t limit)
+{
+    if (text == NULL || length <= 0) {
+        return 0;
+    }
+    int32_t counted = length < limit ? length : limit;
+    const char *end = memchr(text, 0, (size_t)counted);
+    return end != NULL ? (int32_t)(end - text) : text_cut(text, length, limit);
+}
+
 int32_t text_fill(const char *pattern, int32_t pattern_length, const host_text_argument_t *arguments,
                   int32_t count, char *text, int32_t capacity)
 {
@@ -306,9 +316,7 @@ int32_t text_fill(const char *pattern, int32_t pattern_length, const host_text_a
         (count > 0 && arguments == NULL) || text == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
     }
-    if (pattern_length > HOST_TEXT_MAX) {
-        pattern_length = HOST_TEXT_MAX;
-    }
+    pattern_length = counted_text_length(pattern, pattern_length, HOST_TEXT_MAX);
     /* As app_api_time.c fills it: a piece cut between characters where the text is full, a
      * character only half there at HOST_TEXT_MAX taken out, then cut to the capacity. */
     char filled[HOST_TEXT_MAX + 1];
@@ -331,12 +339,16 @@ int32_t text_fill(const char *pattern, int32_t pattern_length, const host_text_a
         if (piece_length < 0) {
             return HOST_ERR_ARGUMENT;
         }
-        if (piece_length > HOST_TEXT_MAX) {
-            piece_length = HOST_TEXT_MAX;
-        }
+        int32_t original_length = counted_text_length(piece, piece_length, piece_length);
+        piece_length = counted_text_length(piece, piece_length, HOST_TEXT_MAX);
+        bool argument_was_cut = piece_length < original_length;
+        int32_t available = piece_length;
         piece_length = text_cut(piece, piece_length, HOST_TEXT_MAX - used);
         copy(filled + used, piece, (size_t)piece_length);
         used += piece_length;
+        if (argument_was_cut || piece_length < available) {
+            break;
+        }
         at += 3;
     }
     if (used == HOST_TEXT_MAX) {
@@ -469,6 +481,9 @@ const uint8_t *standin_value(const char *key, int32_t *length)
 
 int32_t kv_get(const char *key, int32_t key_length, void *bytes, int32_t capacity)
 {
+    if (key != NULL && key_length > 0) {
+        key_length = (int32_t)strnlen(key, (size_t)key_length);
+    }
     standin();
     if (!is_key(key, key_length) || bytes == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
@@ -506,6 +521,9 @@ static int32_t refused_write(int32_t result, const char *what, const char *name,
 
 int32_t kv_set(const char *key, int32_t key_length, const void *bytes, int32_t length)
 {
+    if (key != NULL && key_length > 0) {
+        key_length = (int32_t)strnlen(key, (size_t)key_length);
+    }
     standin_t *host = standin();
     const standin_setting_t *setting = is_key(key, key_length) ? setting_of(key, key_length) : NULL;
     if (!is_key(key, key_length) || length < 0 || length > HOST_KV_VALUE_MAX || (bytes == NULL && length > 0) ||
@@ -601,6 +619,9 @@ const uint8_t *standin_file(const char *name, int32_t *size)
 
 int32_t file_size(const char *name, int32_t name_length)
 {
+    if (name != NULL && name_length > 0) {
+        name_length = (int32_t)strnlen(name, (size_t)name_length);
+    }
     standin();
     if (!is_file_name(name, name_length)) {
         return HOST_ERR_ARGUMENT;
@@ -611,6 +632,9 @@ int32_t file_size(const char *name, int32_t name_length)
 
 int32_t file_read(const char *name, int32_t name_length, int32_t offset, void *bytes, int32_t capacity)
 {
+    if (name != NULL && name_length > 0) {
+        name_length = (int32_t)strnlen(name, (size_t)name_length);
+    }
     standin();
     if (!is_file_name(name, name_length) || offset < 0 || bytes == NULL || capacity < 0) {
         return HOST_ERR_ARGUMENT;
@@ -654,6 +678,9 @@ static bool is_package_file(const char *name, int32_t length)
 
 int32_t file_write(const char *name, int32_t name_length, int32_t offset, const void *bytes, int32_t length)
 {
+    if (name != NULL && name_length > 0) {
+        name_length = (int32_t)strnlen(name, (size_t)name_length);
+    }
     standin_t *host = standin();
     if (!standin_subject.writes_files || !is_file_name(name, name_length) || ends_with(name, name_length, ".new") ||
         is_package_file(name, name_length) ||
@@ -898,10 +925,7 @@ int32_t time_text(int64_t unix_time, int32_t style, char *text, int32_t capacity
     case HOST_TIME_NEAR_DAY: snprintf(written, sizeof written, "%s", near_day); break;
     default: snprintf(written, sizeof written, "%.3s", day); break;
     }
-    int32_t length = (int32_t)strlen(written);
-    if (length > capacity) {
-        length = capacity;
-    }
+    int32_t length = text_cut(written, (int32_t)strlen(written), capacity);
     copy(text, written, (size_t)length);
     return length;
 }
@@ -1230,6 +1254,9 @@ int32_t answer_info(host_answer_info_t *response, int32_t capacity)
 
 int32_t answer_header(const char *name, int32_t name_length, int32_t occurrence, char *value, int32_t capacity)
 {
+    if (name != NULL && name_length > 0) {
+        name_length = (int32_t)strnlen(name, (size_t)name_length);
+    }
     standin();
     if (name_length < 0) {
         return HOST_ERR_ARGUMENT;
@@ -1331,6 +1358,13 @@ static int32_t refused_request(int32_t result, const char *why)
 int32_t http_send(int32_t tag, int32_t method, const char *url, int32_t url_length, const char *headers,
                   int32_t headers_length, const void *body, int32_t body_length)
 {
+    if (url != NULL && url_length > 0) {
+        url_length = (int32_t)strnlen(url, (size_t)url_length);
+    }
+    if (headers != NULL && headers_length > 0) {
+        headers_length = (int32_t)strnlen(headers, (size_t)headers_length);
+    }
+
     standin_t *host = standin();
     if (tag < HOST_REQUEST_FIRST || tag > HOST_REQUEST_LAST || method < 0 || method > HOST_HTTP_METHOD_LAST ||
         url == NULL || url_length < 1 || url_length >= STANDIN_URL_BYTES || headers_length < 0 ||
@@ -1829,7 +1863,7 @@ static void mix_number(int32_t number)
  * more than HOST_TEXT_MAX bytes. */
 static int32_t text_shown(const char *text, int32_t length)
 {
-    return text != NULL && length > 0 ? (int32_t)strnlen(text, (size_t)(length < HOST_TEXT_MAX ? length : HOST_TEXT_MAX)) : 0;
+    return counted_text_length(text, length, HOST_TEXT_MAX);
 }
 
 static void record_text(const char *text, int32_t length)
@@ -1917,18 +1951,14 @@ static bool is_text(const char *text, int32_t length)
 
 static int32_t text_width(int32_t font, const char *text, int32_t length)
 {
-    if (length > HOST_TEXT_MAX) {
-        length = HOST_TEXT_MAX;
-    }
+    length = counted_text_length(text, length, HOST_TEXT_MAX);
     return characters(text, length) * advance_of(font);
 }
 
 /* The text cut with "..." to a width; returns its length. */
 static int32_t fit(int32_t font, const char *text, int32_t length, int32_t max_width, char *fitted)
 {
-    if (length > HOST_TEXT_MAX) {
-        length = HOST_TEXT_MAX;
-    }
+    length = counted_text_length(text, length, HOST_TEXT_MAX);
     if (text_width(font, text, length) <= max_width) {
         copy(fitted, text, (size_t)length);
         return length;
@@ -1988,9 +2018,7 @@ int32_t gfx_draw_text(int32_t x, int32_t y, int32_t font, const char *text, int3
     if (!is_font(font) || !is_drawable(x) || !is_drawable(y) || !is_text(text, length)) {
         return refused_draw("gfx_draw_text");
     }
-    if (length > HOST_TEXT_MAX) {
-        length = HOST_TEXT_MAX;
-    }
+    length = counted_text_length(text, length, HOST_TEXT_MAX);
     if (text_shown(text, length) == 0) {
         world->draw_calls--; /* a text of no letters sets no pixel */
     }
@@ -2126,6 +2154,10 @@ int32_t gfx_draw_bitmap(int32_t x, int32_t y, int32_t width, int32_t height, con
 
 int32_t gfx_draw_qr(int32_t x, int32_t y, int32_t cell, const char *text, int32_t length)
 {
+    if (text != NULL && length > 0) {
+        length = (int32_t)strnlen(text, (size_t)length);
+    }
+
     standin();
     /* Cell 0 only measures: that is no drawing. */
     if (cell != 0 && !is_frame("gfx_draw_qr")) {
@@ -2148,6 +2180,9 @@ int32_t gfx_draw_qr(int32_t x, int32_t y, int32_t cell, const char *text, int32_
 int32_t gfx_draw_bitmap_file(int32_t x, int32_t y, int32_t width, int32_t height, const char *name,
                              int32_t name_length, int32_t offset)
 {
+    if (name != NULL && name_length > 0) {
+        name_length = (int32_t)strnlen(name, (size_t)name_length);
+    }
     if (!is_frame("gfx_draw_bitmap_file")) {
         return HOST_ERR_NOT_DRAWING;
     }
@@ -2454,8 +2489,8 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
 /* kit_text_lines(): the lines the text is drawn in, the last cut when more remains. */
 static int32_t text_lines(int32_t font, const char *given, int32_t length, int32_t width, int32_t max_lines)
 {
-    char copy_of[HOST_TEXT_MAX + 1];
-    length = length < HOST_TEXT_MAX ? length : HOST_TEXT_MAX;
+    char copy_of[HOST_UI_TEXT_LINES_MAX + 1];
+    length = counted_text_length(given, length, HOST_UI_TEXT_LINES_MAX);
     copy(copy_of, given, (size_t)length);
     copy_of[length] = '\0';
     const char *text = copy_of;
@@ -2484,7 +2519,9 @@ int32_t ui_draw_text_lines(int32_t x, int32_t y, int32_t style, const char *text
     }
     int32_t numbers[] = { x, y, style, width, max_lines };
     mix(numbers, sizeof numbers);
-    mix_text(text, length);
+    length = counted_text_length(text, length, HOST_UI_TEXT_LINES_MAX);
+    record_text(text, length);
+    mix(text, (size_t)length);
     int32_t lines = text_lines(STYLE_FONTS[style], text, length, width, max_lines);
     if (lines == 0) {
         world->draw_calls--; /* kit_text_lines() draws no line of an empty text */
@@ -3236,9 +3273,9 @@ int32_t xml_child(const char *doc, int32_t length, int32_t parent, const char *n
 }
 
 int32_t xml_attr(const char *doc, int32_t length, int32_t node, const char *name,
-                 int32_t name_length, char *out, int32_t capacity, int32_t label)
+                 int32_t name_length, int32_t flags, char *out, int32_t capacity)
 {
-    return xml_query_attr(doc, length, node, name, name_length, out, capacity, label);
+    return xml_query_attr(doc, length, node, name, name_length, flags, out, capacity);
 }
 
 int32_t xml_attrs(const char *doc, int32_t length, int32_t node, const host_xml_field_t *fields,

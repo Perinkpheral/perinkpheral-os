@@ -33,11 +33,9 @@ HOST_FUNCTION(sys_info)
 static bool take_key(IM3Runtime runtime, void *_mem, uint32_t offset, int32_t length,
                      char key[SYS_KEY_MAX + 1])
 {
-    if (length <= 0 || length > SYS_KEY_MAX) {
-        return false;
-    }
     const uint8_t *bytes = app_memory_at(runtime, _mem, offset, length);
-    if (bytes == NULL) {
+    length = app_counted_text_length(bytes, length);
+    if (bytes == NULL || length <= 0 || length > SYS_KEY_MAX) {
         return false;
     }
     memcpy(key, bytes, (size_t)length);

@@ -1451,6 +1451,10 @@ int main(int argc, char **argv)
     test_document_delivery();
     test_screen_inversion();
     test_probe_contract();
+    app_t *text_probe = load_probe();
+    draw(text_probe);
+    CHECK(gfx_get(&surface, 14, ROW_SCENE_STATE));
+    app_unload(text_probe);
     test_scene_state();
     test_response_headers();
     test_byte_page_memory();

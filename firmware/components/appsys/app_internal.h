@@ -114,6 +114,9 @@ uint8_t *app_memory_to_fill(IM3Runtime runtime, void *memory, uint32_t offset,
 
 /* The application's bytes as a terminated string the drawing code takes.
  * False when they are not the application's to give. */
+int32_t app_counted_text_length(const void *text, int32_t length);
+bool app_text_copy_sized(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
+                         char *terminated, int32_t capacity);
 bool app_text_copy(IM3Runtime runtime, void *memory, uint32_t offset, int32_t length,
                       char terminated[HOST_TEXT_MAX + 1]);
 

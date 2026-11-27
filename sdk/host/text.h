@@ -18,7 +18,9 @@
  *     { "no_events": "No events", "starts_in": "In {0} min" }
  *
  * tools/perinkpheral generates strings.h: the constants STR_NO_EVENTS,
- * STR_STARTS_IN and the function app_string(id). English is compiled into
+ * STR_STARTS_IN, the sentinel APP_STRING_COUNT and the function app_string(id).
+ * A key named count produces STR_COUNT as an ordinary string ID.
+ * English is compiled into
  * the module. Every other language is written as a table file.
  * When the application is loaded, Perinkpheral OS copies the table of the device
  * language over the English table. A language without a table is shown
@@ -35,9 +37,12 @@ APP_EXPORT(app_strings_buffer, uint8_t *app_strings_buffer(void));
 /* Replaces "{0}", "{1}" ... in `pattern` with the arguments of those
  * numbers. Arguments can appear in any order.
  * An argument is a text; if `text` is NULL, it is a number.
- * The pattern and each text argument are cut to HOST_TEXT_MAX bytes.
- * The filled result is at most HOST_TEXT_MAX bytes, then cut to capacity,
- * without a terminator, cut between characters. Returns the length.
+ * The first NUL within each supplied range ends its text. The pattern and
+ * each text argument are cut to HOST_TEXT_MAX bytes between UTF-8 characters.
+ * The result is a prefix of that expansion, at most HOST_TEXT_MAX bytes,
+ * then cut to capacity between UTF-8 characters, without a terminator.
+ * Expansion stops when the next character cannot fit an input or output
+ * limit; later pattern text is not appended. Returns the length.
  * Capacity 0 returns 0; invalid arguments leave the output untouched. */
 typedef struct host_text_argument {
     int32_t     number;

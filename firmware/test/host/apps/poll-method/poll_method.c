@@ -30,12 +30,12 @@ void app_on_picked(int32_t request, int32_t status)
 
 void app_on_data(int32_t request, const uint8_t *data, int32_t length, int32_t flags, int32_t status)
 {
-    char value[3];
+    char value[3] = {0};
     const char *doc = (const char *)data;
     if (request == 1 && status == 200 &&
         (flags & (HOST_DATA_FIRST | HOST_DATA_LAST)) == (HOST_DATA_FIRST | HOST_DATA_LAST) &&
         xml_child(doc, length, -1, "reply", 5, 0) == 0 &&
-        xml_attr(doc, length, 0, "state", 5, value, sizeof value, 0) == 1 &&
+        xml_attr(doc, length, 0, "state", 5, 0, value, sizeof value) == 2 &&
         value[0] == 'o' && value[1] == 'k' && !value[2]) {
         streamed = 1;
         kv_set("streamed", 8, &streamed, sizeof streamed);

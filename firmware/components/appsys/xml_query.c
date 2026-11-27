@@ -281,6 +281,9 @@ static bool scan(const char *doc, int length, query_t *q)
 }
 static bool overlaps(const char *a, int an, const char *b, int bn)
 {
+    if (an == 0 || bn == 0) {
+        return false;
+    }
     uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
     return x <= y ? y - x < (uintptr_t)an : x - y < (uintptr_t)bn;
 }
@@ -306,15 +309,23 @@ bool xml_document_valid(const char *doc, int32_t length)
 int32_t xml_query_child(const char *doc, int32_t length, int32_t parent, const char *key,
                         int32_t keysz, int32_t from)
 {
+    if (keysz < 0 || (keysz > 0 && !key)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    const char *terminator = keysz > 0 ? memchr(key, 0, (size_t)keysz) : NULL;
+    if (terminator) {
+        keysz = (int32_t)(terminator - key);
+    }
     if (parent < -1 || parent >= MAX_NODES || from < 0 || from > MAX_NODES ||
         (keysz != 0 && !key_valid(key, keysz)))
-        return -2;
-    query_t q = {.key = key, .key_length = keysz, .node = parent, .from = from, .result = -1};
-    return scan(doc, length, &q) ? q.result : -2;
+        return HOST_ERR_ARGUMENT;
+    query_t q = {.key = key, .key_length = keysz, .node = parent, .from = from,
+                 .result = HOST_ERR_NOT_FOUND};
+    return scan(doc, length, &q) ? q.result : HOST_ERR_ARGUMENT;
 }
 static int decoded_length(const char *value, const char *end, bool *escaped)
 {
-    /* Validate even discarded label bytes before changing guest memory. */
+    /* Validate even discarded label bytes before changing application memory. */
     const char *cursor = value;
     int decoded = 0;
     *escaped = memchr(cursor, '&', (size_t)(end - cursor)) != NULL;
@@ -330,61 +341,73 @@ static int decoded_length(const char *value, const char *end, bool *escaped)
     return decoded;
 }
 
-static void copy_value(const char *value, const char *end, int decoded, bool escaped, char *out,
-                       int cap)
+static int copy_value(const char *value, const char *end, int decoded, bool escaped, char *out,
+                      int capacity)
 {
-    bool cut = decoded >= cap;
-    int used = cut ? cap - 1 : decoded;
+    bool cut = decoded > capacity;
+    int used = cut ? capacity : decoded;
     if (!escaped) {
         memcpy(out, value, (size_t)used);
     } else {
         const char *cursor = value;
-        for (int i = 0; i < used; i++) {
-            char c = *cursor++;
-            out[i] = c == '&' ? entity(&cursor, end) : c;
+        for (int index = 0; index < used; index++) {
+            char character = *cursor++;
+            out[index] = character == '&' ? entity(&cursor, end) : character;
         }
     }
     if (cut) {
-        int limit = cap >= 5 ? cap - 4 : cap - 1;
-        /* Bytes at or beyond limit may already be excluded. If the prefix
-         * ends inside a scalar, remove the whole incomplete character. */
+        int limit = capacity >= 4 ? capacity - 3 : capacity;
         int begin = limit;
-        while (begin > 0 && ((unsigned char)out[begin - 1] & 192) == 128)
+        while (begin > 0 && ((unsigned char)out[begin - 1] & 192) == 128) {
             --begin;
+        }
         if (begin > 0) {
             unsigned char lead = (unsigned char)out[begin - 1];
             int width = lead < 128 ? 1 : lead < 224 ? 2 : lead < 240 ? 3 : 4;
-            if (limit - (begin - 1) < width)
+            if (limit - (begin - 1) < width) {
                 limit = begin - 1;
+            }
         }
         used = limit;
-        if (cap >= 5) {
+        if (capacity >= 4) {
             memcpy(out + used, "...", 3);
             used += 3;
         }
     }
-    out[used] = 0;
+    return used;
 }
 
 int32_t xml_query_attr(const char *doc, int32_t length, int32_t node, const char *key,
-                       int32_t keysz, char *out, int32_t cap, int32_t label)
+                       int32_t keysz, int32_t flags, char *out, int32_t capacity)
 {
-    if (node < 0 || node >= MAX_NODES || !key_valid(key, keysz) || !out || cap < 1 ||
-        (label != 0 && label != 1) || length < 1 || length > MAX_BYTES ||
-        overlaps(out, cap, doc, length) || overlaps(out, cap, key, keysz))
-        return -1;
-    query_t q = {.key = key, .key_length = keysz, .node = node, .attribute = true};
-    if (!scan(doc, length, &q))
-        return -1;
-    if (!q.value)
-        return 0;
+    if (node < 0 || node >= MAX_NODES || !key || keysz < 0 || !out || capacity < 0 ||
+        (flags & ~HOST_XML_LABEL) || length < 1 || length > MAX_BYTES ||
+        overlaps(out, capacity, doc, length) || overlaps(out, capacity, key, keysz)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    const char *terminator = memchr(key, 0, (size_t)keysz);
+    if (terminator) {
+        keysz = (int32_t)(terminator - key);
+    }
+    if (!key_valid(key, keysz)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    query_t query = {.key = key, .key_length = keysz, .node = node, .attribute = true};
+    if (!scan(doc, length, &query)) {
+        return HOST_ERR_ARGUMENT;
+    }
+    if (!query.value) {
+        return HOST_ERR_NOT_FOUND;
+    }
     bool escaped;
-    int decoded = decoded_length(q.value, q.end, &escaped);
-    if (decoded < 0 || (decoded >= cap && !label))
-        return -1;
-    copy_value(q.value, q.end, decoded, escaped, out, cap);
-
-    return 1;
+    int decoded = decoded_length(query.value, query.end, &escaped);
+    if (decoded < 0) {
+        return HOST_ERR_ARGUMENT;
+    }
+    if (decoded > capacity && !(flags & HOST_XML_LABEL)) {
+        return HOST_ERR_NO_SPACE;
+    }
+    return copy_value(query.value, query.end, decoded, escaped, out, capacity);
 }
 
 int32_t xml_query_attrs(const char *doc, int32_t length, int32_t node,
@@ -393,12 +416,12 @@ int32_t xml_query_attrs(const char *doc, int32_t length, int32_t node,
     if (!doc || length < 1 || length > MAX_BYTES || node < 0 || node >= MAX_NODES || !fields ||
         ((uintptr_t)fields % _Alignof(host_xml_field_t)) || count < 1 || count > 16 || !out ||
         capacity < 1)
-        return -1;
+        return HOST_ERR_ARGUMENT;
     int table_bytes = count * (int)sizeof *fields;
     if (overlaps(out, capacity, doc, length) ||
         overlaps(out, capacity, (const char *)fields, table_bytes) ||
         overlaps(doc, length, (const char *)fields, table_bytes))
-        return -1;
+        return HOST_ERR_ARGUMENT;
     selected_field_t selected[16] = {0};
     for (int i = 0; i < count; i++) {
         const host_xml_field_t *f = fields + i;
@@ -407,13 +430,13 @@ int32_t xml_query_attrs(const char *doc, int32_t length, int32_t node,
             (int)f->offset + f->capacity > capacity ||
             (f->flags & ~(HOST_XML_LABEL | HOST_XML_REQUIRED)) || f->reserved[0] ||
             f->reserved[1] || f->reserved[2])
-            return -1;
+            return HOST_ERR_ARGUMENT;
         selected[i].key_length = (uint8_t)(end - f->name);
         for (int j = 0; j < i; j++) {
             const host_xml_field_t *prior = fields + j;
             if (!strcmp(f->name, prior->name) ||
                 overlaps(out + f->offset, f->capacity, out + prior->offset, prior->capacity))
-                return -1;
+                return HOST_ERR_ARGUMENT;
         }
     }
     query_t q = {.fields = fields,
@@ -422,26 +445,27 @@ int32_t xml_query_attrs(const char *doc, int32_t length, int32_t node,
                  .node = node,
                  .attribute = true};
     if (!scan(doc, length, &q))
-        return -1;
+        return HOST_ERR_ARGUMENT;
     int mask = 0;
     for (int i = 0; i < count; i++) {
         const host_xml_field_t *f = fields + i;
         selected_field_t *v = selected + i;
         if ((f->flags & HOST_XML_REQUIRED) && v->start == v->end)
-            return -1;
+            return HOST_ERR_ARGUMENT;
         if (!v->start)
             continue;
         int decoded = decoded_length(doc + v->start, doc + v->end, &v->escaped);
         if (decoded < 0 || (decoded >= f->capacity && !(f->flags & HOST_XML_LABEL)))
-            return -1;
+            return HOST_ERR_ARGUMENT;
         v->decoded = (uint16_t)decoded;
         mask |= 1 << i;
     }
     for (int i = 0; i < count; i++) {
         const selected_field_t *v = selected + i;
         const host_xml_field_t *f = fields + i;
-        copy_value(doc + v->start, doc + v->end, v->decoded, v->escaped, out + f->offset,
-                   f->capacity);
+        int used = copy_value(doc + v->start, doc + v->end, v->decoded, v->escaped,
+                              out + f->offset, f->capacity - 1);
+        out[f->offset + used] = 0;
     }
     return mask;
 }
