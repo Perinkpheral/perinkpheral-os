@@ -8,7 +8,8 @@ next. Do not plan several tasks at once.
 
 - Do not change product code: `firmware/main`, `firmware/components`, `firmware/system`,
   `recovery`, `sdk`, `tools/core/src/main`, `tools/cli/src/main`. You may add new files
-  under `firmware/test/fuzz/` and `firmware/test/monkey/` only.
+  under `firmware/test/fuzz/` and `tools/core/src/test/` only. Test-task registration
+  in `tools/core/build.gradle.kts` may be added for the simulator runner.
 - Do not commit, push, tag or open pull requests.
 - Do not contact any device, router or service on the network. Everything runs on this
   computer.
@@ -44,7 +45,6 @@ before any task, and check each with the command after it:
 - wasi-sdk 34 from https://github.com/WebAssembly/wasi-sdk/releases (the archive for this
   computer's system and processor). Unpack it and `export WASI_SDK_PATH=<its folder>`.
   Check: `$WASI_SDK_PATH/bin/clang --version`.
-- Python 3.12 or later: `python3 --version`.
 - Node.js 22 and npm: `node --version`.
 - ffmpeg: `ffmpeg -version`.
 - Optional, for checks that match the Linux CI: Docker with the `gcc:14` image.
@@ -62,7 +62,9 @@ cd perinkpheral-os
 tools/perinkpheral                        # builds the Kotlin tools on first use, prints the commands
 make -C firmware/test/host test           # host tests; needs WASI_SDK_PATH
 tools/perinkpheral sim-test firmware/test/sim
-tools/perinkpheral sim sdk/apps/hello     # the simulator with one application; stop it with Ctrl-C
+simulator_mocks=$(mktemp)
+printf '{}\n' > "$simulator_mocks"
+tools/perinkpheral sim sdk/apps/hello --mocks "$simulator_mocks" # stop with Ctrl-C
 ```
 
 All four must work before Task 1. If one fails, write the exact error into the report and
@@ -117,8 +119,9 @@ Target: `firmware/components/appstore/text_template.c` (`{{key}}` in URLs, heade
 bodies). The store lookup can be a stub that returns fixed values, including values with
 line feeds, carriage returns, UTF-8 and empty values.
 
-1. Check the limits in CLAUDE.md: body at most 1024 bytes after expansion, a carriage
-   return in a value fails the request, keys 1 to 15 characters.
+1. Check the limits in CLAUDE.md: body at most 1024 bytes after expansion, keys 1 to
+   15 characters. Carriage returns fail header, server-prefix and body substitutions.
+   Other URL substitutions percent-encode them.
 2. Run 2 hours.
 
 ## Task 5. Fuzz firmware image intake
@@ -128,8 +131,10 @@ Target: `firmware/components/net/ota_stream.c` and `ota_health.c`.
 1. Feed a firmware image in random pieces with random corruptions: header magic, project
    name, length, layout id. A good image from a local build is the seed; if there is no
    build, write a minimal header by hand from the code.
-2. Expected: anything that is not a valid image of this project is refused before a byte
-   is written. Report any input that reaches the write step and is not valid.
+2. Invalid sizes and incompatible headers must be rejected before writing. Truncated
+   or corrupt bodies may already have been written; they must fail completion or
+   final verification and must not be selected for boot. The pure stream test uses a
+   writer stub; final image verification is the recovery writer's `esp_ota_end()` call.
 3. Run 2 hours.
 
 ## Task 6. Fuzz answer headers and the poller's response handling
@@ -144,13 +149,16 @@ through `test_poller_net.c`'s stubs.
 
 Goal: random use of every application without a person.
 
-1. Read `docs/testing/stability.md` and the simulator's usage line in the output of
-   `tools/perinkpheral` (`sim <app> [--port] [--language] [--font]`); the simulator
-   answers the development API (`/api/dev/...`, `/api/settings`, `/api/clock`) on its port.
-2. Write `firmware/test/monkey/monkey.py` (Python 3, standard library only) that starts
-   the simulator with one application, then for 20 minutes sends random presses (short
-   and long, all four buttons, chords of BACK with UP or DOWN), random clock jumps
-   (`/api/settings` time_auto false and `/api/clock`), and reads the log.
+1. Read `docs/testing/stability.md` and `tools/simulator/README.md` for the supported
+   simulator API and command options.
+2. Implement the simulator test runner in Kotlin under `tools/core/src/test/`.
+   Start every application with `--mocks <file>`. Supply fixtures for its expected
+   requests; unmatched requests remain simulated failures. For 20 minutes, generate
+   short and long presses of each button and read the log. BACK-held chords require
+   separate native input tests or device testing. Advance time through
+   `POST /api/sim/forward?seconds=N`, with positive N. Start separate runs with
+   `--at <unix>` for different initial dates; the simulator API does not expose
+   arbitrary backward clock jumps.
 3. Record: simulator exit or crash, sanitizer output in the log, "trap", "stopped",
    "over budget", a frame that does not change for 5 minutes while presses arrive.
 4. Run every application of `sdk/apps` and, if the catalog repository is next to this
@@ -158,8 +166,10 @@ Goal: random use of every application without a person.
 
 ## Task 8. Network faults in the simulator
 
-1. For each application in Task 7, run it with mocks that return: HTTP 500, 404, 304,
-   an empty body, a body cut in the middle, invalid JSON, a 2 MB body, a 30 second delay.
+1. For each application in Task 7, use file mocks for HTTP 500, 404 and 304, empty
+   bodies, truncated document contents, invalid JSON and oversized bodies (2 MiB).
+   Transport interruption and delayed delivery require a separate local fixture or
+   test harness; file mocks do not provide them.
 2. Expected: the application shows one of the standard reasons (Loading, Not set up,
    No network, Access denied, No answer) or its last good data. It never crashes and never
    shows garbage text. Take a picture (`shot`) of each case and list the ones that look

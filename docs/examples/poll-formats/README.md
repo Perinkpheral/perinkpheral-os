@@ -40,13 +40,13 @@ tools/perinkpheral sim-test docs/examples/poll-formats/tests
 Для примера с ABI 3 нужна прошивка 0.1.100 или новее. Адреса используют
 зарезервированный домен, ответы подставляет симулятор.
 
-- **MIME GET** — GET принимает JSON или XML согласно MIME-типу ответа. Два
+- **MIME GET** - GET принимает JSON или XML согласно MIME-типу ответа. Два
   сценария проверяют оба формата.
-- **XML POST** — POST отправляет XML-запрос на чтение. Явное поле format
+- **XML POST** - POST отправляет XML-запрос на чтение. Явное поле format
   со значением xml переопределяет неверный text/plain в тестовом ответе.
-- **JSON pick** — GET извлекает значение по пути JSON. Явное поле format
+- **JSON pick** - GET извлекает значение по пути JSON. Явное поле format
   со значением json переопределяет text/plain. Данные поступают в app_on_picked().
-- **Untyped** — GET получает application/octet-stream. Байты приходят в
+- **Untyped** - GET получает application/octet-stream. Байты приходят в
   app_on_data() без разбора.
 
 Ответы похожи на XML Plex и JSON Jellyfin. POST обращается к тестовому сервису.

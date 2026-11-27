@@ -4,7 +4,7 @@ Assets, threats, implemented controls and accepted limitations.
 This assessment is based on code review, not adversarial testing.
 `CLAUDE.md` defines the project scope; accepted tradeoffs are recorded below.
 
-## What is worth taking
+## Assets
 
 1. **Application credentials**: the Home Assistant integration's screen secret,
    private calendar URLs and other application tokens. Stored unencrypted in `appkv`.
@@ -13,13 +13,14 @@ This assessment is based on code review, not adversarial testing.
 4. **A foothold in the home network**: the device makes requests from inside it.
 5. **What the screen shows**: a calendar, who is at home, what plays.
 
-## Who, and what they can do
+## Threat actors and capabilities
 
 ### An application the user installed
 
 Applications are untrusted. The interpreter and Perinkpheral OS API enforce their isolation.
 
-Holds:
+Controls:
+
 - It runs in the interpreter with memory of its own, at most 64 KB. Every pointer, length and coordinate
   it passes is checked before use (`firmware/components/appsys/app.c`); it cannot read or write Perinkpheral OS's
   memory. A handler that does not return in 3 seconds is stopped.
@@ -27,7 +28,8 @@ Holds:
   a file's name cannot leave it. It cannot reach another application's secrets.
 - It has no sockets. Polls start at their manifest URLs; requests made with `http_send`
   are confined to `hosts` at dispatch. GET redirects to the same name with the same port,
-  or with both ports in {80, 443}, bypass the allowlist check and retain application headers.
+  or with both ports in {80, 443}, bypass the allowlist check. These redirects retain
+  application headers unless they downgrade from HTTPS to HTTP.
   Other raw-request redirect destinations must be in `hosts`; application headers are dropped there.
   GET polls follow redirects even to other hosts. Other methods deliver the redirect
   response without replaying the request. Host names are compared without case sensitivity.
@@ -38,7 +40,8 @@ Holds:
 - The system API - reset, forgetting the network, removing applications - needs
   `"system": true`, which is asked about on the page and on the device's own screen.
 
-Does not hold:
+Limitations:
+
 - **It can send its own secrets to any host its manifest names, and nobody is shown that
   list before installation.** It reads the token with `kv_get`; `hosts` is its own word; the page says
   nothing about `hosts` before installing, and the catalog's index does not carry them
@@ -46,9 +49,10 @@ Does not hold:
   For example, an application can request a token and list both `{{server}}` and
   another host in its manifest. Installation does not warn about that destination.
 - It can ask for the screen every 30 seconds, write lines into the log that look like
-  Perinkpheral OS's, and wear the flash with writes to its store and files. Nuisance, not theft.
-- It can ask the home network: `"hosts": ["192.168.1.1"]` is a manifest like any other.
-  Plain `http` to a router or a camera, from inside. Again nobody is shown.
+  Perinkpheral OS's, and wear the flash with writes to its store and files. These operations
+  permit interface disruption, misleading log output and flash wear.
+- Manifest-authorized destinations may include private-network HTTP services.
+  Installation does not display these destinations.
 
 ### A catalog, or whoever controls one
 
@@ -57,7 +61,8 @@ the size and SHA-256 supplied in the installation request. The browser obtains t
 values from the catalog index; automatic updates read the index in firmware. These
 checks do not authenticate the publisher. The official source cannot be removed.
 
-Does not hold:
+Limitations:
+
 - There are no signatures. Whoever can write to a source - its owner, or somebody who took
   the account over - serves whatever they like, and an Update is one click. The official
   source is a GitHub repository: its safety is that account's.
@@ -70,11 +75,12 @@ installed daily without another click. Automatic updates restrict changes to
 destination declarations, system access, file-writing privileges and certificate
 authorities. They do not authenticate replacement application code.
 
-### Somebody on the same network
+### Local network peers
 
-A guest on the Wi-Fi, a compromised thing in the house, a page in the user's browser.
+Threat actors include network guests, compromised local devices and malicious browser content.
 
-Holds:
+Controls:
+
 - What cannot be taken back is asked about on the device's own screen: a firmware update,
   a factory reset, a change of the Wi-Fi network, installing an application with system
   access. In development builds, injected button events can answer main-firmware
@@ -86,7 +92,8 @@ Holds:
 - The page never reads stored secrets or custom links back. Hidden settings are
   a form rule; their values remain available through the API unless secret or link.
 
-Does not hold:
+Limitations:
+
 - **There is no password on the page.** Anybody who can reach port 80 may install and
   remove applications, add a catalog, change every setting, restart the device or enter
   recovery, read the log and exposed settings values, excluding secrets and stored
@@ -116,7 +123,7 @@ Does not hold:
   application, and `/api/dev/button` can answer
   main-firmware confirmation questions. Such a build is for a bench; releases omit it.
 
-### Somebody near the device with a radio, not on the network
+### Nearby radio attackers
 
 - With no saved network and Wi-Fi enabled, or after two minutes of failing to join a
   saved network, it puts up an **open** access point. Deliberately disabled Wi-Fi starts
@@ -132,7 +139,7 @@ Does not hold:
   checks and physical confirmation; it has no settings, application or development
   API. It reads saved settings and glyph packs without modifying them.
 
-### Somebody with physical access
+### Physical access
 
 - Flash encryption and secure boot are not enabled. USB access allows reading stored
   credentials and replacing firmware. The buttons provide access to Settings.
@@ -140,11 +147,14 @@ Does not hold:
 
 ### A server the device talks to
 
-Holds: HTTPS is verified against ESP-IDF's root certificate bundle; an answer over 256 KB is cut off, 4 MB for one handed on in pieces; a
-JSON answer is picked apart by Perinkpheral OS in a stream, with bounds; text that is not ASCII
-is drawn from glyph packs, spelled in ASCII or shown as `?`, never run.
+Controls: HTTPS is verified against ESP-IDF's root certificate bundle. Picked JSON
+responses are parsed incrementally and limited to 256 KiB. Streamed responses are
+limited to 4 MiB. Optional JSON/XML document delivery uses an application-owned
+buffer of at most 12,288 bytes. Reception stops early when no consumer needs the
+remaining body. Text that is not ASCII is drawn from glyph packs, spelled in ASCII
+or shown as `?`; it is not executed.
 
-Does not hold: plain `http` is allowed, so a token sent over it crosses the network in the
+Limitations: plain `http` is allowed, so a token sent over it crosses the network in the
 clear. Packaged authority roots are supported for that application only; a setting for
 a user-supplied server certificate is not implemented.
 
@@ -156,10 +166,12 @@ and keep the radio active beyond the response deadlines.
 
 A page of the application's author, opened from the device's page. It is given the
 application's setting declarations and values except secrets and links, and hands back values the user
-then saves. Hidden settings have no form fields and cannot be filled this way. It could hand back a `server` of its own and wait for the token to follow: the
-same trick as above, played on a user who trusts the form.
+then saves. Ordinary hidden settings have no form inputs. Latitude and longitude
+settings referenced by a place field have hidden inputs and can be filled by
+companion messages. A malicious companion page can propose an attacker-controlled
+server; credentials subsequently saved for that destination may be disclosed.
 
-## The level, and what follows from it
+## Accepted protection scope
 
 The accepted scope, set on 2026-11-13, trusts the local network and physical access.
 It does not defend against radio jamming or a malicious network peer. The limitations
@@ -179,7 +191,7 @@ password on the access point, a secret an application cannot read, HTTPS on the 
 signatures, encrypted flash. The development tools stay in the build while the project is
 being developed; a release is built without them.
 
-## Decided, so that it is not argued again
+## Excluded protections
 
 The project provides no backend, accounts or telemetry. Its protection scope trusts
 local-network peers and physical access. Application signatures are not implemented.

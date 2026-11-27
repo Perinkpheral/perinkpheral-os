@@ -3,8 +3,9 @@
 `tools/perinkpheral app-check <folder>` builds every application of a folder, then runs
 non-system applications against a stand-in
 host (`standin.c`, the contract built for this computer with the sanitizers) and holds it to what
-every application must do: keep its session across unloads, use the store sparingly and retry a
-refused write, keep its timers and alarms, handle every answer and failure of the network, and
+every application must do: keep its session across unloads, use the store sparingly,
+handle refused writes by preserving state across unloading or displaying a failure,
+keep its timers and alarms, handle every answer and failure of the network, and
 draw a frame of its own. Which checks apply is read from the module's imports and exports and from
 the manifest. `apps/specimen` passes them all; the tools' test breaks copies of it and requires
 each break to be caught, and keeps unusual but right copies that must pass. Applications with
@@ -40,8 +41,9 @@ defect of the checks:
 - Mock headers describe the final response: no automatic headers, transfer decoding or
   Content-Length/body consistency check is performed.
 - The network has no redirects, TLS or timeouts; the request queue holds only the checked
-  application's requests; a picked answer is broken off only before its last closing bracket;
-  polls come when the checks give them, not at their pace.
+  application's requests. The late-failure scenario truncates picked JSON before its last
+  closing bracket; response-mutation checks also truncate JSON halfway through its text.
+  Polls come when the checks give them, not at their pace.
 - The system API (`sys_*`) is not stood in for.
 
 ## Failure-path checks
@@ -116,10 +118,11 @@ alternate JSON bodies in `valid_responses`, keyed by the matching mock address:
 {"valid_responses": {"https://example.test/feed": ["{\"value\":21,\"description\":null}", "{\"value\":21,\"rows\":[]}"]}}
 ```
 
-Only mutations equal to a declared JSON body may render a different picture; their
-fallback picture must survive unloading. Required fields and every other mutation
-remain checked. Addresses must match supplied mocks; variants must be JSON objects
-or arrays encoded as strings. This avoids exempting an entire mutation kind for one
+For JSON mutations other than long strings, undeclared variants must produce the
+healthy or failed-response picture. Declared valid variants may produce another
+picture, which must survive unloading. Long-string mutations use the separate
+truncation-marker check described below. Addresses must match supplied mocks;
+variants must be JSON objects or arrays encoded as strings. This avoids exempting an entire mutation kind for one
 optional field. For non-JSON protocols,
 up to 64 decimal tokens are replaced independently with an
 oversized integer; only sanitizer safety is asserted because another number can be valid

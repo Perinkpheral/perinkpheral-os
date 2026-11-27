@@ -20,8 +20,9 @@ The sheet has six poses: standing, waving, peeking over an edge, thinking, point
 
 The pictures for these placements: [44 × 44](ink/wave-44.png), [100 × 100](ink/wave-100.png).
 
-A picture costs `height × ceil(width / 8)` bytes, plus 2 bytes in an application. Setup keeps the
-QR code size, its text and its any-press exit; the QR code with its quiet zone ends at x = 314.
+A picture costs `height × ceil(width / 8)` bytes, plus 2 bytes in an application.
+Preserve the setup screen's QR code, text and any-press exit. Calculate the QR code's quiet-zone bounds from its
+module count, cell size and viewport; its right edge is not fixed.
 
 ## Rules
 
@@ -39,7 +40,7 @@ QR code size, its text and its any-press exit; the QR code with its quiet zone e
 
 | Placement | Reason |
 |---|---|
-| Splash, About | The splash is the wordmark only; About is diagnostics |
+| Splash, About | The splash is About's first page: wordmark, version, project QR code and credits. About's second page contains diagnostics |
 | Menu, empty lists, Settings | Empty space is not a reason |
 | "Not set up", offline | The remedy is the content; Wi-Fi may be off on purpose |
 | Errors, crashes, recovery, updates, flasher results | Diagnosis, consent and instructions come first |

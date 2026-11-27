@@ -115,7 +115,9 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
   WASI_SDK_PATH."""
 
 /** Arguments: the words in order, and --name value or --flag. */
-private class Arguments(raw: Array<String>, private val flags: Set<String>) {
+internal class Arguments(raw: Array<String>, private val flags: Set<String> = setOf(
+    "follow", "app", "apps", "clock", "update", "check", "unfrozen", "quick", "allow-remembered-change"
+)) {
     val words = ArrayList<String>()
     val options = HashMap<String, String>()
 
@@ -246,7 +248,7 @@ private fun preinstalled(arguments: Arguments) {
 }
 
 private fun run(raw: Array<String>): Int {
-    val arguments = Arguments(raw, setOf("follow", "app", "apps", "clock", "update", "check", "unfrozen", "quick"))
+    val arguments = Arguments(raw)
     when (arguments.words.firstOrNull()) {
         "build" -> {
             builder().build(File(arguments.word(1, "the application's folder")),

@@ -17,8 +17,9 @@ info:
     hostname or its .local form, compared case-insensitively without the port.
     Main strips a Host port without validating it. When Origin is present, the
     text after :// must exactly equal Host. Recovery accepts the same names but
-    permits only an omitted port or :80; a present Origin must exactly equal
-    http:// followed by Host. Main's root page is exempt from these checks.
+    permits only an omitted port or :80. A nonempty Origin must exactly equal
+    http:// followed by Host; an absent or empty Origin is accepted. Main's root page
+    is exempt from these checks.
 
     Main's ordinary API handlers return JSON error and confirmation objects,
     {"error":"..."} and {"ok":"..."}. Development handlers generally return
@@ -358,7 +359,13 @@ paths:
         503 JSON error: Device busy. or Not enough memory.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Confirmation refused, or Host/Origin check failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+            text/html:
+              schema: { type: string, const: "Forbidden." }
         "503": { $ref: "#/components/responses/Error" }
 
   /api/settings:
@@ -460,7 +467,13 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Confirmation refused, or Host/Origin check failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+            text/html:
+              schema: { type: string, const: "Forbidden." }
 
   /api/time:
     post:
@@ -641,7 +654,13 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Confirmation refused, or Host/Origin check failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+            text/html:
+              schema: { type: string, const: "Forbidden." }
         "409":
           description: >-
             Not enough storage, or the application needs a newer firmware ("Update Perinkpheral OS.",
@@ -839,7 +858,11 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Host/Origin check failed.
+          content:
+            text/html:
+              schema: { type: string, const: "Forbidden." }
 
   /api/ota:
     post:
@@ -885,7 +908,11 @@ paths:
           content:
             text/html:
               schema: { type: string, examples: ["Not confirmed.", "Upload interrupted.", "Forbidden."] }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Host/Origin check failed.
+          content:
+            text/html:
+              schema: { type: string, const: "Forbidden." }
 
   /api/ota/release:
     post:
@@ -899,7 +926,11 @@ paths:
         503 JSON error: Device busy. or Not enough memory.
       responses:
         "409": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Host/Origin check failed.
+          content:
+            text/html:
+              schema: { type: string, const: "Forbidden." }
 
   /api/dev/button:
     post:
@@ -1074,4 +1105,4 @@ paths:
             Unknown kind. The actual response is text/html with body `kind=wdt|abort`.
             Recognized kinds terminate the device without an HTTP response.
           content:
-            text/plain: {}
+            text/html: {}

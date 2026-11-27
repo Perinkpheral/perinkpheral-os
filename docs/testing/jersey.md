@@ -84,10 +84,11 @@ selection with scripts outside the Kotlin tools. No production font was changed.
 
 ## Cyrillic polish, 2026-11-21
 
-Jersey remains the proportional family. Its Cyrillic now covers all 115 pack entries in
-all four faces, including Jersey 20 for the largest SDK size. Only that face's extended
-Latin remains omitted for space. ASCII headers, SDK size identifiers and font selection
-are unchanged.
+This section records the rejected 2026-11-21 Cyrillic trial. Production reverted
+to the previously tested pack with isolated corrections accepted on
+[2026-11-22](acceptance-2026-11-22.md#findings-and-what-was-done). The production
+pack includes Departure Mono and Jersey 10, 15 and 25; Jersey 20 has no packaged
+Cyrillic. The constructions and review results below describe the rejected trial.
 
 - Б has a square flag projecting beyond its bowl; the smallest б has a heavier flag and a clear neck.
 - З/з have a smaller upper bowl, a larger lower bowl and flat entry terminals beside
@@ -114,10 +115,12 @@ tools/perinkpheral preview <preview-directory> --font jersey
 tools/perinkpheral sim <application> --font jersey --language ru --glyphs <glyph-pack-directory>
 ```
 
-The generator checks coverage, counters, selected confusable pairs and sector-rounded
-partition use. Latin is 31,964 bytes (8 sectors), Cyrillic 24,796 (7), Greek 1,428 (1):
-58,188 bytes of data occupying 65,536 bytes. There are no unallocated sectors when all
-three packs are installed. The pack format and partition layout are unchanged.
+The current generator checks Cyrillic coverage and sector-rounded partition use.
+Counters and confusable letter forms require visual review. At catalog commit
+`661b523`, Latin is 31,964 bytes (8 sectors), Cyrillic 18,760 (5), and Greek 1,428 (1):
+52,152 bytes occupying 57,344 bytes, leaving two sectors free. The rejected trial
+measured 24,796 bytes (7 sectors) for Cyrillic and 58,188 bytes for all three packs,
+occupying all 65,536 bytes. The pack format and partition layout are unchanged.
 
 The review included all four face sheets, Russian and Kazakh text, the weather, calendar,
 status and kit applications, firmware previews, and a temporary specimen at all six SDK

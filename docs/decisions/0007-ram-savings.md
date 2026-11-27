@@ -6,9 +6,10 @@ Status: rejected
 
 ## Context
 
-The ESP32-C6 has no PSRAM. Increasing the application area to 144 KiB leaves
-less heap for Perinkpheral OS and TLS. The study evaluated additional savings
-without changing wasm3, ABI capacities, display behavior or admission thresholds.
+The ESP32-C6 has no PSRAM. The study evaluated the then-current 144 KiB
+application area, which reduced heap available to Perinkpheral OS and TLS. It
+evaluated additional savings without changing wasm3, ABI capacities, display
+behavior or admission thresholds.
 Streaming glyph uploads are covered by [0003](0003-streaming-glyph-uploads.md).
 
 ## Decision
@@ -70,7 +71,7 @@ requires high-water coverage and at least 1 KiB spare after the proposed cut.
 | TLS IN 16384 -> 4096 bytes | Up to 12 KiB, workload-dependent | High; incompatible server records can fail requests | Required probed servers did not negotiate `max_fragment_length`; no universal reduction is supported |
 | Remove one display frame | 14.65 KiB C | High; rendering and refresh redesign | Both 15,000-byte frames support complete-frame composition, equality/damage detection and the retained screen copy |
 | Smaller root bundle | Approximately zero steady RAM | Medium; reduced trusted-server coverage | The 150-root, 67.37 KiB bundle is in flash; its BSS pointer is four bytes and only the selected key is parsed |
-| Reduce wasm3 overhead within its fixed area | Zero OS heap | Application failures if the reservation is cut | Internal savings do not recover heap while the 144 KiB reservation remains fixed |
+| Reduce wasm3 overhead within its fixed area | Zero OS heap | Application failures if the reservation is cut | Internal savings do not recover heap at the study's fixed 144 KiB reservation |
 
 TLS 1.2 probes offered a 4096-byte maximum fragment length. No server extension
 was negotiated by `api.wheretheiss.at`, `raw.githubusercontent.com`,
@@ -110,11 +111,12 @@ untested for the optional overlay.
 
 ## Consequences
 
-The report's recommendation to adopt the first two prototypes is superseded by
-the owner's decision. Firmware configuration, request storage, task stacks and
-capacities remain unchanged. Retain both frames, the full root bundle, 16 KiB
-TLS IN, the 144 KiB application area, TLS admission at 60 KiB free / 17 KiB
-contiguous and critical pressure at 12 KiB. No endurance or load-test acceptance
+These prototypes remain rejected. [0011](0011-page-32k.md) subsequently reduced
+the shared application area to 112 KiB. The 2026-11-24 rejection retained firmware
+configuration, request storage, task stacks and capacities as they were at that
+time: both frames, the full root bundle, 16 KiB TLS IN, the 144 KiB application
+area, TLS admission at 60 KiB free / 17 KiB contiguous and critical pressure
+at 12 KiB. No endurance or load-test acceptance
 is inferred from build, host or simulator results. The research branch preserves
 the prototypes without merging them into main.
 

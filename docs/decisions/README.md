@@ -39,7 +39,7 @@ and exclude machine-specific paths and secrets. KiB means 1,024 bytes; KB means
 
 | Number | Decision or study | Date | Status |
 | --- | --- | --- | --- |
-| [0001](0001-interpreter-arena.md) | Interpreter arena: 64 to 80 KiB and memory guards | 2026-11-24 | accepted |
+| [0001](0001-interpreter-arena.md) | Interpreter arena: 64 to 80 KiB and memory guards | 2026-11-24 | accepted; memory sizing superseded by [0011](0011-page-32k.md) |
 | [0002](0002-wamr-aot.md) | Replace wasm3 with WAMR AOT | 2026-11-24 | rejected |
 | [0003](0003-streaming-glyph-uploads.md) | Stream glyph-pack uploads to flash after release | 2026-11-24 | deferred |
 | [0004](0004-map-land-data.md) | Lossless one-arc-minute land data; no borders or names | 2026-11-23 | accepted |

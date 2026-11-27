@@ -69,9 +69,10 @@ other does.
 
 ## Device observations
 
-A development build exposes the frame and injected presses, application uploads, the
-store, restart, socket listing and deliberate faults under `/api/dev`.
-Release builds omit these routes. There is no `/api/dev/health` route.
+Both builds expose the displayed frame through `GET /api/screen`. Development
+builds additionally expose injected presses, application uploads, KV access,
+restart, socket listing and deliberate faults under `/api/dev`.
+There is no `/api/dev/health` route.
 `/api/dev/flash` is retained only to return 409; firmware uploads in either build
 go through recovery and physical confirmation.
 

@@ -2,11 +2,13 @@
 
 Catalog commit: `df1840fe0b2f4ef8a60864a2e7f3a3b38b41085d`. The requested checkout was tested read-only, but other agents merged fixes while the run was in progress. To make these final results coherent, the complete run below uses a temporary `git archive` of this commit. Uncommitted calendar/sun edits in the catalog checkout are excluded. No catalog file, Git index or branch was changed by this work. SDK branch: `feat/app-check-failure-paths`.
 
-The live checkout was checked with `WASI_SDK_PATH=$HOME/opt/wasi-sdk`, `PERINKPHERAL=/tmp/wt-checks` and `/tmp/wt-checks/tools/perinkpheral app-check /Users/grakovne/projects/perinkpheral-project/perinkpheral-apps/apps`. Reproduce the pinned full run with the same environment and a fresh archive:
+Set `WASI_SDK_PATH`, `PERINKPHERAL` and `CATALOG_CHECKOUT` to the installed
+wasi-sdk, firmware checkout and catalog checkout. Reproduce the pinned full run
+with a fresh archive:
 
 ```sh
 catalog_snapshot=$(mktemp -d)
-git -C /Users/grakovne/projects/perinkpheral-project/perinkpheral-apps archive df1840fe0b2f4ef8a60864a2e7f3a3b38b41085d | tar -x -C "$catalog_snapshot"
+git -C "$CATALOG_CHECKOUT" archive df1840fe0b2f4ef8a60864a2e7f3a3b38b41085d | tar -x -C "$catalog_snapshot"
 "$PERINKPHERAL/tools/perinkpheral" app-check "$catalog_snapshot/apps"
 ```
 
