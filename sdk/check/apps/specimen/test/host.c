@@ -319,6 +319,8 @@ static void check_response_headers(void)
         assert(answer_header("Retry-After", 11, 1, text, sizeof text) == HOST_ERR_NOT_FOUND);
         assert(answer_header("Retry-After", 11, 0, text, 2) == HOST_ERR_NO_SPACE);
         assert(answer_header("Cache-Control", 13, 0, text, sizeof text) == 10 && memcmp(text, "max-age=60", 10) == 0);
+    } else if (header_mode == 4) {
+        assert(info.retry_after == 60);
     } else if (header_mode == 2) {
         assert(answer_header("set-cookie", 10, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
         assert(answer_header("absent", 6, 0, text, sizeof text) == HOST_ERR_NO_SPACE);
@@ -489,7 +491,8 @@ static void test_refusals_and_metadata(void)
     standin_answer_headers(headers, 2);
     standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
     const standin_pair_t date_header[] = { { "Retry-After", "Wed, 25 Nov 2026 12:00:00 GMT" } };
-    header_mode = 0;
+    standin()->now = 1795607940; /* 2026-11-25 11:59:00 UTC */
+    header_mode = 4;
     standin_answer_headers(date_header, 1);
     standin_data(16, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
     char header[64];

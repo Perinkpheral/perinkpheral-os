@@ -118,9 +118,11 @@ static void on_wifi_changed(void)
         /* The clock was asked before there was a network to answer. */
         net_time_sync_now();
         poller_network_is_back();
-        /* News only when the network was away, not when the device raised
-         * its own radio for a poll. */
-        if (!power_is_saving()) {
+        static uint32_t told_generation;
+        wifi_status_t status;
+        wifi_get_status(&status);
+        if (status.connection_generation != told_generation) {
+            told_generation = status.connection_generation;
             app_host_tell_network_is_up();
         }
     }

@@ -63,6 +63,7 @@ typedef struct {
     uint32_t id;
     int      poll_count;
     uint32_t poll_every_s[APP_POLLS_MAX];
+    uint8_t  manual_polls;
     char     poll_every_key[APP_POLLS_MAX][MANIFEST_SETTING_KEY_MAX + 1];
 } known_app_t;
 static known_app_t       s_known[LAUNCHER_INSTALLED_MAX];
@@ -190,11 +191,11 @@ static void remember_retry_after(int seconds)
             break;
         }
     }
-    if (installed) {
+    if (installed && s_answering_poll) {
         s_answer_throttled = true;
         poll_rounds_throttled(&s_rounds, (int)s_answering_app);
     }
-    if (slot >= 0 && installed) {
+    if (slot >= 0 && installed && s_answering_poll) {
         int64_t until_ms = now_ms + (int64_t)seconds * MS_PER_SECOND;
         if (s_cooldowns[slot].app != s_answering_app || until_ms > s_cooldowns[slot].until_ms) {
             s_cooldowns[slot].app = s_answering_app;
@@ -840,6 +841,7 @@ static int schedule_installed(void)
         known->id = installed[i].id;
         known->poll_count = installed[i].poll_count;
         memcpy(known->poll_every_s, installed[i].poll_every_s, sizeof known->poll_every_s);
+        known->manual_polls = installed[i].manual_polls;
         memcpy(known->poll_every_key, installed[i].poll_every_key, sizeof known->poll_every_key);
     }
 
@@ -869,7 +871,10 @@ static int schedule_installed(void)
             uint32_t first_in_ms;
             if (poll_schedule_has(&s_schedule, apps[i], poll) ||
                 !poll_schedule_add(&s_schedule, apps[i], poll, s_known[i].poll_every_s[poll],
-                                   &first_in_ms)) {
+                                   (s_known[i].manual_polls & (1u << poll)) != 0, &first_in_ms)) {
+                continue;
+            }
+            if ((s_known[i].manual_polls & (1u << poll)) != 0) {
                 continue;
             }
             /* The pace the application asked for before the restart, if it
@@ -982,7 +987,7 @@ void poller_hurry(const char *app_name)
             continue;
         }
         for (int poll = 0; poll < s_known[i].poll_count; poll++) {
-            if (s_known[i].poll_every_key[poll][0] == '\0' ||
+            if ((s_known[i].manual_polls & (1u << poll)) != 0 || s_known[i].poll_every_key[poll][0] == '\0' ||
                 app_kv_poll_pace(app_name, poll) != 0) {
                 continue;
             }
@@ -1018,24 +1023,29 @@ bool poller_poll_now(const char *app_name, int poll)
     if (app == NO_APP) {
         return false;
     }
-    int64_t since_ms = uptime_ms() - s_polled_now_at_ms;
+    lock();
+    if (!poll_schedule_has(&s_schedule, app, poll)) {
+        unlock();
+        return false;
+    }
+    if (poll_schedule_is_wanted(&s_schedule, app, poll)) {
+        unlock();
+        return true;
+    }
+    int64_t now_ms = uptime_ms();
+    int64_t since_ms = now_ms - s_polled_now_at_ms;
     if (since_ms < POLL_NOW_EVERY_MS) {
-        lock();
-        bool is_one = poll_schedule_has(&s_schedule, app, poll);
-        /* Marked only when set: a poll left with no deadline would never run again. */
-        if (is_one && deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll,
-                                       (uint32_t)(POLL_NOW_EVERY_MS - since_ms))) {
+        if (deadlines_set_in(DEADLINE_POLL, (uint32_t)app, poll, POLL_NOW_EVERY_MS - since_ms)) {
             poll_schedule_due_soon(&s_schedule, app, poll);
         }
         unlock();
-        return is_one;
+        return true;
     }
-    s_polled_now_at_ms = uptime_ms();
-    lock();
-    bool found = poll_schedule_want(&s_schedule, app, poll);
+    s_polled_now_at_ms = now_ms;
+    poll_schedule_want(&s_schedule, app, poll);
     unlock();
     wake();
-    return found;
+    return true;
 }
 
 int32_t poller_set_interval(const char *app_name, int poll, uint32_t every_s)
@@ -1046,7 +1056,14 @@ int32_t poller_set_interval(const char *app_name, int poll, uint32_t every_s)
         return HOST_ERR_ARGUMENT;
     }
     lock();
-    bool found = poll_schedule_has(&s_schedule, app, poll);
+    const poll_entry_t *entry = NULL;
+    for (int i = 0; i < s_schedule.count; i++) {
+        if (s_schedule.entries[i].app == app && s_schedule.entries[i].poll == poll) {
+            entry = &s_schedule.entries[i];
+            break;
+        }
+    }
+    bool found = entry != NULL && !entry->manual;
     unlock();
     if (!found) {
         return HOST_ERR_ARGUMENT;

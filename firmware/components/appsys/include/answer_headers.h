@@ -27,4 +27,10 @@ int32_t answer_headers_get(const answer_headers_t *headers, const char *name, si
                            int32_t occurrence, char *value, int32_t capacity);
 
 /* Fixed response metadata is independent of aggregate header storage. */
-void answer_info_header(host_answer_info_t *response, const char *name, const char *value);
+/* Complete unsigned decimal seconds or IMF-fixdate GMT; surrounding SP/HTAB
+ * is ignored. Invalid/expired dates and dates with an unknown clock yield 0.
+ * Positive overflow saturates at INT32_MAX. Capture unix_time once per response. */
+int32_t answer_retry_after(const char *value, int64_t unix_time);
+int32_t answer_poll_cooldown(const host_answer_info_t *response);
+void answer_info_header(host_answer_info_t *response, const char *name, const char *value,
+                        int64_t unix_time);

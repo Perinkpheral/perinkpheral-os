@@ -43,7 +43,9 @@ defect of the checks:
 - The network has no redirects, TLS or timeouts; the request queue holds only the checked
   application's requests. The late-failure scenario truncates picked JSON before its last
   closing bracket; response-mutation checks also truncate JSON halfway through its text.
-  Polls come when the checks give them, not at their pace.
+  Periodic polls come when the checks give them, not at their pace. Ordinary
+  capability rounds advance uptime to an applicable poll delay while keeping the
+  comparison wall clock fixed. Timers and alarms still fire only as the scene directs.
 - The system API (`sys_*`) is not stood in for.
 
 ## Failure-path checks
@@ -62,8 +64,8 @@ prove every possible input or button sequence. A coverage note identifies missin
 | `clock` | Cross both DST directions in Berlin, New York, Lord Howe (30-minute change), Auckland, New Year and 2090. Compare the live and reloaded picture. Optional event probes assert the per-date local HH:MM in draw records. |
 
 `headers` in a mock is an object of response headers. `answer_header()` exposes them
-case-insensitively. Numeric Retry-After headers, including injected 429s, also expose `retry_after` in `answer_info()`.
-The stand-in observes early requests instead of refusing them, so an ignored deadline fails.
+case-insensitively. Decimal-seconds and IMF-fixdate GMT Retry-After headers expose normalized `retry_after` in `answer_info()`, using the same parser as firmware and simulator.
+The stand-in observes early raw requests instead of refusing them, so an ignored raw-request deadline fails. Manifest-poll requests coalesce and wait for the accepted-call window and server cooldown.
 Host-scheduled polling and real HTTP pacing remain simulator concerns.
 
 `clock_probes` is an array of `{ "now": <epoch>, "event": <epoch>, "presses": "O" }`.
@@ -81,8 +83,9 @@ records. The standard `Storage error.`, `Not enough space.`, `Could not save.` a
 A log line is not a visible error.
 
 In the Retry-After probe, the stand-in defers settings-triggered and sibling
-manifest-poll deliveries. It observes app-issued requests separately, including
-explicit `poll_run()` calls. The firmware host poller tests cover deadline and
+manifest-poll deliveries. Calling `poll_run()` during a cooldown is valid;
+only raw-request cooldowns are the application's responsibility. Manual polls
+are delivered only after `poll_run()` or a reconnect retry of requested work. The firmware host poller tests cover deadline and
 list rescheduling, including reconnect and delays longer than a day.
 
 `exceptions` maps check keys to nonempty reasons. The report lists every declaration for the

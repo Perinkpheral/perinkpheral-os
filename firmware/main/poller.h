@@ -31,16 +31,16 @@ void poller_start(void);
 void poller_poll_is_due(uint32_t app, int poll);
 
 /* The application that was taking the answer to `request` piece by piece
- * was unloaded before its end - a press needed the screen. A GET or HEAD poll
- * is asked again in a minute, or at its shorter pace; other methods keep their
- * normal pace. From the host loop. */
+ * was unloaded before its end - a press needed the screen. An automatic GET or
+ * HEAD poll is asked again in a minute, or at its shorter pace; other methods
+ * keep their normal pace. Manual polls need another poll_run(). From the host loop. */
 void poller_answer_was_abandoned(const char *app_name, int request);
 
 /* DEADLINE_POLLER_LOOK has come: the moment the poller asked to look at
  * its things again. */
 void poller_look(void);
 
-/* The network is available again: make every poll due. */
+/* The network is available again: retry requested transport failures. */
 void poller_network_is_back(void);
 
 /* The installed applications changed: the poller takes the new list. What
@@ -56,7 +56,7 @@ void poller_hold(void);
  * Nothing else of the schedule is touched. */
 void poller_reschedule(void);
 
-/* The application's settings changed: fetch its polls again now, not
+/* The application's settings changed: fetch its automatic polls again now, not
  * when their time comes. From any task. */
 void poller_hurry(const char *app_name);
 

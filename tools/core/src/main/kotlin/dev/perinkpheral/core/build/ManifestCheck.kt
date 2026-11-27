@@ -182,8 +182,11 @@ class ManifestCheck(private val sdk: Sdk) {
             }
             checkTemplate("$where: body", body)
         }
+        if (poll.containsKey("manual") && poll["manual"] !is Boolean) fail("$where: \"manual\" must be a boolean")
         val every = poll["every"]
-        if (every is String) {
+        if (!poll.containsKey("every") && poll["manual"] == true) {
+            // Manual polls have no ordinary deadline.
+        } else if (every is String) {
             // "{{key}}": the pace is the user's choice in that setting.
             val named = settings.map { it as Map<*, *> }.firstOrNull { every == "{{${it["key"]}}}" }
                 ?: fail("$where: \"every\" as text must be {{key}} of a setting")

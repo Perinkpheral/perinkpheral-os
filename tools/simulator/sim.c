@@ -27,6 +27,7 @@
  * --at starts the clock at a moment of its own and lets it run from there:
  * the same screens at the same moment, to set a picture beside another.
  */
+#include <stdatomic.h>
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
@@ -54,6 +55,7 @@
 #include "answer_headers.h"
 #include "app_manifest.h"
 #include "poll_schedule.h"
+#include "poll_round.h"
 #include "app_scene.h"
 #include "app_store.h"
 #include "deadline_table.h"
@@ -108,7 +110,7 @@ static struct {
 
 /* ---- time: the computer's, moved on by /api/sim/forward ---- */
 
-static int64_t s_forward_ms;
+static atomic_int_fast64_t s_forward_ms;
 static int64_t s_started_ms;
 static uint32_t s_boot_id;
 
@@ -119,15 +121,11 @@ static int64_t monotonic_ms(void)
     return (int64_t)now.tv_sec * MS_PER_SECOND + now.tv_nsec / 1000000 + s_forward_ms;
 }
 
-static int64_t s_at_started; /* the computer's time when the clock was set to --at */
+static atomic_int_fast64_t s_clock_offset_s;
 
 static int64_t unix_now(void)
 {
-    int64_t now = (int64_t)time(NULL);
-    if (s_options.at != 0) {
-        now = s_options.at + (now - s_at_started);
-    }
-    return now + s_forward_ms / MS_PER_SECOND;
+    return (int64_t)time(NULL) + atomic_load(&s_clock_offset_s) + s_forward_ms / MS_PER_SECOND;
 }
 
 /* ---- the log: main-thread only, what /api/log gives, and the console ---- */
@@ -180,6 +178,12 @@ static wm_t                 s_wm;
 static deadline_table_t     s_deadlines;
 static uint32_t             s_poll_every_s[APP_POLLS_MAX];
 static uint32_t             s_poll_override_s[APP_POLLS_MAX];
+static poll_schedule_t      s_poll_schedule;
+static poll_rounds_t        s_poll_rounds;
+static int64_t              s_poll_cooldown_until_ms;
+static int64_t              s_poll_run_accepted_ms;
+static bool                 s_last_job_was_request;
+static uint32_t             s_network_generation;
 static int32_t              s_alarm_every_s[HOST_ALARM_COUNT];
 static int64_t              s_alarm_at[HOST_ALARM_COUNT];
 static bool                 s_time_changed;
@@ -373,8 +377,11 @@ typedef struct job {
     int         format_policy;
     int         number; /* the poll's index, or the request's tag */
     int         method;
+    poll_turn_t poll_turn;
+    int         poll_items;
     char        url[APP_URL_MAX + 1];
     uint64_t    generation;
+    uint32_t    network_generation;
     char       *manifest;
     json_t     *host_values;
     app_header_t header_templates[APP_HEADERS_MAX];
@@ -395,6 +402,7 @@ typedef struct job {
     size_t          answer_length;
     host_answer_info_t response;
     answer_headers_t response_headers;
+    int64_t response_at_ms;
 } job_t;
 
 static bool            s_network_connected = true;
@@ -483,7 +491,18 @@ static void answer_from_mock(job_t *job, const json_t *mock)
         memcpy(job->answer, body->text, job->answer_length);
     }
     job->response.length = (int32_t)job->answer_length;
-    keep_answer_headers(&job->response_headers, json_get(mock, "headers"));
+    const json_t *headers = json_get(mock, "headers");
+    keep_answer_headers(&job->response_headers, headers);
+    int64_t response_time = unix_now();
+    job->response_at_ms = monotonic_ms();
+    for (const json_t *field = headers != NULL ? headers->child : NULL; field != NULL; field = field->next) {
+        for (const json_t *value = json_is_array(field) ? field->child : field;
+             value != NULL; value = json_is_array(field) ? value->next : NULL) {
+            if (field->name != NULL && json_is_string(value)) {
+                answer_info_header(&job->response, field->name, value->text, response_time);
+            }
+        }
+    }
 }
 
 /* ---- base64, for bodies on their way to the network and back ---- */
@@ -668,7 +687,8 @@ static void exchange(job_t *job, char *next, size_t next_size)
     const json_t *status = json_get(answer, "status");
     job->status = json_is_number(status) ? (int)status->number : HOST_FAILED_NO_ANSWER;
     host_answer_info_t *response = &job->response;
-    response->status = job->status;
+    const json_t *http_status = json_get(answer, "httpStatus");
+    response->status = json_is_number(http_status) ? (int32_t)http_status->number : job->status;
     const json_t *got_headers = json_get(answer, "headers");
     keep_answer_headers(&job->response_headers, got_headers);
     const json_t *mime = json_get(answer,"mimeFormat");
@@ -690,10 +710,16 @@ static void exchange(job_t *job, char *next, size_t next_size)
     if (number[0] != '\0') {
         response->length = atoi(number);
     }
-    number[0] = '\0';
-    copy_answer_header(metadata_headers, "retry-after", number, sizeof number);
-    if (number[0] >= '0' && number[0] <= '9') {
-        response->retry_after = atoi(number);
+    const json_t *elapsed = json_get(answer, "bodyElapsedMs");
+    int64_t body_ms = json_is_number(elapsed) && elapsed->number > 0 ? elapsed->number : 0;
+    int64_t response_time = unix_now() - body_ms / MS_PER_SECOND;
+    job->response_at_ms = monotonic_ms() - body_ms;
+    for (const json_t *field = metadata_headers != NULL ? metadata_headers->child : NULL;
+         field != NULL; field = field->next) {
+        const json_t *value = json_is_array(field) ? json_at(field, 0) : field;
+        if (field->name != NULL && json_is_string(value)) {
+            answer_info_header(response, field->name, value->text, response_time);
+        }
     }
     const json_t *content = json_get(answer, "body");
     if (json_is_string(content)) {
@@ -824,6 +850,7 @@ static void add_header(char **headers, const char *name, const char *value);
 /* Settings saves and application writes cannot interleave with preparation here. */
 static void prepare_job(job_t *job)
 {
+    job->network_generation = s_network_generation;
     job->manifest = strdup(s_manifest_json);
     job->host_values = json_new_object();
     json_t *root = json_parse(job->manifest);
@@ -873,14 +900,27 @@ static void prepare_job(job_t *job)
     }
 }
 
+static job_t *next_poll_job(void);
+static void finish_poll(job_t *job);
+
 static void dispatch_job(void)
 {
-    if (s_job_active || s_jobs_pending == NULL) {
+    if (s_job_active) {
         return;
     }
-    job_t *job = s_jobs_pending;
-    s_jobs_pending = job->next;
-    job->next = NULL;
+    job_t *job = NULL;
+    if (s_last_job_was_request || s_jobs_pending == NULL) {
+        job = next_poll_job();
+    }
+    if (job == NULL && s_jobs_pending != NULL) {
+        job = s_jobs_pending;
+        s_jobs_pending = job->next;
+        job->next = NULL;
+    }
+    if (job == NULL) {
+        return;
+    }
+    s_last_job_was_request = !job->is_poll;
     prepare_job(job);
     s_job_active = true;
     pthread_mutex_lock(&s_jobs_lock);
@@ -899,6 +939,17 @@ static bool accepts_job(const job_t *job)
 static void hand_over(job_t *job)
 {
     job->response_headers.head_response=job->method==HOST_HTTP_HEAD;
+    if (job->is_poll && job->response.status > 0) {
+        int32_t cooldown_s = answer_poll_cooldown(&job->response);
+        if (cooldown_s > 0) {
+            int64_t until_ms = job->response_at_ms + (int64_t)cooldown_s * MS_PER_SECOND;
+            if (until_ms > s_poll_cooldown_until_ms) {
+                s_poll_cooldown_until_ms = until_ms;
+            }
+            poll_rounds_throttled(&s_poll_rounds, SIM_APP_ID);
+            job->poll_items = 0;
+        }
+    }
     if (job->missing_mock) {
         say('E', "sim", "no mock matches %s %s; network disabled by --mocks", METHODS[job->method], job->url);
     }
@@ -907,7 +958,7 @@ static void hand_over(job_t *job)
     }
     /* Only an explicit network loss simulates losing Wi-Fi. A server's
      * failure leaves the connection alone; any HTTP answer proves it is back. */
-    if (job->status == HOST_FAILED_NO_NETWORK || job->status > 0) {
+    if ((job->status == HOST_FAILED_NO_NETWORK && job->network_generation == s_network_generation) || job->status > 0) {
         bool connected = job->status > 0;
         if (connected != s_network_connected) {
             s_network_connected = connected;
@@ -999,7 +1050,7 @@ static void add_header(char **headers, const char *name, const char *value)
 }
 
 /* One request of a poll: for item `item` of the list it goes over, or -1. */
-static void start_poll_request(const app_poll_t *poll, int number, const list_item_t *each,
+static job_t *start_poll_request(const app_poll_t *poll, int number, const list_item_t *each,
                                int item)
 {
     job_t *job = calloc(1, sizeof *job);
@@ -1020,36 +1071,96 @@ static void start_poll_request(const app_poll_t *poll, int number, const list_it
         snprintf(job->each_key, sizeof job->each_key, "%s", each->key);
         snprintf(job->each_value, sizeof job->each_value, "%s", each->item);
     }
-    ask(job);
+    job->generation = s_generation;
+    job->network_generation = s_network_generation;
+    return job;
 }
 
 /* A poll: one request, or one for every item of the list it goes over. */
-static void start_poll(int number)
+static job_t *start_poll(int number, int item, int *items)
 {
     static app_poll_t poll;
     if (app_manifest_parse_poll(s_manifest_json, number, &poll) != APP_MANIFEST_OK) {
-        return;
+        return NULL;
     }
     char list[APP_SETTING_VALUE_MAX + 1];
-    if (poll.each_key[0] == '\0' || !setting_of(NULL, poll.each_key, list, sizeof list)) {
-        start_poll_request(&poll, number, NULL, -1);
-        return;
+    if (poll.each_key[0] == '\0' || !setting_of(NULL, poll.each_key, list, sizeof list) || list[0] == '\0') {
+        job_t *job = start_poll_request(&poll, number, NULL, -1);
+        if (poll.each_key[0] != '\0') { job->status = HOST_FAILED_NOT_READY; }
+        return job;
+    }
+    *items = 1;
+    for (const char *at = list; *at != '\0'; at++) {
+        if (*at == '\n') { (*items)++; }
     }
     char *at = list;
-    for (int item = 0; at != NULL; item++) {
+    for (int index = 0; at != NULL; index++) {
         char *end = strchr(at, '\n');
-        if (end != NULL) {
-            *end = '\0';
-        }
-        /* An item another poll of the list claims by its prefix is passed over; {{key}} is
-         * the item without this poll's prefix. */
-        const char *value;
-        if (app_manifest_poll_takes(&poll, at, &value)) {
+        if (end != NULL) { *end = '\0'; }
+        if (index == item) {
+            const char *value;
+            if (!app_manifest_poll_takes(&poll, at, &value)) { return NULL; }
             list_item_t each = { .key = poll.each_key, .item = value };
-            start_poll_request(&poll, number, &each, item);
+            return start_poll_request(&poll, number, &each, item);
         }
         at = end != NULL ? end + 1 : NULL;
     }
+    return NULL;
+}
+
+static void finish_poll(job_t *job)
+{
+    bool transport_failed = job->status == HOST_FAILED_NO_NETWORK ||
+                            job->status == HOST_FAILED_NO_ANSWER || job->status == HOST_FAILED_TIMEOUT;
+    int poll = job->number;
+    if (!poll_rounds_answered(&s_poll_rounds, &job->poll_turn, transport_failed ? 0 : job->poll_items)) {
+        return;
+    }
+    if (transport_failed) {
+        poll_schedule_network_failed(&s_poll_schedule, SIM_APP_ID, poll);
+        if (job->network_generation != s_network_generation && s_network_connected) {
+            poll_schedule_network_is_back(&s_poll_schedule);
+        }
+    }
+    uint32_t pace_ms = poll_schedule_pace_ms(&s_poll_schedule, SIM_APP_ID, poll);
+    if (pace_ms > 0 && !poll_schedule_is_due_soon(&s_poll_schedule, SIM_APP_ID, poll)) {
+        int64_t cooldown_ms = s_poll_cooldown_until_ms - monotonic_ms();
+        set_due(DUE_POLL, poll, cooldown_ms > pace_ms ? cooldown_ms : pace_ms);
+    }
+}
+
+static job_t *next_poll_job(void)
+{
+    poll_turn_t turn;
+    while (poll_rounds_next(&s_poll_rounds, poll_schedule_next_wanted(&s_poll_schedule), &turn)) {
+        int64_t cooldown_ms = s_poll_cooldown_until_ms - monotonic_ms();
+        if (cooldown_ms > 0) {
+            set_due(DUE_POLL, turn.poll, cooldown_ms);
+            poll_schedule_answered(&s_poll_schedule, SIM_APP_ID, turn.poll);
+            poll_schedule_due_soon(&s_poll_schedule, SIM_APP_ID, turn.poll);
+            poll_rounds_answered(&s_poll_rounds, &turn, 0);
+            continue;
+        }
+        if (turn.throttled) {
+            job_t ended = { .number = turn.poll, .poll_turn = turn };
+            finish_poll(&ended);
+            continue;
+        }
+        if (!turn.is_continuation) {
+            poll_schedule_answered(&s_poll_schedule, SIM_APP_ID, turn.poll);
+            cancel_due(DUE_POLL, turn.poll);
+        }
+        int items = 0;
+        job_t *job = start_poll(turn.poll, turn.item, &items);
+        if (job != NULL) {
+            job->poll_turn = turn;
+            job->poll_items = items;
+            return job;
+        }
+        job_t skipped = { .number = turn.poll, .poll_turn = turn, .poll_items = items };
+        finish_poll(&skipped);
+    }
+    return NULL;
 }
 
 /* ---- the services the application's host calls ---- */
@@ -1102,7 +1213,19 @@ static bool services_poll_now(const char *app_name, int poll)
     if (poll < 0 || poll >= s_manifest.poll_count) {
         return false;
     }
-    set_due(DUE_POLL, poll, 0);
+    if (poll_schedule_is_wanted(&s_poll_schedule, SIM_APP_ID, poll)) {
+        return true;
+    }
+    enum { ACCEPTED_CALL_WINDOW_MS = 1000 };
+    int64_t now_ms = monotonic_ms();
+    int64_t since_ms = now_ms - s_poll_run_accepted_ms;
+    if (since_ms < ACCEPTED_CALL_WINDOW_MS) {
+        set_due(DUE_POLL, poll, ACCEPTED_CALL_WINDOW_MS - since_ms);
+        poll_schedule_due_soon(&s_poll_schedule, SIM_APP_ID, poll);
+    } else {
+        s_poll_run_accepted_ms = now_ms;
+        poll_schedule_want(&s_poll_schedule, SIM_APP_ID, poll);
+    }
     return true;
 }
 
@@ -1127,7 +1250,7 @@ static void poll_override_path(char path[PATH_BYTES], const char *app_name, int 
 
 static int32_t services_poll_interval(const char *app_name, int poll, uint32_t every_s)
 {
-    if (poll < 0 || poll >= s_manifest.poll_count ||
+    if (poll < 0 || poll >= s_manifest.poll_count || app_manifest_poll_is_manual(&s_manifest, poll) ||
         (every_s != 0 && (every_s < APP_POLL_EVERY_MIN_S || every_s > APP_POLL_EVERY_MAX_S))) {
         return HOST_ERR_ARGUMENT;
     }
@@ -1155,7 +1278,10 @@ static int32_t services_poll_interval(const char *app_name, int poll, uint32_t e
     uint32_t effective_s = every_s != 0 ? every_s : manifest_poll_seconds(poll);
     if (s_poll_every_s[poll] != effective_s) {
         s_poll_every_s[poll] = effective_s;
+        bool changed = false;
+        poll_schedule_set_interval(&s_poll_schedule, SIM_APP_ID, poll, effective_s, &changed);
         set_due(DUE_POLL, poll, (int64_t)effective_s * MS_PER_SECOND);
+        poll_schedule_due_soon(&s_poll_schedule, SIM_APP_ID, poll);
     }
     return HOST_OK;
 }
@@ -1392,7 +1518,7 @@ static int32_t services_time_set(int64_t unix_seconds)
         return HOST_ERR_FAILED;
     }
     s_options.at = unix_seconds - s_forward_ms / MS_PER_SECOND;
-    s_at_started = (int64_t)time(NULL);
+    atomic_store(&s_clock_offset_s, s_options.at != 0 ? s_options.at - (int64_t)time(NULL) : 0);
     for (int alarm = 0; alarm < HOST_ALARM_COUNT; alarm++) {
         if (s_alarm_at[alarm] != 0) {
             int64_t left_s = s_alarm_at[alarm] - unix_seconds;
@@ -1572,6 +1698,11 @@ static bool load_app(void)
         return false;
     }
     deadline_table_init(&s_deadlines);
+    poll_schedule_init(&s_poll_schedule);
+    s_poll_rounds = (poll_rounds_t){0};
+    s_poll_cooldown_until_ms = 0;
+    s_network_generation = 0;
+    s_poll_run_accepted_ms = monotonic_ms() - MS_PER_SECOND;
     memset(s_alarm_every_s, 0, sizeof s_alarm_every_s);
     memset(s_alarm_at, 0, sizeof s_alarm_at);
     s_time_changed = false;
@@ -1590,7 +1721,12 @@ static bool load_app(void)
         }
         s_poll_override_s[poll] = kept_s;
         s_poll_every_s[poll] = kept_s != 0 ? kept_s : manifest_poll_seconds(poll);
-        set_due(DUE_POLL, poll, FIRST_POLLS_MS);
+        uint32_t first_ms;
+        poll_schedule_add(&s_poll_schedule, SIM_APP_ID, poll, s_poll_every_s[poll],
+                           app_manifest_poll_is_manual(&s_manifest, poll), &first_ms);
+        if (!app_manifest_poll_is_manual(&s_manifest, poll)) {
+            set_due(DUE_POLL, poll, FIRST_POLLS_MS + first_ms);
+        }
     }
     set_due(DUE_MINUTE, 0, (SECONDS_PER_MINUTE - unix_now() % SECONDS_PER_MINUTE) * MS_PER_SECOND);
     say('I', "sim", "%s %s loaded", s_manifest.name, s_manifest.version);
@@ -1622,10 +1758,7 @@ static void answer_due(const deadline_id_t *id)
         break;
     }
     case DUE_POLL:
-        /* The next time first: what the poll brings - an answer of "not ready" is delivered
-         * at once - may ask for it sooner (poll_run), and that is not to be undone. */
-        set_due(DUE_POLL, id->number, (int64_t)s_poll_every_s[id->number] * MS_PER_SECOND);
-        start_poll(id->number);
+        poll_schedule_want(&s_poll_schedule, SIM_APP_ID, id->number);
         break;
     case DUE_MINUTE:
         wm_invalidate(&s_wm, WM_CHANGED_BY_DATA);
@@ -1881,8 +2014,12 @@ static void handle(int socket_fd, const request_t *request)
             if (s_poll_override_s[poll] == 0) {
                 s_poll_every_s[poll] = manifest_poll_seconds(poll);
             }
-            set_due(DUE_POLL, poll, 0);
+            if (!app_manifest_poll_is_manual(&s_manifest, poll)) {
+                bool changed = false;
+                poll_schedule_set_interval(&s_poll_schedule, SIM_APP_ID, poll, s_poll_every_s[poll], &changed);
+            }
         }
+        poll_schedule_want_of(&s_poll_schedule, SIM_APP_ID);
         answer_text(socket_fd, stored == HOST_OK ? 200 : 400, stored == HOST_OK ? "stored" : "refused");
     } else if (is_post && strcmp(path, "/api/sim/intent") == 0) {
         query_value(request, "kind", name, sizeof name);
@@ -1890,6 +2027,12 @@ static void handle(int socket_fd, const request_t *request)
                    : strcmp(name, "time_changed") == 0  ? HOST_INTENT_TIME_CHANGED
                    : strcmp(name, "network_up") == 0    ? HOST_INTENT_NETWORK_UP
                                                         : 0;
+        if (kind == HOST_INTENT_NETWORK_UP) {
+            s_network_generation++;
+            s_network_connected = true;
+            wm_invalidate(&s_wm, WM_CHANGED_BY_DATA);
+            poll_schedule_network_is_back(&s_poll_schedule);
+        }
         bool is_installed = strcmp(name, "installed") == 0, is_updated = strcmp(name, "updated") == 0;
         if (is_installed || is_updated) {
             app_delivery_t delivery = { .kind = is_installed ? APP_DELIVERY_INSTALLED
@@ -2154,7 +2297,7 @@ int main(int argc, char **argv)
     if (s_options.apps == NULL || s_options.app == NULL || s_options.state == NULL) {
         usage();
     }
-    s_at_started = (int64_t)time(NULL);
+    atomic_store(&s_clock_offset_s, s_options.at != 0 ? s_options.at - (int64_t)time(NULL) : 0);
     /* The store's paths are as short as the device's ("/apps/<name>/<file>"):
      * the folder of applications becomes the working one, and the other
      * folders are made absolute before that. */
@@ -2308,6 +2451,7 @@ int main(int argc, char **argv)
                 s_job_active = false;
                 if (accepts_job(job)) {
                     hand_over(job);
+                    if (job->is_poll) { finish_poll(job); }
                 }
                 free_job(job);
             }

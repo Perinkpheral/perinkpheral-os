@@ -2,9 +2,15 @@
 #include "tinytest.h"
 #include "standin.h"
 
+static const standin_poll_t polls[] = {
+    { .url = "https://example.test/manual", .manual = true },
+    { .url = "https://example.test/periodic" },
+};
 static const char *const certificates[] = { "root.pem" };
 const standin_subject_t standin_subject = {
     .writes_files = true,
+    .polls = polls,
+    .poll_count = 2,
     .certificates = certificates,
     .certificate_count = 1,
 };
@@ -120,8 +126,54 @@ static void test_notification_validation(void)
     CHECK(standin()->notices == 1);
 }
 
+static void test_manual_poll_queue_and_cooldown(void)
+{
+    standin_reset();
+    CHECK(!standin_poll_take(0));
+    standin_settings();
+    standin_intent(HOST_INTENT_NETWORK_UP);
+    CHECK(!standin_poll_take(0));
+    CHECK(poll_set_interval(0, 0) == HOST_ERR_ARGUMENT);
+    CHECK(poll_set_interval(0, 60) == HOST_ERR_ARGUMENT);
+    CHECK(poll_run(0) == HOST_OK);
+    CHECK(standin_poll_take(0));
+    CHECK(!standin_poll_take(0));
+    CHECK(poll_run(0) == HOST_OK);
+    CHECK(poll_run(0) == HOST_OK);
+    CHECK(!standin_poll_take(0));
+    standin_pass(1000);
+    CHECK(standin_poll_take(0));
+    CHECK(!standin_poll_take(0));
+    const standin_pair_t date[] = { { "Retry-After", "Fri, 27 Nov 2026 12:02:00 GMT" } };
+    standin()->now = 1795780800;
+    standin_answer_headers(date, 1);
+    standin_data(0, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    CHECK(standin()->poll_cooldown_until_ms == standin()->uptime_ms + 120000);
+    standin()->monitor_backoff = true;
+    standin()->retry_until_ms = standin()->uptime_ms + 120000;
+    CHECK(poll_run(0) == HOST_OK && standin()->early_requests == 0);
+    CHECK(!standin_poll_take(0) && !standin_poll_take(1));
+    standin_pass(119000);
+    CHECK(!standin_poll_take(0));
+    standin_pass(1000);
+    CHECK(standin_poll_take(0) && standin_poll_take(1));
+    CHECK(!standin_poll_take(0));
+    standin_data(0, -1, HOST_FAILED_NO_NETWORK, "", 0, 1, STANDIN_WHOLE, 0);
+    standin_intent(HOST_INTENT_NETWORK_UP);
+    CHECK(standin_poll_take(0));
+    standin_data(0, -1, 200, "", 0, 1, STANDIN_WHOLE, 0);
+    standin_intent(HOST_INTENT_NETWORK_UP);
+    CHECK(!standin_poll_take(0));
+    standin_reset();
+    standin_data(HOST_REQUEST_FIRST, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    CHECK(standin()->poll_cooldown_until_ms == 0 && standin_poll_take(1));
+    standin_data(1, -1, 429, "", 0, 1, STANDIN_WHOLE, 0);
+    CHECK(standin()->poll_cooldown_until_ms == 60000);
+}
+
 int main(void)
 {
+    test_manual_poll_queue_and_cooldown();
     test_package_files();
     test_long_back();
     test_log_sanitization();

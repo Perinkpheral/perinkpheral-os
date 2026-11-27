@@ -197,6 +197,11 @@ static void on_station_disconnected(void *arg, esp_event_base_t base, int32_t id
                  lost->bssid[3], lost->bssid[4], lost->bssid[5], lost->rssi,
                  s_is_looking_in_one_place ? ", as last time" : "");
     }
+    if (!atomic_load(&s_wifi.radio_stopped)) {
+        xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
+        wifi_status_lost(&s_wifi.status);
+        xSemaphoreGive(s_wifi.lock);
+    }
     if (!atomic_load(&s_wifi.radio_stopped) &&
         wifi_search_point_refused(atomic_exchange(&s_joined_point, false), lost->reason)) {
         /* This point would not let the device in: the next attempt tries another. */
@@ -421,6 +426,11 @@ static void handle_event(wifi_plan_event_t event)
         /* Only a device that is where it should be may go dark. */
         if (!s_wifi.radio_off && s_wifi.plan.has_network &&
             !wifi_phase_has_access_point(s_wifi.plan.phase)) {
+            if (s_wifi.plan.phase != WIFI_PHASE_ONLINE) {
+                xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
+                wifi_status_lost(&s_wifi.status);
+                xSemaphoreGive(s_wifi.lock);
+            }
             s_wifi.radio_off = true;
             atomic_store(&s_wifi.radio_stopped, true);
             s_wifi.connecting = false;
@@ -566,6 +576,8 @@ void wifi_get_status(wifi_status_t *status)
     xSemaphoreTake(s_wifi.lock, portMAX_DELAY);
     status->phase = s_wifi.status.phase;
     status->is_radio_off = s_wifi.status.is_radio_off;
+    status->connection_known = s_wifi.status.connection_known;
+    status->connection_generation = s_wifi.status.connection_generation;
     status->was_reached = s_wifi.status.was_reached;
     status->access_point_up = s_wifi.status.access_point_up;
     strlcpy(status->address, s_wifi.status.address, sizeof status->address);

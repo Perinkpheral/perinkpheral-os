@@ -119,8 +119,103 @@ int32_t answer_headers_get(const answer_headers_t *headers, const char *name, si
     return HOST_ERR_NOT_FOUND;
 }
 
+/* IMF-fixdate is deliberately parsed without locale or the process time zone. */
+static int decimal_digits(const char *text, size_t length)
+{
+    int value = 0;
+    for (size_t index = 0; index < length; index++) {
+        if (text[index] < '0' || text[index] > '9') {
+            return -1;
+        }
+        value = value * 10 + text[index] - '0';
+    }
+    return value;
+}
+
+static int64_t http_date(const char *text, size_t length)
+{
+    static const char *const WEEKDAYS[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    static const char *const MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    static const int MONTH_DAYS[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (length != 29 || memcmp(text + 3, ", ", 2) != 0 || text[7] != ' ' ||
+        text[11] != ' ' || text[16] != ' ' || text[19] != ':' || text[22] != ':' ||
+        memcmp(text + 25, " GMT", 4) != 0) {
+        return -1;
+    }
+    bool weekday_valid = false;
+    for (size_t index = 0; index < sizeof WEEKDAYS / sizeof WEEKDAYS[0]; index++) {
+        weekday_valid = weekday_valid || memcmp(text, WEEKDAYS[index], 3) == 0;
+    }
+    int month = 0;
+    while (month < 12 && memcmp(text + 8, MONTHS[month], 3) != 0) {
+        month++;
+    }
+    int day = decimal_digits(text + 5, 2);
+    int year = decimal_digits(text + 12, 4);
+    int hour = decimal_digits(text + 17, 2);
+    int minute = decimal_digits(text + 20, 2);
+    int second = decimal_digits(text + 23, 2);
+    bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if (!weekday_valid || month == 12 || year < 1601 || day < 1 ||
+        day > MONTH_DAYS[month] + (month == 1 && leap) ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+        return -1;
+    }
+    int previous_year = year - 1;
+    /* Gregorian days before this year, relative to 1970-01-01. */
+    int64_t days = (int64_t)previous_year * 365 + previous_year / 4 - previous_year / 100 +
+                   previous_year / 400 - 719162;
+    for (int index = 0; index < month; index++) {
+        days += MONTH_DAYS[index] + (index == 1 && leap);
+    }
+    return ((days + day - 1) * 24 + hour) * 3600 + minute * 60 + second;
+}
+
+int32_t answer_retry_after(const char *value, int64_t unix_time)
+{
+    if (value == NULL) {
+        return 0;
+    }
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+    size_t length = strlen(value);
+    while (length > 0 && (value[length - 1] == ' ' || value[length - 1] == '\t')) {
+        length--;
+    }
+    if (length == 0) {
+        return 0;
+    }
+    if (value[0] >= '0' && value[0] <= '9') {
+        int32_t seconds = 0;
+        for (size_t index = 0; index < length; index++) {
+            if (value[index] < '0' || value[index] > '9') {
+                return 0;
+            }
+            int digit = value[index] - '0';
+            seconds = seconds > (INT32_MAX - digit) / 10 ? INT32_MAX : seconds * 10 + digit;
+        }
+        return seconds;
+    }
+    if (unix_time < HOST_TIME_MIN || unix_time > HOST_TIME_MAX) {
+        return 0;
+    }
+    int64_t date = http_date(value, length);
+    int64_t seconds = date - unix_time;
+    return seconds <= 0 ? 0 : seconds > INT32_MAX ? INT32_MAX : (int32_t)seconds;
+}
+
+int32_t answer_poll_cooldown(const host_answer_info_t *response)
+{
+    enum { HTTP_TOO_MANY_REQUESTS = 429, DEFAULT_COOLDOWN_S = 60 };
+    return response->retry_after > 0 ? response->retry_after :
+           response->status == HTTP_TOO_MANY_REQUESTS ? DEFAULT_COOLDOWN_S : 0;
+}
+
 /* The headers an application may ask about, and where each goes. */
-void answer_info_header(host_answer_info_t *response, const char *name, const char *value)
+void answer_info_header(host_answer_info_t *response, const char *name, const char *value,
+                        int64_t unix_time)
 {
     const struct {
         const char *name;
@@ -145,8 +240,6 @@ void answer_info_header(host_answer_info_t *response, const char *name, const ch
         }
     }
     if (strcasecmp(name, "Retry-After") == 0) {
-        /* Seconds; a date instead of them reads as 0, which is "none". */
-        long seconds = strtol(value, NULL, 10);
-        response->retry_after = seconds > 0 && seconds < INT32_MAX ? (int32_t)seconds : 0;
+        response->retry_after = answer_retry_after(value, unix_time);
     }
 }

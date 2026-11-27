@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
@@ -43,8 +44,6 @@ static const char *TAG = "poller";
 #define USER_AGENT          "perinkpheral"
 #define HTTP_OK_FIRST       200
 #define HTTP_OK_LAST        299
-#define HTTP_TOO_MANY_REQUESTS 429
-#define THROTTLE_DEFAULT_S   60
 
 static const poller_net_host_t *s_host;
 
@@ -193,6 +192,8 @@ typedef struct {
     char       url[APP_URL_MAX + 1];
     host_answer_info_t response; /* what the headers of the answer said */
     answer_headers_t headers;
+    int64_t response_time;
+    bool response_time_captured;
     const char *paths[JSON_PICK_PATHS_MAX];
     json_pick_t pick;
     uint8_t     piece[HOST_DATA_CHUNK_MAX];
@@ -241,7 +242,11 @@ static esp_err_t on_http_event(esp_http_client_event_t *event)
     request_t *request = event->user_data;
     host_answer_info_t *response = &request->response;
     if (event->event_id == HTTP_EVENT_ON_HEADER) {
-        answer_info_header(response, event->header_key, event->header_value);
+        if (!request->response_time_captured) {
+            request->response_time = (int64_t)time(NULL);
+            request->response_time_captured = true;
+        }
+        answer_info_header(response, event->header_key, event->header_value, request->response_time);
         answer_headers_add(&request->headers, event->header_key, event->header_value);
     }
     return ESP_OK;
@@ -634,6 +639,7 @@ static esp_err_t headers_or_why_not(esp_http_client_handle_t client, request_t *
     /* Redirects may reuse a connection: reset per response, not per connection. */
     memset(&request->response, 0, sizeof request->response);
     answer_headers_reset(&request->headers);
+    request->response_time_captured = false;
     int64_t length = esp_http_client_fetch_headers(client);
     if (length == -ESP_ERR_HTTP_EAGAIN || (length < 0 && is_late())) {
         return ESP_ERR_TIMEOUT;
@@ -800,11 +806,9 @@ static void ask_network(request_t *request, const char *app_name, int number, in
                  request->item[0] != '\0' ? " " : "", request->item, why, esp_err_to_name(err));
         tell_failure(app_name, number, wants_values, why);
     } else {
-        int retry_after = request->response.retry_after;
-        if (retry_after == 0 && http_status == HTTP_TOO_MANY_REQUESTS) {
-            retry_after = THROTTLE_DEFAULT_S;
-        }
-        if (retry_after > 0) {
+        request->response.status = http_status;
+        int retry_after = answer_poll_cooldown(&request->response);
+        if (!only_listed_hosts && retry_after > 0) {
             s_host->retry_after(retry_after);
         }
         request->response.length = esp_http_client_is_chunked_response(client)
@@ -925,8 +929,10 @@ void poller_net_request(const char *app_name, const poller_ask_t *ask)
     }
     /* A request is a poll nobody scheduled: the same URL and headers. */
     strlcpy(request->poll.url, ask->url, sizeof request->poll.url);
-    memcpy(request->poll.headers, ask->headers,
-           (size_t)ask->header_count * sizeof request->poll.headers[0]);
+    if (ask->header_count > 0) {
+        memcpy(request->poll.headers, ask->headers,
+               (size_t)ask->header_count * sizeof request->poll.headers[0]);
+    }
     request->poll.header_count = ask->header_count;
     perform(request, app_name, ask->number, ask->method, ask->body, ask->body_length, true);
     free(request);

@@ -330,6 +330,9 @@ object AppCheckTest {
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
     private val FINE = listOf(
+        Break("network", "poll_run during Retry-After queues deferred work",
+            listOf("void app_on_picked(int32_t request, int32_t http_status)\n{\n    rate_limit(http_status);" to
+                "void app_on_picked(int32_t request, int32_t http_status)\n{\n    rate_limit(http_status);\n    if (http_status == 429) poll_run(request);"), ""),
         Break("sessions", "a session reserved on focus needs no allocation on blur",
             listOf("    session_get(&page, sizeof page);" to
                 "    session_get(&page, sizeof page);\n    session_set(&page, sizeof page);",

@@ -117,6 +117,150 @@ static void test_mocks(const char *state)
     assert(load_mocks());
 }
 
+static void take_poll_deadlines(void)
+{
+    deadline_id_t due;
+    while (deadline_table_take_due(&s_deadlines, monotonic_ms(), &due)) {
+        assert(due.kind == DUE_POLL);
+        answer_due(&due);
+    }
+}
+
+static void test_poll_scheduling(void)
+{
+    free(s_manifest_json);
+    s_manifest_json = strdup("{\"name\":\"probe\",\"title\":\"Probe\",\"abi\":3,\"polls\":["
+        "{\"url\":\"https://example.test/manual\",\"manual\":true,\"pick\":[\"value\"]},"
+        "{\"url\":\"https://example.test/list/{{items}}\",\"manual\":true,\"each\":\"items\"}],"
+        "\"settings\":[{\"key\":\"items\",\"type\":\"list\",\"title\":\"Items\",\"default\":[\"a\",\"b\",\"c\"]}]}");
+    assert(app_manifest_parse(s_manifest_json, &s_manifest) == APP_MANIFEST_OK);
+    poll_schedule_init(&s_poll_schedule);
+    s_poll_rounds = (poll_rounds_t){0};
+    deadline_table_init(&s_deadlines);
+    s_poll_cooldown_until_ms = 0;
+    s_poll_run_accepted_ms = monotonic_ms() - 1000;
+    for (int poll = 0; poll < s_manifest.poll_count; poll++) {
+        uint32_t first_ms;
+        assert(poll_schedule_add(&s_poll_schedule, SIM_APP_ID, poll, 0, true, &first_ms));
+    }
+    poll_schedule_want_of(&s_poll_schedule, SIM_APP_ID);
+    poll_schedule_network_is_back(&s_poll_schedule);
+    assert(next_poll_job() == NULL);
+    assert(services_poll_interval("probe", 0, 60) == HOST_ERR_ARGUMENT);
+    assert(services_poll_now("probe", 0));
+    assert(services_poll_now("probe", 0));
+    job_t *job = next_poll_job();
+    assert(job != NULL && job->number == 0 && job->wants_values);
+    assert(services_poll_now("probe", 0) && services_poll_now("probe", 0));
+    job->status = 200;
+    finish_poll(job);
+    free_job(job);
+    assert(next_poll_job() == NULL);
+    s_forward_ms += 1001;
+    take_poll_deadlines();
+    job = next_poll_job();
+    assert(job != NULL && job->number == 0);
+    s_options.at = 1795780800;
+    atomic_store(&s_clock_offset_s, s_options.at - (int64_t)time(NULL));
+    s_forward_ms = 0;
+    json_t *mock = json_parse("{\"status\":429,\"body\":\"{}\",\"headers\":{"
+        "\"Content-Type\":\"application/json\",\"Retry-After\":\"Fri, 27 Nov 2026 12:02:00 GMT\"}}");
+    answer_from_mock(job, mock);
+    json_free(mock);
+    hand_over(job);
+    assert(job->response.retry_after == 120);
+    finish_poll(job);
+    free_job(job);
+    assert(next_poll_job() == NULL); /* manual 429 does not invent another run */
+    s_poll_run_accepted_ms = monotonic_ms() - 1000;
+    assert(services_poll_now("probe", 1));
+    assert(next_poll_job() == NULL); /* requested sibling is deferred */
+    poll_schedule_want_of(&s_poll_schedule, SIM_APP_ID);
+    poll_schedule_network_is_back(&s_poll_schedule);
+    assert(next_poll_job() == NULL);
+    s_forward_ms += 119000;
+    take_poll_deadlines();
+    assert(next_poll_job() == NULL);
+    s_forward_ms += 1001;
+    take_poll_deadlines();
+    job = next_poll_job();
+    assert(job != NULL && job->number == 1 && job->item == 0 && job->poll_items == 3);
+    job->status = 200;
+    finish_poll(job);
+    free_job(job);
+    job = next_poll_job();
+    assert(job != NULL && job->item == 1);
+    job->status = 429;
+    job->response.status = 429;
+    job->response_at_ms = monotonic_ms();
+    hand_over(job); /* bare 429: ends the round and starts a 60-second cooldown */
+    finish_poll(job);
+    free_job(job);
+    assert(next_poll_job() == NULL && s_poll_cooldown_until_ms > monotonic_ms());
+    s_forward_ms += 61000;
+    take_poll_deadlines();
+    assert(next_poll_job() == NULL);
+    assert(services_poll_now("probe", 1));
+    job = next_poll_job();
+    assert(job != NULL && job->item == 0);
+    job->status = HOST_FAILED_NO_NETWORK;
+    finish_poll(job);
+    free_job(job);
+    poll_schedule_network_is_back(&s_poll_schedule);
+    job = next_poll_job();
+    assert(job != NULL && job->item == 0); /* retries explicitly requested transport failure */
+    job->status = 200;
+    job->poll_items = 0;
+    finish_poll(job);
+    free_job(job);
+    poll_schedule_network_is_back(&s_poll_schedule);
+    assert(next_poll_job() == NULL);
+    s_poll_cooldown_until_ms = 0;
+    job_t raw = { .number = HOST_REQUEST_FIRST, .status = 429, .item = -1,
+        .response = { .status = 429, .retry_after = 300 } };
+    hand_over(&raw);
+    assert(raw.response.retry_after == 300 && s_poll_cooldown_until_ms == 0);
+    /* Reconnection can arrive before the active request notices its lost connection. */
+    assert(services_poll_now("probe", 0));
+    s_forward_ms += 1001;
+    take_poll_deadlines();
+    job = next_poll_job();
+    assert(job != NULL && job->number == 0);
+    s_network_generation++;
+    job->status = HOST_FAILED_NO_ANSWER;
+    finish_poll(job);
+    free_job(job);
+    job = next_poll_job();
+    assert(job != NULL && job->number == 0);
+    job->status = 200;
+    finish_poll(job);
+    free_job(job);
+    assert(next_poll_job() == NULL);
+    s_network_generation = 0;
+    /* An expired delay still terminates the active list round. */
+    assert(services_poll_now("probe", 1));
+    s_forward_ms += 1001;
+    take_poll_deadlines();
+    job = next_poll_job();
+    assert(job != NULL && job->poll_items == 3);
+    job->status = 200;
+    job->response = (host_answer_info_t){ .status = 200, .retry_after = 1 };
+    job->response_at_ms = monotonic_ms() - 1500;
+    hand_over(job);
+    finish_poll(job);
+    free_job(job);
+    assert(next_poll_job() == NULL);
+    s_options.at = 0;
+    atomic_store(&s_clock_offset_s, 0);
+    s_forward_ms = 0;
+    s_poll_schedule.count = 0;
+    deadline_table_init(&s_deadlines);
+    s_requests_waiting = 0;
+    free(s_manifest_json);
+    s_manifest_json = NULL;
+    s_manifest = (app_manifest_t){0};
+}
+
 int main(void)
 {
     s_log = calloc(LOG_KEPT_BYTES + 1, 1);
@@ -125,6 +269,7 @@ int main(void)
     s_options.state = state;
     s_options.app = "probe";
     s_options.apps = state;
+    test_poll_scheduling();
     test_network_icon();
     test_mocks(state);
     s_manifest_json = strdup("{\"hosts\":[\"{{server}}\",\"{{other}}\"],\"settings\":["
@@ -176,7 +321,7 @@ int main(void)
     snprintf(poll.headers[0].name, sizeof poll.headers[0].name, "Authorization");
     snprintf(poll.headers[0].value, sizeof poll.headers[0].value, "Bearer {{token}} {{item}}");
     list_item_t each = { .key = "item", .item = "a/b" };
-    start_poll_request(&poll, 0, &each, 2);
+    ask(start_poll_request(&poll, 0, &each, 2));
     set_value("server", "http://changed.example");
     set_value("token", "new-server-token");
     job = s_jobs_pending;
@@ -202,14 +347,14 @@ int main(void)
     free_job(job);
 
     snprintf(poll.url, sizeof poll.url, "{{missing}}");
-    start_poll_request(&poll, 0, NULL, -1);
+    ask(start_poll_request(&poll, 0, NULL, -1));
     job = s_jobs_pending;
     s_jobs_pending = NULL;
     prepare_job(job);
     assert(job->status == HOST_FAILED_NOT_READY && job->headers == NULL);
     free_job(job);
     snprintf(poll.url, sizeof poll.url, "{{server}}/data");
-    start_poll_request(&poll, 0, NULL, -1);
+    ask(start_poll_request(&poll, 0, NULL, -1));
     set_value("server", "");
     job = s_jobs_pending;
     s_jobs_pending = NULL;
@@ -252,7 +397,7 @@ int main(void)
     snprintf(poll.url, sizeof poll.url, "{{server}}/post");
     snprintf(poll.body, sizeof poll.body, "token={{token}}");
     snprintf(poll.headers[0].value, sizeof poll.headers[0].value, "Bearer {{token}}");
-    start_poll_request(&poll, 0, NULL, -1);
+    ask(start_poll_request(&poll, 0, NULL, -1));
     set_value("token", "send-time");
     dispatch_job();
     json_t *post = read_request(asked);

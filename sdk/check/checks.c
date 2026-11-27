@@ -360,7 +360,9 @@ static void deliver(int32_t request, int32_t item, bool is_picked, const char *u
     }
     if (round->kind == ROUND_HTTP && status == 429) {
         host->rate_limits++;
-        host->retry_until_ms = host->uptime_ms + (int64_t)backoff_seconds * 1000;
+        if (request >= HOST_REQUEST_FIRST) {
+            host->retry_until_ms = host->uptime_ms + (int64_t)backoff_seconds * 1000;
+        }
         snprintf(retry_after, sizeof retry_after, "%d", backoff_seconds);
         answer.headers = backoff_headers;
         answer.header_count = 1;
@@ -492,13 +494,29 @@ static void ask_again(void)
 static void answer_manifest_polls(const round_t *round, int32_t response_refusal)
 {
     standin_t *host = standin();
+    if (!host->monitor_backoff) {
+        /* Ordinary capability rounds explicitly wait for dispatch. Keep the
+         * comparison's wall clock fixed; timers and alarms are fired by its scene. */
+        int64_t ready_at_ms = host->poll_cooldown_until_ms;
+        for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+            if (host->poll_pending[poll] && host->poll_ready_at_ms[poll] > ready_at_ms) {
+                ready_at_ms = host->poll_ready_at_ms[poll];
+            }
+        }
+        if (host->uptime_ms < ready_at_ms) {
+            host->uptime_ms = ready_at_ms;
+        }
+    }
     for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
+        if (!standin_poll_take(poll)) {
+            continue;
+        }
         int32_t items = standin_poll_items(poll);
         bool is_empty = standin_poll_list_is_empty(poll);
         for (int32_t index = 0; index < (items < 0 || is_empty ? 1 : items); index++) {
             /* The firmware ends this list round and defers sibling polls
              * during a server cooldown, including polls wanted by settings. */
-            if (host->monitor_backoff && host->uptime_ms < host->retry_until_ms) {
+            if (host->uptime_ms < host->poll_cooldown_until_ms) {
                 return;
             }
             delivery_t answer = { .alarm = -1, .request = poll, .item = items < 0 || is_empty ? -1 : standin_poll_item(poll, index),
@@ -1771,13 +1789,9 @@ static void check_responses(void)
 }
 
 /* Queue admission is observed, rather than refused by the host: a violating application must fail. */
-static int32_t requests_made(void)
+static int32_t raw_requests_made(void)
 {
-    int32_t total = standin()->sends;
-    for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
-        total += standin()->polls_run[poll];
-    }
-    return total;
+    return standin()->sends;
 }
 
 static void during_backoff(void *context)
@@ -1848,13 +1862,13 @@ static void check_backoff(void)
                    "retry-after: HTTP 429 with Retry-After: %d, %d requests queued during cooldown "
                    "by reconnect, clock/settings changes, OK, timers or alarms", backoff_seconds,
                    standin()->early_requests);
-            before = requests_made();
+            before = raw_requests_made();
             if (!play(&ON_SCREEN)) {
                 break;
             }
-            expect(NETWORK, requests_made() == before,
+            expect(NETWORK, standin()->uptime_ms >= standin()->retry_until_ms || raw_requests_made() == before,
                    "retry-after: unload/focus queued %d requests one second before a %d-second cooldown ends",
-                   requests_made() - before, backoff_seconds);
+                   raw_requests_made() - before, backoff_seconds);
             standin_pass(1000);
         }
     }

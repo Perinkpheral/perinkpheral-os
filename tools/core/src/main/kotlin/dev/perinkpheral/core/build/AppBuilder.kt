@@ -99,6 +99,7 @@ class AppBuilder(private val sdk: Sdk, private val wasiSdk: File, private val sa
             val firmwareLine = when {
                 declared == firmware -> "  firmware $firmware or later, as the manifest says"
                 byCall == "RESPONSE_FORMAT" -> "  firmware $firmware or later, for response format selection"
+                byCall == "POLL_MANUAL" -> "  firmware $firmware or later, for manual polls"
                 byCall == "POLL_METHOD" -> "  firmware $firmware or later, for a poll's method or body"
                 byCall != null -> "  firmware $firmware or later, for $byCall"
                 else -> "  firmware $firmware or later"
