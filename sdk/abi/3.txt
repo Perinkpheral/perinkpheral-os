@@ -24,7 +24,7 @@ constant BTN_UP_KEYDOWN	4
 constant BTN_UP_KEYUP	5
 constant BTN_UP_LONG_PRESSED	7
 constant BTN_UP_PRESSED	6
-constant HOST_ABI_3_FIRMWARE_FIRST	"0.1.30"
+constant HOST_ABI_3_FIRMWARE_FIRST	"0.1.103"
 constant HOST_ALARM_COUNT	4
 constant HOST_ALARM_EVERY_MAX	86400
 constant HOST_ALARM_EVERY_MIN	60
@@ -72,7 +72,7 @@ constant HOST_FAILED_TOO_LARGE	-7
 constant HOST_FILES_MAX	65536
 constant HOST_FILES_WRITER_MAX	32768
 constant HOST_FILE_NAME_MAX	23
-constant HOST_FIRMWARE_FIRST	"0.1.30"
+constant HOST_FIRMWARE_FIRST	"0.1.103"
 constant HOST_FONT_DISPLAY	3
 constant HOST_FONT_HUGE	4
 constant HOST_FONT_LARGE	2
@@ -183,32 +183,6 @@ constant HOST_REDRAW_SOON	1
 constant HOST_REQUEST_FIRST	16
 constant HOST_REQUEST_LAST	255
 constant HOST_SESSION_MAX	1024
-constant HOST_SINCE_HOST_DOCUMENT_MAX	"0.1.100"
-constant HOST_SINCE_HOST_FORMAT_JSON	"0.1.100"
-constant HOST_SINCE_HOST_FORMAT_RAW	"0.1.100"
-constant HOST_SINCE_HOST_FORMAT_XML	"0.1.100"
-constant HOST_SINCE_HOST_ICON_CUBE	"0.1.84"
-constant HOST_SINCE_HOST_ICON_LAYERS	"0.1.84"
-constant HOST_SINCE_HOST_ICON_PROGRESS	"0.1.84"
-constant HOST_SINCE_HOST_MAP_AEQD	"0.1.94"
-constant HOST_SINCE_HOST_MAP_COASTLINE	"0.1.94"
-constant HOST_SINCE_HOST_MAP_WORLD	"0.1.94"
-constant HOST_SINCE_HOST_XML_LABEL	"0.1.100"
-constant HOST_SINCE_HOST_XML_REQUIRED	"0.1.100"
-constant HOST_SINCE_POLL_METHOD	"0.1.80"
-constant HOST_SINCE_RESPONSE_FORMAT	"0.1.100"
-constant HOST_SINCE_SYS_DO_WIFI_SETUP	"0.1.66"
-constant HOST_SINCE_SYS_WIFI_OFF	"0.1.66"
-constant HOST_SINCE_answer_header	"0.1.51"
-constant HOST_SINCE_app_on_document	"0.1.100"
-constant HOST_SINCE_document_buffer_set	"0.1.100"
-constant HOST_SINCE_gfx_draw_map	"0.1.94"
-constant HOST_SINCE_gfx_draw_map_radius	"0.1.94"
-constant HOST_SINCE_gfx_map_point	"0.1.94"
-constant HOST_SINCE_screen_set_inverted	"0.1.54"
-constant HOST_SINCE_xml_attr	"0.1.100"
-constant HOST_SINCE_xml_attrs	"0.1.100"
-constant HOST_SINCE_xml_child	"0.1.100"
 constant HOST_STATUS_TEXT_MAX	31
 constant HOST_TEXT_ARGUMENTS_MAX	4
 constant HOST_TEXT_MAX	127
@@ -695,15 +669,6 @@ import xml_child	i(iiiiii) grant=none
 macro BTN_ACTION_OF	(event) ((event) & 3)
 macro BTN_EVENT	(button, action) ((button) << 2 | (action))
 macro BTN_OF	(event) ((event) >> 2)
-since answer_header	0.1.51
-since document_buffer_set	0.1.100
-since gfx_draw_map	0.1.94
-since gfx_draw_map_radius	0.1.94
-since gfx_map_point	0.1.94
-since screen_set_inverted	0.1.54
-since xml_attr	0.1.100
-since xml_attrs	0.1.100
-since xml_child	0.1.100
 struct host_answer_info_t align	4
 struct host_answer_info_t size	476
 struct host_cell_t align	4

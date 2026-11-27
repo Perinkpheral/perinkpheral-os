@@ -13,6 +13,7 @@
 #include "app_internal.h"
 #include "answer_headers.h"
 #include "app_abi.h"
+#include "m3_env.h"
 
 /* The interpreter's own stack of values, apart from the application's
  * memory. */
@@ -196,6 +197,11 @@ static const uint8_t *read_name(wasm_reader_t *reader, uint32_t *length)
 #define WASM_HEADER_BYTES    8
 #define WASM_SECTION_CUSTOM  0
 #define WASM_SECTION_IMPORT  2
+#define WASM_SECTION_MEMORY  5
+#define WASM_MEMORY_HAS_MAX  1
+#define WASM_MEMORY_CUSTOM_PAGE 8
+#define WASM_STANDARD_PAGE_LOG 16
+#define WASM_LINEAR_MEMORY_MAX_BYTES 65536u
 #define WASM_IMPORT_FUNCTION 0
 
 /* wasm3 skips name subsections by adding their declared length to a
@@ -225,6 +231,31 @@ static bool check_custom_section(wasm_reader_t reader)
     return true;
 }
 
+/* The build and runtime accept the same fixed linear-memory declaration.
+ * Check it before the interpreter can allocate or execute the module. */
+static bool check_memory_section(wasm_reader_t reader)
+{
+    uint32_t count = read_leb_u32(&reader);
+    if (count == 0) {
+        return !reader.failed && reader.next == reader.end;
+    }
+    if (count != 1) {
+        return false;
+    }
+    uint32_t flags = read_leb_u32(&reader);
+    if ((flags & WASM_MEMORY_HAS_MAX) == 0 ||
+        (flags & ~(WASM_MEMORY_HAS_MAX | WASM_MEMORY_CUSTOM_PAGE)) != 0) {
+        return false;
+    }
+    uint32_t initial = read_leb_u32(&reader);
+    uint32_t maximum = read_leb_u32(&reader);
+    uint32_t page_log = (flags & WASM_MEMORY_CUSTOM_PAGE) != 0
+                            ? read_leb_u32(&reader) : WASM_STANDARD_PAGE_LOG;
+    return !reader.failed && reader.next == reader.end &&
+           page_log <= WASM_STANDARD_PAGE_LOG && initial == maximum &&
+           initial <= (WASM_LINEAR_MEMORY_MAX_BYTES >> page_log);
+}
+
 /* Whether the module's custom sections are bounded and everything it
  * imports is a function of the host API.
  * The interpreter would load a module that imports something else and
@@ -246,6 +277,10 @@ static app_load_result_t check_module(const uint8_t *wasm, size_t wasm_size, uns
         const uint8_t *section_end = reader.next + section_size;
         if (section == WASM_SECTION_CUSTOM &&
             !check_custom_section((wasm_reader_t){ reader.next, section_end, false })) {
+            return APP_ERR_BAD_MODULE;
+        }
+        if (section == WASM_SECTION_MEMORY &&
+            !check_memory_section((wasm_reader_t){ reader.next, section_end, false })) {
             return APP_ERR_BAD_MODULE;
         }
         if (section != WASM_SECTION_IMPORT) {
@@ -410,6 +445,9 @@ static app_load_result_t load_module(app_t *app, const uint8_t *wasm, size_t was
         m3_FreeModule(module);
         return load_result == m3Err_mallocFailed ? APP_ERR_NO_MEMORY : APP_ERR_BAD_MODULE;
     }
+    /* wasm3 treats a zero maximum as absent. Keep fixed zero-length memory
+     * fixed too, without changing the interpreter's representation. */
+    app->runtime->memory.maxPages = app->runtime->memory.numPages;
     return link_host_api(module) ? APP_OK : APP_ERR_OTHER_API;
 }
 

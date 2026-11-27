@@ -69,3 +69,10 @@ val argumentsTest by tasks.registering(JavaExec::class) {
 }
 tasks.check { dependsOn(argumentsTest) }
 tasks.test { failOnNoDiscoveredTests.set(false) }
+
+val contractCommandTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.perinkpheral.cli.ContractCommandTest")
+}
+tasks.check { dependsOn(contractCommandTest) }

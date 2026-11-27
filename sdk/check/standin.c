@@ -847,7 +847,7 @@ int32_t time_text(int64_t unix_time, int32_t style, char *text, int32_t capacity
     static const char *const MONTHS[] = { "January", "February", "March", "April", "May", "June", "July",
                                           "August", "September", "October", "November", "December" };
     standin();
-    if (text == NULL || capacity <= 0 || !is_moment(unix_time) || style < HOST_TIME_CLOCK ||
+    if (text == NULL || capacity < 0 || !is_moment(unix_time) || style < HOST_TIME_CLOCK ||
         style > HOST_TIME_WEEKDAY_SHORT) {
         return HOST_ERR_ARGUMENT;
     }

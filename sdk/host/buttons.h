@@ -38,7 +38,7 @@
  * BTN_BACK_KEYDOWN without BTN_BACK_KEYUP for that hold.
  *
  * BACK held and UP or DOWN pressed opens the previous or the next application
- * of the menu (firmware 0.1.63). Such a press of UP or DOWN is delivered to no
+ * of the menu. Such a press of UP or DOWN is delivered to no
  * application, and the hold of BACK is then neither a short nor a long press:
  * the application sees BTN_BACK_KEYDOWN and nothing more of it. */
 APP_EXPORT(app_on_back, void app_on_back(void));

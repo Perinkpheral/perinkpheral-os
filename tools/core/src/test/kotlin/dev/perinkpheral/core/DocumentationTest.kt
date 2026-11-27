@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 package dev.perinkpheral.core
 
+import dev.perinkpheral.core.build.BuildFlags
+import dev.perinkpheral.core.build.Sdk
+import dev.perinkpheral.core.build.versionNumber
 import java.io.File
 
 /** Regression checks for the documented exceptions a caller must account for. */
@@ -90,7 +93,27 @@ object DocumentationTest {
             read("docs/guide/source/guide.ru.txt") to "Сопоставлять параллельные списки по индексам безопасно")
         check("two lists of one array stay in step" !in network)
         check("a {{setting}} used by the request is empty" !in network)
-        check(findings == 29)
+        val sdk = Sdk(root)
+        val base = read("sdk/host/base.h").replace(" * ", " ")
+        val umbrella = read("sdk/host_api.h").replace(" * ", " ")
+        finding(30, base to "negative result means failure", base to "unknown negative",
+            base to "ignore unknown events, intents and enum values", base to "unknown output flag bits",
+            guide to "negative results mean failure", guide to "Ignore unknown output flag bits")
+        finding(31, umbrella to "at most 64 KB (65536 bytes)",
+            umbrella to "at least 112 KB (114688 bytes)", umbrella to "not compatibility promises",
+            guide to "112 KB (114688 bytes)", guide to "not compatibility promises",
+            read("docs/guide/source/guide.ru.txt") to "не являются обещаниями совместимости")
+        finding(32, read("sdk/host/app.h").replace(" * ", " ") to
+            "a file in the incoming package replaces an existing file of the same name",
+            guide to "incoming package file replaces an existing file of the same name")
+        check(sdk.contract.string("HOST_ABI_3_FIRMWARE_FIRST") == sdk.firmwareFirst)
+        check(versionNumber(sdk.firmwareFirst)!! <= versionNumber(sdk.version)!!)
+        check(BuildFlags.WASM_PAGE == 65536 && BuildFlags.APP_AREA >= 112 * 1024)
+        val areaHeader = read("firmware/components/wasm3/m3_area.h")
+        val area = Regex("#define M3_AREA_BYTES \\((\\d+) \\* 1024\\)").find(areaHeader)!!
+            .groupValues[1].toInt() * 1024
+        check(area >= BuildFlags.APP_AREA)
+        check(findings == 32)
         println("DocumentationTest: $findings findings checked")
     }
 }
