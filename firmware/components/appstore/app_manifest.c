@@ -838,7 +838,11 @@ bool app_manifest_allows_url(const char *json, const char *url,
         return false;
     }
     json_t *root = json_parse(json);
+    if (root == NULL) {
+        return false;
+    }
     bool   allowed = false;
+    bool   allocation_failed = false;
     const json_t *listed;
     json_for_each(listed, json_get(root, "hosts"))
     {
@@ -857,7 +861,10 @@ bool app_manifest_allows_url(const char *json, const char *url,
             }
             memcpy(key, listed->text + 2, key_length);
             key[key_length] = '\0';
-            if (value_of(context, key, server, sizeof server) && host_in_url(server, &named) &&
+            errno = 0;
+            bool has_value = value_of(context, key, server, sizeof server);
+            allocation_failed |= !has_value && errno == ENOMEM;
+            if (has_value && host_in_url(server, &named) &&
                 is_same_name(&named, &host) && named.port == host.port) {
                 allowed = true;
                 break;
@@ -874,6 +881,8 @@ bool app_manifest_allows_url(const char *json, const char *url,
         }
     }
     json_free(root);
+    /* Parsing a later setting's default may clear an earlier allocation failure. */
+    errno = !allowed && allocation_failed ? ENOMEM : 0;
     return allowed;
 }
 

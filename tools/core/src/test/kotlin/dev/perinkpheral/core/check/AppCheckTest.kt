@@ -356,7 +356,6 @@ object AppCheckTest {
         Triple("firmware/components/ui/kit.c", "KEY_ACTION_GAP", "KEY_ACTION_GAP"),
         Triple("firmware/components/ui/kit.c", "VALUE_UNIT_GAP", "VALUE_UNIT_GAP"),
         Triple("firmware/components/ui/kit.c", "VALUE_UNIT_GAP_LARGE", "VALUE_UNIT_GAP_LARGE"),
-        Triple("firmware/components/ui/kit.c", "TEXT_BUFFER", "KIT_TEXT_BUFFER"),
         Triple("firmware/components/ui/list.c", "ROW_HEIGHT", "LIST_ROW_HEIGHT"),
         Triple("firmware/components/ui/list.c", "TOP_GAP", "LIST_TOP_GAP"),
         Triple("firmware/components/appsys/app_api_ui.c", "BUTTON_NAME_MAX", "BUTTON_NAME_MAX"),
@@ -376,6 +375,11 @@ object AppCheckTest {
         for ((file, there, ours) in PINS) {
             val theirs = defines(File(root, file))[there] ?: error("$file no longer defines $there")
             check(here[ours] == theirs) { "standin.c's $ours is ${here[ours]}, $file's $there is $theirs" }
+        }
+        val multiline = defines(File(root, "firmware/components/ui/include/kit.h"))["KIT_TEXT_LINES_MAX"]
+        val apiMultiline = defines(File(root, "sdk/host/ui.h"))["HOST_UI_TEXT_LINES_MAX"]
+        check(multiline != null && multiline == apiMultiline) {
+            "the kit's multiline limit $multiline is not the stand-in's contract limit $apiMultiline"
         }
         val scratch = defines(File(root, "firmware/components/map/include/map.h"))["MAP_SCRATCH_BYTES"]
         check(scratch == dev.perinkpheral.core.build.AppBuilder.MAP_WORKING_BYTES.toString()) {

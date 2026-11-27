@@ -8,6 +8,7 @@
 
 _Static_assert(HOST_ICON_COUNT == GFX_ICON_COUNT, "the contract's icons are the host's");
 _Static_assert(HOST_ICON_SUNSET == GFX_ICON_SUNSET, "in the same order");
+_Static_assert(HOST_UI_TEXT_LINES_MAX == KIT_TEXT_LINES_MAX, "the kit holds the full multiline input");
 
 static bool is_valid_icon(int32_t icon)
 {

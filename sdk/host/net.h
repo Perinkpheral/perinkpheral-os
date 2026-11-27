@@ -293,6 +293,8 @@ HOST_IMPORT(poll_run, int32_t poll_run(int32_t poll));
  *              the same current KV snapshot. After a settings change a
  *              queued request whose destination is no longer allowed fails
  *              with HOST_FAILED_NOT_ALLOWED; it is never silently retargeted.
+ *              Allocation failure during this authorization gives HOST_FAILED_NO_MEMORY;
+ *              later setting lookups cannot turn it into HOST_FAILED_NOT_ALLOWED.
  *              Missing/invalid header values give HOST_FAILED_NOT_READY.
  *              Once prepared, a request keeps that snapshot even if settings
  *              change during transmission. Body bytes are copied at queue time.

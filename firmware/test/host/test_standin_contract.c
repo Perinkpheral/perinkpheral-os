@@ -629,7 +629,17 @@ static void test_counted_headers_and_multiline(void)
     word[160] = '\0';
     standin()->is_drawing = true;
     alarm(3);
-    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, word, 160, 400, 4) == 2);
+    standin()->draw_text[0] = '\0';
+    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, word, 160, 400, 1) == 1);
+    char expected[sizeof word + 1];
+    snprintf(expected, sizeof expected, "%s\n", word);
+    CHECK_STR(standin()->draw_text, expected);
+    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, word, 160, 400, 4) == 1);
+    standin()->draw_text[0] = '\0';
+    CHECK(ui_draw_text_lines(0, 0, HOST_UI_CAPTION, word, 160, 140, 1) == 1);
+    memcpy(expected, word, 17 * 4);
+    strcpy(expected + 17 * 4, "...\n");
+    CHECK_STR(standin()->draw_text, expected);
     alarm(0);
     char spaces[203];
     memset(spaces, ' ', sizeof spaces);

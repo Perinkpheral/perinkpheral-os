@@ -5,9 +5,22 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <errno.h>
+#include "app_manifest.h"
 
 static bool refuse_job_allocation, refuse_body_template;
+static bool refuse_authorization;
 static void (*before_read_line)(void);
+
+static bool test_allows_url(const char *manifest, const char *url,
+                            app_manifest_value_fn value_of, void *context)
+{
+    if (refuse_authorization) {
+        errno = ENOMEM;
+        return false;
+    }
+    return app_manifest_allows_url(manifest, url, value_of, context);
+}
 
 static void *test_calloc(size_t count, size_t size)
 {
@@ -51,7 +64,9 @@ static time_t test_wall_time(time_t *out)
 #define calloc test_calloc
 #define strdup test_strdup
 #define getline test_getline
+#define app_manifest_allows_url test_allows_url
 #include "sim.c"
+#undef app_manifest_allows_url
 #undef getline
 #undef strdup
 #undef calloc
@@ -246,6 +261,17 @@ static void test_time_and_recurrence(void)
 
 static void test_preparation_memory_failure(void)
 {
+    s_manifest_json = strdup("{\"hosts\":[\"example.test\"]}");
+    job_t *request = calloc(1, sizeof *request);
+    assert(request != NULL);
+    snprintf(request->url, sizeof request->url, "https://example.test/file");
+    refuse_authorization = true;
+    prepare_job(request);
+    refuse_authorization = false;
+    assert(request->status == HOST_FAILED_NO_MEMORY);
+    free_job(request);
+    free(s_manifest_json);
+    s_manifest_json = NULL;
     for (int is_poll = 0; is_poll <= 1; is_poll++) {
         job_t *job = calloc(1, sizeof *job);
         assert(job != NULL);

@@ -254,13 +254,36 @@ static void test_text_lines(void)
         memcpy(multibyte + 4 * index, "😀", 4);
     }
     multibyte[160] = '\0';
-    /* A full byte buffer must finish the line even after backing up over UTF-8. */
-    alarm(5);
-    CHECK(kit_text_lines(&g, 0, 0, KIT_CAPTION, multibyte, 400, 4) == 2);
-    alarm(0);
     static uint8_t expected[sizeof frame];
     gfx_t reference;
     gfx_init(&reference, expected, 400, 300);
+    alarm(5);
+    gfx_clear(&g, false);
+    gfx_clear(&reference, false);
+    CHECK(gfx_text_font_width(kit_font(KIT_CAPTION), multibyte) == 280);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_CAPTION, multibyte, 400, 1) == 1);
+    gfx_text_font(&reference, 0, gfx_font_ascent(kit_font(KIT_CAPTION)),
+                  kit_font(KIT_CAPTION), multibyte, true);
+    CHECK(memcmp(frame, expected, sizeof frame) == 0);
+    CHECK(kit_text_lines(&g, 0, 0, KIT_CAPTION, multibyte, 400, 4) == 1);
+    alarm(0);
+    /* The full input may fit one line; truncation must keep whole characters and dots. */
+    char longest[HOST_UI_TEXT_LINES_MAX + 1];
+    for (int index = 0; index < HOST_UI_TEXT_LINES_MAX / 4; index++) {
+        memcpy(longest + 4 * index, "😀", 4);
+    }
+    longest[HOST_UI_TEXT_LINES_MAX] = '\0';
+    const int widths[] = { 400, 1024 };
+    for (int sample = 0; sample < 2; sample++) {
+        char fitted[sizeof longest];
+        gfx_fit_text(kit_font(KIT_CAPTION), longest, widths[sample], fitted, sizeof fitted);
+        gfx_clear(&g, false);
+        gfx_clear(&reference, false);
+        CHECK(kit_text_lines(&g, 0, 0, KIT_CAPTION, longest, widths[sample], 1) == 1);
+        gfx_text_font(&reference, 0, gfx_font_ascent(kit_font(KIT_CAPTION)),
+                      kit_font(KIT_CAPTION), fitted, true);
+        CHECK(memcmp(frame, expected, sizeof frame) == 0);
+    }
     const char *texts[] = { "wordwordword", "éééééééééééé" };
     const char *parts[][3] = { { "word", "word", "word" }, { "éééé", "éééé", "éééé" } };
     for (int family = GFX_FAMILY_DEPARTURE_MONO; family <= GFX_FAMILY_JERSEY; family++) {

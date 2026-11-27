@@ -242,6 +242,9 @@ bool app_manifest_accepts_setting(const char *json, const char *key, const char 
 #define APP_HOST_MAX  MANIFEST_HOST_MAX
 typedef bool (*app_manifest_value_fn)(void *context, const char *key, char *value,
                                       size_t value_size);
+/* False with errno ENOMEM if authorization could not finish due to allocation failure,
+ * including a setting lookup; later entries cannot clear that failure. A matching
+ * entry still authorizes the destination. */
 bool app_manifest_allows_url(const char *json, const char *url,
                              app_manifest_value_fn value_of, void *context);
 

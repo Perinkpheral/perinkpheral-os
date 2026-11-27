@@ -11,7 +11,7 @@
 
 #include "gfx_icons.h"
 
-#define TEXT_BUFFER 128 /* bound native stack use while wrapping longer application text */
+#define TEXT_BUFFER (KIT_TEXT_LINES_MAX + 1) /* a whole multiline input and its terminator */
 
 /* ---- primitives ---- */
 
@@ -45,10 +45,9 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
     int  end = 0, fits = 0, after = 0;
     for (;;) {
         /* to the end of the next word */
-        while (text[end] != '\0' && text[end] != ' ' && end < TEXT_BUFFER - 1) {
+        while (text[end] != '\0' && text[end] != ' ') {
             end++;
         }
-        bool buffer_full = end == TEXT_BUFFER - 1;
         while (end > 0 && gfx_is_utf8_tail(text[end])) {
             end--;
         }
@@ -90,8 +89,7 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
         while (text[after] == ' ') {
             after++;
         }
-        if (text[after] == '\0' || buffer_full || after >= TEXT_BUFFER - 1 ||
-            gfx_text_font_width(font, line) > width) {
+        if (text[after] == '\0') {
             break;
         }
         end = after;
@@ -103,6 +101,9 @@ static int line_of(const gfx_font_t *font, const char *text, int width, int *nex
 int kit_text_lines(gfx_t *g, int left, int top, kit_style_t style, const char *text, int width,
                    int max_lines)
 {
+    char input[TEXT_BUFFER];
+    gfx_text_copy(input, sizeof input, text);
+    text = input;
     const gfx_font_t *font = kit_font(style);
     int lines = 0;
     while (*text == ' ') {
@@ -120,6 +121,9 @@ int kit_text_lines(gfx_t *g, int left, int top, kit_style_t style, const char *t
         while (at < bytes && from[at] != '\0') {
             line[at] = from[at];
             at++;
+        }
+        while (at > 0 && gfx_is_utf8_tail(from[at])) {
+            at--;
         }
         line[at] = '\0';
         kit_text(g, left, top + lines * gfx_font_height(font), style, line, width);

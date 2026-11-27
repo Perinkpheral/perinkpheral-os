@@ -1937,7 +1937,6 @@ static const int32_t STYLE_FONTS[] = {
 #define VALUE_UNIT_GAP       5
 #define VALUE_UNIT_GAP_LARGE 12
 #define BUTTON_NAME_MAX      8
-#define KIT_TEXT_BUFFER      128 /* kit.c's TEXT_BUFFER */
 #define TITLE_TOP        10 /* kit.c: the title's top, the gap under its letters, the rule, the gap after */
 #define TITLE_RULE_GAP   8
 #define TITLE_AFTER_RULE 10
@@ -2053,10 +2052,11 @@ static int32_t text_width(int32_t font, const char *text, int32_t length)
 }
 
 /* The text cut with "..." to a width; returns its length. */
-static int32_t fit(int32_t font, const char *text, int32_t length, int32_t max_width, char *fitted)
+static int32_t fit_limited(int32_t font, const char *text, int32_t length, int32_t max_width,
+                           char *fitted, int32_t limit)
 {
-    length = counted_text_length(text, length, HOST_TEXT_MAX);
-    if (text_width(font, text, length) <= max_width) {
+    length = counted_text_length(text, length, limit);
+    if (characters(text, length) * advance_of(font) <= max_width) {
         copy(fitted, text, (size_t)length);
         return length;
     }
@@ -2071,9 +2071,17 @@ static int32_t fit(int32_t font, const char *text, int32_t length, int32_t max_w
     while (kept > 0 && kept < length && ((uint8_t)text[kept] & 0xC0) == 0x80) {
         kept--;
     }
+    while (kept > 0 && text[kept - 1] == ' ') {
+        kept--;
+    }
     copy(fitted, text, (size_t)kept);
     copy(fitted + kept, "...", 3);
     return kept + 3;
+}
+
+static int32_t fit(int32_t font, const char *text, int32_t length, int32_t max_width, char *fitted)
+{
+    return fit_limited(font, text, length, max_width, fitted, HOST_TEXT_MAX);
 }
 
 static int32_t surface_width(void)
@@ -2533,24 +2541,23 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
 {
     int32_t end = 0, fits = 0, after = 0;
     for (;;) {
-        while (text[end] != '\0' && text[end] != ' ' && end < KIT_TEXT_BUFFER - 1) {
+        while (text[end] != '\0' && text[end] != ' ') {
             end++;
         }
-        bool buffer_full = end >= KIT_TEXT_BUFFER - 1;
         while (end > 0 && is_utf8_tail(text[end])) {
             end--;
         }
-        if (text_width(font, text, end) > width && fits > 0) {
+        if (characters(text, end) * advance_of(font) > width && fits > 0) {
             break;
         }
-        if (text_width(font, text, end) > width) {
+        if (characters(text, end) * advance_of(font) > width) {
             int32_t boundary = end;
             while (boundary > 0) {
                 boundary--;
                 while (boundary > 0 && is_utf8_tail(text[boundary])) {
                     boundary--;
                 }
-                if (boundary > 0 && text_width(font, text, boundary) <= width) {
+                if (boundary > 0 && characters(text, boundary) * advance_of(font) <= width) {
                     end = boundary;
                     break;
                 }
@@ -2572,8 +2579,7 @@ static int32_t line_of(int32_t font, const char *text, int32_t width, int32_t *n
         while (text[after] == ' ') {
             after++;
         }
-        if (text[after] == '\0' || buffer_full || after >= KIT_TEXT_BUFFER - 1 ||
-            text_width(font, text, end) > width) {
+        if (text[after] == '\0') {
             break;
         }
         end = after;
@@ -2596,7 +2602,14 @@ static int32_t text_lines(int32_t font, const char *given, int32_t length, int32
     }
     while (*text != '\0' && lines < max_lines) {
         int32_t next = 0;
-        line_of(font, text, width, &next);
+        int32_t bytes = line_of(font, text, width, &next);
+        if (lines == max_lines - 1 && text[next] != '\0') {
+            bytes = (int32_t)strlen(text);
+        }
+        char fitted[HOST_UI_TEXT_LINES_MAX + 1];
+        int32_t shown = fit_limited(font, text, bytes, width, fitted, HOST_UI_TEXT_LINES_MAX);
+        record_text(fitted, shown);
+        mix(fitted, (size_t)shown);
         lines++;
         text += next;
     }
@@ -2616,8 +2629,6 @@ int32_t ui_draw_text_lines(int32_t x, int32_t y, int32_t style, const char *text
     int32_t numbers[] = { x, y, style, width, max_lines };
     mix(numbers, sizeof numbers);
     length = counted_text_length(text, length, HOST_UI_TEXT_LINES_MAX);
-    record_text(text, length);
-    mix(text, (size_t)length);
     int32_t lines = text_lines(STYLE_FONTS[style], text, length, width, max_lines);
     if (lines == 0) {
         world->draw_calls--; /* kit_text_lines() draws no line of an empty text */

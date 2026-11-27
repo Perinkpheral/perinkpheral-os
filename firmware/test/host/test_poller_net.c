@@ -15,6 +15,9 @@ static void *request_malloc(size_t size);
 
 static int json_allocations, fail_json_at;
 static bool json_only_authorization, in_host_loop;
+static bool use_setting_defaults;
+static const char *fail_default_key;
+static int default_lookups;
 /* ESP-IDF allocators need not set errno when they return NULL. */
 static bool refuse_json_allocation(void)
 {
@@ -154,7 +157,17 @@ void mbedtls_x509_crt_init(mbedtls_x509_crt *chain) { memset(chain, 0, sizeof *c
 void mbedtls_x509_crt_free(mbedtls_x509_crt *chain) { (void)chain; }
 int mbedtls_x509_crt_parse_der(mbedtls_x509_crt *chain, const unsigned char *bytes, size_t length) { certificate_parse_calls++; chain->ca_istrue = parsed_ca; chain->next = parsed_extra ? chain : NULL; (void)bytes; (void)length; return 0; }
 void mbedtls_ssl_conf_ca_chain(mbedtls_ssl_config *config, mbedtls_x509_crt *chain, void *revocations) { (void)config; (void)chain; (void)revocations; }
-int32_t app_kv_get_or_default(const char *name, const char *key, void *value, int32_t capacity) { (void)name; (void)key; (void)value; (void)capacity; return HOST_ERR_NOT_FOUND; }
+int32_t app_kv_get_or_default(const char *name, const char *key, void *value, int32_t capacity)
+{
+    (void)name;
+    if (!use_setting_defaults) return HOST_ERR_NOT_FOUND;
+    default_lookups++;
+    bool fail_default = fail_default_key != NULL && strcmp(key, fail_default_key) == 0;
+    if (fail_default) fail_json_at = json_allocations + 1;
+    int length = app_manifest_setting_default(manifest_json, key, value, (size_t)capacity);
+    if (fail_default) fail_json_at = 0;
+    return length;
+}
 char *app_store_read_manifest(const char *root, const char *name) { (void)root; (void)name; if (fail_manifest) { errno = ENOMEM; return NULL; } return manifest_json == NULL ? NULL : strdup(manifest_json); }
 long app_store_file_size(const char *root, const char *name, const char *file) { (void)root; (void)name; (void)file; return -1; }
 long app_store_read_file(const char *root, const char *name, const char *file, long offset, void *bytes, size_t capacity) { (void)root; (void)name; (void)file; (void)offset; (void)bytes; (void)capacity; return -1; }
@@ -175,6 +188,9 @@ static void reset(void)
     fail_request_allocation = fail_list_allocation = fail_client_init = fail_manifest = false;
     json_allocations = fail_json_at = 0;
     json_only_authorization = in_host_loop = false;
+    use_setting_defaults = false;
+    fail_default_key = NULL;
+    default_lookups = 0;
     header_error = ESP_OK;
     content_length_override = -2;
     content_type = "application/json";
@@ -338,6 +354,26 @@ static void test_poll_memory_failures(void)
             CHECK(delivered_status == HOST_FAILED_NO_MEMORY);
             CHECK(delivered_only_on_screen == !authorization);
         }
+    }
+    for (int failed = 0; failed < 2; failed++) {
+        reset();
+        manifest_json = "{\"hosts\":[\"{{first}}\",\"{{second}}\"],\"settings\":["
+            "{\"key\":\"first\",\"title\":\"First\",\"type\":\"url\",\"default\":\"https://example.test\"},"
+            "{\"key\":\"second\",\"title\":\"Second\",\"type\":\"url\",\"default\":\"https://other.test\"}]}";
+        use_setting_defaults = true;
+        fail_default_key = failed == 0 ? "first" : "second";
+        poller_ask_t request = { .number = INT32_MAX,
+            .url = failed == 0 ? "https://example.test/file" : "https://other.test/file" };
+        poller_net_request("probe", &request);
+        CHECK(default_lookups == 2);
+        CHECK(delivered_status == HOST_FAILED_NO_MEMORY && !delivered_only_on_screen);
+        CHECK(cleanups == 0);
+        default_lookups = 0;
+        delivered_status = 0;
+        fail_default_key = NULL;
+        request.url = "https://example.test/file";
+        poller_net_request("probe", &request);
+        CHECK(default_lookups >= 1 && delivered_status == 200 && cleanups == 1);
     }
     reset();
     header_error = ESP_ERR_NO_MEM;

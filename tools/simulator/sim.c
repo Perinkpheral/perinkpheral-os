@@ -946,7 +946,7 @@ static void prepare_job(job_t *job)
         snprintf(job->url, sizeof job->url, "%s", url);
     }
     if (!job->is_poll && !app_manifest_allows_url(job->manifest, job->url, job_setting, job)) {
-        job->status = HOST_FAILED_NOT_ALLOWED;
+        job->status = errno == ENOMEM ? HOST_FAILED_NO_MEMORY : HOST_FAILED_NOT_ALLOWED;
         return;
     }
     for (int i = 0; i < job->header_count; i++) {

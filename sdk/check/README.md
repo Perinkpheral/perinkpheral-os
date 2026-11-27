@@ -124,6 +124,15 @@ defect of the checks:
   destination-change secret clearing performed by the settings API.
 - The system API (`sys_*`) is not stood in for.
 
+Multiline text uses the full `HOST_UI_TEXT_LINES_MAX` input limit for each line,
+wraps by measured width and records the text actually drawn, including UTF-8-safe
+truncation with `...` on the last line. A line that fits retains every character.
+Native checks approximate text width with Departure Mono metrics; simulator frames
+use the firmware renderer. The stand-in resolves allowlisted settings from prepared
+tables without parsing or allocating. Firmware tests inject allocation failures
+while resolving multiple `hosts` defaults: absent another matching entry, a queued
+request reports `HOST_FAILED_NO_MEMORY` even after a later lookup succeeds.
+
 Interpreter tests cover memory validation; simulator frames cover rendering; device tests
 cover the shared application area, panel and timing. A checker process must exit zero even
 when it printed successful results for every requested capability.

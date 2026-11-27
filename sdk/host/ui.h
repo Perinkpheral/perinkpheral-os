@@ -108,8 +108,10 @@ HOST_IMPORT(ui_draw_text, int32_t ui_draw_text(int32_t x, int32_t y, int32_t sty
 /* ui_draw_text_lines: text wrapped to `width`, preferring spaces and splitting
  * overlong words at UTF-8 character boundaries, at most `max_lines` lines
  * (1..HOST_UI_LINES_MAX). Input is cut to HOST_UI_TEXT_LINES_MAX bytes
- * between UTF-8 characters. The first NUL ends the text. The last line is cut with "..." if text
- * remains. Line height is ui_text_height() of the style. Returns the
+ * between UTF-8 characters. The first NUL ends the text. A fitting line keeps
+ * every character regardless of byte length. The last line is cut between
+ * characters with "..." if text remains; it is empty if the dots do not fit.
+ * Line height is ui_text_height() of the style. Returns the
  * number of lines drawn.
  *
  * ui_text_width, ui_text_height: text width and line height of a style.

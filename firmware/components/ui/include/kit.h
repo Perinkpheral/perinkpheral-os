@@ -39,9 +39,10 @@ const gfx_font_t *kit_font(kit_style_t style);
  * with "..." to this width; 0: no limit. Returns the width drawn. */
 int kit_text(gfx_t *g, int left, int top, kit_style_t style, const char *text, int max_width);
 
-/* Draws text on up to `max_lines` lines of `width`, broken at spaces.
+/* Draws up to KIT_TEXT_LINES_MAX bytes on `max_lines` lines of `width`, broken at spaces.
  * The last line is cut with "..." when text remains. A word wider than
- * `width` is cut. Returns the number of lines drawn. */
+ * `width` is split between UTF-8 characters. Returns the number of lines drawn. */
+#define KIT_TEXT_LINES_MAX 512
 int kit_text_lines(gfx_t *g, int left, int top, kit_style_t style, const char *text, int width,
                    int max_lines);
 
