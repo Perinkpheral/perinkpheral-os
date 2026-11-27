@@ -19,7 +19,7 @@ import java.time.ZoneOffset
  * (WASI_SDK_PATH) only what needs neither is tested, and it says so.
  */
 object AppCheckTest {
-    private enum class PollEdit { REMOVE, REQUIRE_SETTING }
+    private enum class PollEdit { REMOVE, REQUIRE_SETTING, ADD_MANUAL }
 
     /** One line of the contract broken in the specimen, and the capability that has to notice. */
     private class Break(val capability: String, val what: String, val edits: List<Pair<String, String>>, val saying: String,
@@ -35,6 +35,7 @@ object AppCheckTest {
         when (edit) {
             PollEdit.REMOVE -> manifest.remove("polls")
             PollEdit.REQUIRE_SETTING -> manifest["polls"] = listOf(poll + ("headers" to mapOf("X-Token" to "{{server}}")))
+            PollEdit.ADD_MANUAL -> manifest["polls"] = listOf(poll, poll + ("manual" to true))
         }
         file.writeText(Json.write(manifest))
     }
@@ -50,7 +51,48 @@ object AppCheckTest {
         "    if (is_same(row, \"null\")) {\n        return;\n    }" to
             "    if (row_length <= 0 || is_same(row, \"null\")) {\n        row[0] = '-';\n        row[1] = '\\0';\n    }")
 
+    private val MANUAL_TOGGLE_EDITS = listOf(
+        "    ask_note();" to "    (void)ask_note;",
+        "#define TEXT_BYTES     96" to "#define TEXT_BYTES     96\n#define MANUAL_MODE    2",
+        "void app_on_button(int32_t event)\n{" to """
+            void app_on_button(int32_t event)
+            {
+                if (event == BTN_UP_LONG_PRESSED) {
+                    page ^= MANUAL_MODE;
+                    poll_run(0);
+                    screen_redraw(HOST_REDRAW_NORMAL);
+                    return;
+                }
+        """.trimIndent(),
+        "if (page == 0)" to "if ((page & 1) == 0)",
+        "page = 1;" to "page |= 1;",
+        "page = 0;" to "page &= ~1;",
+        "void app_on_draw(void)\n{" to """
+            void app_on_draw(void)
+            {
+                gfx_draw_text(MARGIN, 140, HOST_FONT_SMALL, (page & MANUAL_MODE) ? "Near" : "World",
+                              (page & MANUAL_MODE) ? 4 : 5);
+        """.trimIndent())
+    private val MANUAL_POLL = listOf("\"every\": 60" to "\"manual\": true")
+    private val MANUAL_TRIGGER = mapOf("request_presses" to "u")
+
     private val BREAKS = listOf(
+        Break("sessions", "a toggling request trigger must not conceal a lost navigation mode",
+            MANUAL_TOGGLE_EDITS + listOf("    int32_t saved = session_set(&page, sizeof page);" to
+                "    int32_t resume_page = page & ~MANUAL_MODE;\n" +
+                "    int32_t saved = session_set(&resume_page, sizeof resume_page);"), "back from the stack",
+            manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER),
+        Break("store", "manual response replays still retry refused saves without toggling the view",
+            MANUAL_TOGGLE_EDITS + listOf("    if (is_same(kept, text) && !*is_unsaved) {" to
+                "    if (is_same(kept, text)) {"), "not saved when the same answer comes again",
+            manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER),
+        Break("network", "a requested manual poll reaches a fresh background instance",
+            MANUAL_TOGGLE_EDITS + listOf("static int32_t count;" to
+                "static bool was_focused;\nstatic int32_t count;",
+                "void app_on_focus(void)\n{" to "void app_on_focus(void)\n{\n    was_focused = true;",
+                "void app_on_picked(int32_t request, int32_t http_status)\n{" to
+                    "void app_on_picked(int32_t request, int32_t http_status)\n{\n    if (!was_focused) __builtin_trap();"),
+            "app_on_picked", manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER),
         Break("store", "a failed restore can delete state during app_on_load",
             listOf("    kv_get(\"count\", 5, &count, sizeof count);" to
                 "    if (kv_get(\"count\", 5, &count, sizeof count) == HOST_ERR_FAILED) kv_set(\"count\", 5, NULL, 0);"),
@@ -359,7 +401,18 @@ object AppCheckTest {
     }
 
     /** Copies of the specimen that are right, if unusual: the capability passes them. */
-    private val FINE = listOf(
+    private val FINE = listOf("sessions", "store", "network", "clock").map { capability ->
+        Break(capability, "a manual trigger toggles the view once, preserving navigation and response comparisons",
+            MANUAL_TOGGLE_EDITS, "", manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER)
+    } + listOf(
+        Break("network", "requesting one manual poll never delivers its unrequested sibling",
+            MANUAL_TOGGLE_EDITS + listOf("void app_on_picked(int32_t request, int32_t http_status)\n{" to
+                "void app_on_picked(int32_t request, int32_t http_status)\n{\n    if (request == 1) __builtin_trap();"), "",
+            manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER, pollEdit = PollEdit.ADD_MANUAL),
+        Break("network", "reserving session storage on focus does not suppress a fresh manual trigger",
+            MANUAL_TOGGLE_EDITS + listOf("    session_get(&page, sizeof page);" to
+                "    session_get(&page, sizeof page);\n    session_set(&page, sizeof page);"), "",
+            manifestEdits = MANUAL_POLL, checkPatch = MANUAL_TRIGGER),
         Break("timers", "replacement cancels a request watchdog without recreating it",
             listOf("    ask_note();\n}" to "    ask_note();\n    alarm_set(2, 60);\n}"), ""),
         Break("timers", "replacement can restore the recurring alarm at its background interval",

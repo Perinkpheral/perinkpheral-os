@@ -544,7 +544,13 @@ static void answer_manifest_polls(const round_t *round, int32_t response_refusal
         }
     }
     for (int32_t poll = 0; poll < standin_subject.poll_count; poll++) {
-        if (!standin_poll_take(poll)) {
+        bool taken = standin_poll_take(poll);
+        /* Declared button triggers prepare work for invariant comparisons without
+         * repeated navigation. Other manual work keeps the application's cadence;
+         * Retry-After probes keep the scheduler's admission and cooldowns. */
+        bool replay = standin_subject.request_presses != NULL && !host->monitor_backoff &&
+                      standin_subject.polls[poll].manual && host->polls_run[poll] > 0;
+        if (!taken && !replay) {
             continue;
         }
         int32_t items = standin_poll_items(poll);
@@ -571,10 +577,20 @@ static void answer_manifest_polls(const round_t *round, int32_t response_refusal
 
 static void press(char key);
 
+static bool requests_triggered;
+
+static void load_foreground(void)
+{
+    /* app_on_focus() may reserve session storage before the initial trigger. */
+    requests_triggered = standin()->session_length > 0;
+    standin_load();
+}
+
 static void trigger_requests(void)
 {
     standin_t *host = standin();
-    if (!is_away) {
+    if (!is_away && !requests_triggered) {
+        requests_triggered = true;
         for (const char *key = standin_subject.request_presses; key != NULL && *key != '\0' && !host->is_leaving; key++) {
             press(*key);
         }
@@ -666,7 +682,7 @@ static void scene_run(void *context)
     if (!is_away) {
         int32_t previous = host->refuse_restore_reads;
         host->refuse_restore_reads = scene->load_read_refusal;
-        standin_load();
+        load_foreground();
         host->refuse_restore_reads = previous;
     } else if (scene->is_updated) {
         hand(&(delivery_t){ .alarm = -1, .is_updated = true });
@@ -1565,9 +1581,7 @@ static void check_network(void)
          * On return, answer a fresh request if focus or its timer asks for one. */
         scene_t reopened = { .retry_round = 1, .rounds = { { ROUND_WHOLE, 0, 0 } } };
         const scene_t *returned = standin_subject.poll_count == 0 ? &reopened : &ON_SCREEN;
-        /* A manual poll needs another foreground trigger before the next background answer. */
-        if (play(&ON_SCREEN) && play(&away) && (!has_manual || play(&ON_SCREEN)) &&
-            play(&then) && play(returned)) {
+        if (play(&ON_SCREEN) && play(&away) && play(&then) && play(returned)) {
             expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive || deferred_recovery,
                    "%s, then a whole answer off the screen, then on the screen: it shows another picture than "
                    "after the whole answer alone", told(&away));
@@ -1596,7 +1610,7 @@ static void session_refusal_run(void *context)
 {
     const scene_t *scene = context;
     const char *way = scene->presses;
-    standin_load();
+    load_foreground();
     standin_focus();
     if (has_polls_or_requests) {
         answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });
@@ -1649,7 +1663,7 @@ static void check_session_refusal(void)
 static void elapsed_answers(void *context)
 {
     (void)context;
-    standin_load();
+    load_foreground();
     standin_focus();
     answer_round(&(round_t){ ROUND_CACHE, 0, 0 });
     ask_again();
@@ -1949,7 +1963,7 @@ static void during_backoff(void *context)
 {
     bool repeat = *(const bool *)context;
     standin_t *host = standin();
-    standin_load();
+    load_foreground();
     standin_focus();
     shown.is_shown = false;
     show();
@@ -2035,7 +2049,7 @@ static void clock_crossing(void *context)
 {
     const clock_crossing_t *crossing = context;
     int64_t boundary = crossing->boundary;
-    standin_load();
+    load_foreground();
     standin_focus();
     if (has_polls_or_requests) {
         answer_round(&(round_t){ ROUND_WHOLE, 0, 0 });

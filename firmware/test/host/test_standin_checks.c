@@ -52,6 +52,9 @@ int main(void)
     answer_manifest_polls(&(round_t){ .kind = ROUND_WHOLE }, HOST_OK);
     CHECK(delivered == 1);
     CHECK(standin()->poll_network_failed[0]);
+    /* Without a declared button trigger, manual work follows actual requests. */
+    answer_manifest_polls(&(round_t){ .kind = ROUND_WHOLE }, HOST_OK);
+    CHECK(delivered == 1);
     standin_intent(HOST_INTENT_NETWORK_UP);
     CHECK(standin_poll_take(0));
     CHECK(!standin_poll_take(0));

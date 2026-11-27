@@ -16,10 +16,23 @@ Put application-specific inputs in `test/check.json`: `at`, `tz`, `store` and
 also discovers and runs `test/*.c`, compiled with the stand-in and sanitizers.
 
 For button-triggered requests, declare `"request_presses": "U"` (short `UODB`, long
-`uodb`). The checker presses this sequence before foreground response rounds and
-when preparing a foreground visit for background delivery. A network check with
+`uodb`). The checker presses this sequence once per fresh foreground scene that
+starts without a retained session, including visits that prepare background work.
+It does not press it again on session restoration or before later response rounds:
+a trigger may navigate or toggle a mode. Session presence is checked before loading,
+so reserving session storage on focus does not suppress the initial trigger.
+With a declared trigger, response-invariant rounds replay previously requested manual
+polls without repeating the presses, just as they replay automatic polls independently
+of their cadence. Without a declared trigger, manual polls follow the application's
+actual requests and cadence.
+Background instances load from the store and receive these answers only for manual
+polls the application actually requested with `poll_run()`. Never requested manual
+polls remain silent; background delivery does not press buttons. Retry-After probes
+use scheduler admission and cooldowns without synthetic replay. A network check with
 manual polls requires at least one delivered manual response; no delivery is a
-coverage failure, with a request to supply the trigger.
+coverage failure, with a request to supply the trigger. The checker still compares
+the picture and the number of BACK presses needed to leave the prepared scene
+and its restored session.
 
 Named `tz` values in native checks and simulator scenarios use recurring POSIX
 rules, including for past dates, rather than IANA history. Settings city names and
@@ -172,7 +185,9 @@ A log line is not a visible error.
 In the Retry-After probe, the stand-in defers settings-triggered and sibling
 manifest-poll deliveries. Calling `poll_run()` during a cooldown is valid;
 only raw-request cooldowns are the application's responsibility. Manual polls
-are delivered only after `poll_run()` or a reconnect retry of requested work. The firmware host poller tests cover deadline and
+require `poll_run()` or a reconnect retry of requested work; ordinary response-invariant
+rounds with a declared trigger can replay that requested work as described above.
+The firmware host poller tests cover deadline and
 list rescheduling, including reconnect and delays longer than a day.
 
 `exceptions` maps check keys to nonempty reasons. The report lists every declaration for the
