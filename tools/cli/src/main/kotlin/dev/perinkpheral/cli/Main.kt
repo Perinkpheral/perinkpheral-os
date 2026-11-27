@@ -97,7 +97,7 @@ private const val USAGE = """perinkpheral - build, check and run perINKpheral ap
     perinkpheral soak --out <dir> --image <id> [--hours 72]
                                               observe a release image; logs, status and gaps, no device changes
     perinkpheral stress-run --out <dir> [--host <device>] [--bench <LAN address>]
-                     [--axes a,b,c,d,e,f,g] [--serial <port>] [--quick]
+                     [--axes a,b,c,d,e,f,g] [--serial <port>] [--quick] [--allow-remembered-change]
                                               manual stress ramps A-G; C-F require development tools
     perinkpheral log [--follow] [--app]       its log; --app: only the lines of applications
     perinkpheral shot [out.png]               the frame its panel shows
@@ -383,7 +383,7 @@ private fun run(raw: Array<String>): Int {
                 it[0]
             }
             return StressRun(client, output, StressRun.Options(arguments.option("bench"), axes,
-                arguments.option("serial"), arguments.has("quick")), build = { kind, out ->
+                arguments.option("serial"), arguments.has("quick"), arguments.has("allow-remembered-change")), build = { kind, out ->
                 builder().build(File(root(), "tools/stress/apps/$kind"), out)
             }, glyphs = {
                 val scratch = java.nio.file.Files.createTempDirectory("stress-glyphs").toFile()

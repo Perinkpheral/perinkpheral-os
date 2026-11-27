@@ -205,8 +205,10 @@ tools/perinkpheral stress-run --out <empty-directory> --host <device> \
 
 `--host` defaults to `PERINKPHERAL_HOST`. `--bench` is inferred only with one
 unambiguous LAN address. `--axes`, `--serial` and `--quick` are optional. A, B and G
-work on release builds; C-F require development tools and wasi-sdk. The runner owns
-its hostile HTTP server and builds `tools/stress/apps` with the application builder.
+work on release builds; C-F require development tools and wasi-sdk. C-F and B's
+install part require a captured, restorable remembered application or
+`--allow-remembered-change`; current firmware does not expose the remembered name.
+The runner owns its hostile HTTP server and builds `tools/stress/apps` with the application builder.
 It records `steps.jsonl`, optional `serial.log`, a cleanup inventory and `report.md`;
 an axis failure, interruption or cleanup error exits 1. Ctrl-C waits for cleanup.
 It never resets to defaults, changes Wi-Fi or injects OK. It restores `time_auto`,

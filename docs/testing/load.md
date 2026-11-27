@@ -35,8 +35,9 @@ No packages or glyph packs are downloaded by the computer.
 Quick mode reduces loads and observation periods; it usually takes a few minutes.
 Device scheduling, request timeouts, package reloads and recovery can extend it.
 A, B and G work on release firmware. C-F are skipped with a diagnostic when
-`dev_tools` is absent or false. A step records status before and after, responses,
-elapsed time and console fault lines. Each axis stops at its first failure; remaining
+`dev_tools` is absent or false. They also require a captured, restorable remembered
+application or `--allow-remembered-change`. A step records status before and after,
+responses, elapsed time and console fault lines. Each axis stops at its first failure; remaining
 selected axes continue. Readiness requires status and the page to answer within
 three minutes. Refused connections and HTTP refusals during A are load observations.
 Memory/busy refusals during B are observations; HTTP 500, new failed allocations,
@@ -50,8 +51,10 @@ but that counter must rise across a requested restart.
 B uses only the device's own catalog source 0. If unreachable, catalog/install work
 is skipped and glyph/page work proceeds. Reinstalls use an initially absent, small,
 non-system two-file catalog package; installed applications and retained stores are
-excluded. If no such package is available, or any retained stores exist, the install
-part is skipped: application handlers may write KV and evict retained stores.
+excluded. The install part is skipped if no such package or application slot is
+available, any retained stores exist, or the remembered application cannot be
+restored and `--allow-remembered-change` is absent. Catalog, glyph and page work continues.
+Application handlers may write KV and evict retained stores.
 C and D are skipped when retained stores exist because configuration also writes KV.
 C-F are skipped when the retained-store list has all 16 entries and may omit protected
 names. Every temporary upload applies this guard. Installed applications keep
@@ -62,9 +65,12 @@ table cannot hold another pack. The current API omits face counts, so existing p
 are conservatively treated as potentially filling that table. Pack names and sizes
 are recorded at the start and checked after cleanup. Full C includes a document of
 exactly HOST_DOCUMENT_MAX (12,288 bytes) and the first byte over that limit.
-Its connection-release checks require the next request on the tested path within
-120 seconds, below the streamed response's 300-second timeout. E opens the bench
+Its connection-release checks require the bench server to observe the tested
+connection closing within 120 seconds, below the streamed response's 300-second
+timeout. The next ordinary poll is not part of this check. E opens the bench
 application before each ordinary UP/DOWN press, including after sibling switching.
+A BACK chord sends BACK down, directional down/up/short, then BACK up/short;
+cleanup retries both releases after failures or interruption.
 F accepts the firmware's storage-refusal responses, including HTTP 500, only when
 mounted-filesystem usage confirms insufficient free space for the module. Other
 upload failures fail the axis.
@@ -102,11 +108,16 @@ sets modem-control lines; opening and closing a tty can change DTR/RTS. It reope
 that path after disconnection. If enumeration changes its name, restart the
 run with the new port. Without `--serial`, console-only faults cannot be detected.
 
-Development runs change the remembered last application. Current firmware exposes
-neither the open nor the remembered application. Its API cannot set the remembered
-name without a restart. The report states that the device will start into the menu or the default
-application after bench packages are removed. The owner should open their application
-once. The initial screen and status record what the device showed at the start.
+Development open records the selected installed application as the remembered
+application without restarting. The runner captures `last_app`, or `current_app`
+when available, from initial status and accepts only an installed name. Cleanup
+reopens that application after removing bench packages. Current firmware exposes
+neither field, so C-F and B's install part are skipped by default. A menu frame or
+an application bitmap alone does not identify the remembered name.
+`--allow-remembered-change` permits these workloads when restoration is unavailable;
+the report records that the remembered application may change and the owner must
+open their application once to select it for subsequent boots. The initial screen
+and status are recorded before mutations.
 G's restarts re-arm automatic application updates when `app_auto_update` is on;
 an update may change an installed
 version and fail the final comparison.

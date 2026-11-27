@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 /** Deliberately malformed HTTP/1.1 responses. Each connection snapshots its path's case. */
@@ -21,6 +22,12 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
     private val lifecycle = Any()
     private var closed = false
     internal var beforeDispatch: () -> Unit = {}
+    class Connection(val id: Long, val path: String, val case: String) {
+        @Volatile var peerClosedAt: Long? = null
+            internal set
+    }
+    private val sequence = AtomicLong()
+    val connections = CopyOnWriteArrayList<Connection>()
     val hits = CopyOnWriteArrayList<Pair<String, String>>()
     val port: Int get() = listener.localPort
 
@@ -68,6 +75,8 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
         if (length > 4096) return
         if (input.readNBytes(length).size != length) return
         val case = cases[path] ?: "ok"
+        val connection = Connection(sequence.incrementAndGet(), path, case)
+        connections += connection
         hits += path to case
         hit(mapOf("path" to path, "case" to case))
         if (case == "reset") { socket.setSoLinger(true, 0); return }
@@ -86,21 +95,39 @@ class StressServer(address: String, private val hit: (Map<String, Any?>) -> Unit
             append(if (chunked) "Transfer-Encoding: chunked\r\n" else "Content-Length: $declared\r\n")
             append("Connection: close\r\n\r\n")
         }
-        val output = socket.getOutputStream()
-        output.write(head.toByteArray())
-        output.flush()
-        if (!chunked) { output.write(body); return }
-        fun chunk(bytes: ByteArray) {
-            output.write("${bytes.size.toString(16)}\r\n".toByteArray()); output.write(bytes)
-            output.write("\r\n".toByteArray()); output.flush()
-        }
-        when (case) {
-            "stream4m", "stream5m" -> repeat(if (case == "stream4m") 64 else 80) { chunk(ByteArray(65536) { 'x'.code.toByte() }) }
-            "endless" -> while (!socket.isClosed) { chunk("{\"a\":".repeat(100).toByteArray()); Thread.sleep(50) }
-            "trickle" -> "{\"a\":{\"b\":1},\"items\":[]}".toByteArray().forEach { Thread.sleep(2000); chunk(byteArrayOf(it)) }
-            "stall" -> Thread.sleep(600_000)
-        }
-        output.write("0\r\n\r\n".toByteArray())
+        // Endless responses stay open until the client closes or cleanup closes locally.
+        val peer = if (case == "endless") {
+            socket.soTimeout = 0
+            workers.submit {
+                try {
+                    while (input.read() >= 0) { }
+                    if (!socket.isClosed) connection.peerClosedAt = System.nanoTime() / 1_000_000
+                } catch (_: java.io.IOException) {
+                    if (!socket.isClosed) connection.peerClosedAt = System.nanoTime() / 1_000_000
+                }
+            }
+        } else null
+        try {
+            val output = socket.getOutputStream()
+            output.write(head.toByteArray())
+            output.flush()
+            if (!chunked) { output.write(body); return }
+            fun chunk(bytes: ByteArray) {
+                output.write("${bytes.size.toString(16)}\r\n".toByteArray()); output.write(bytes)
+                output.write("\r\n".toByteArray()); output.flush()
+            }
+            when (case) {
+                "stream4m", "stream5m" -> repeat(if (case == "stream4m") 64 else 80) { chunk(ByteArray(65536) { 'x'.code.toByte() }) }
+                "endless" -> while (!socket.isClosed && connection.peerClosedAt == null) { chunk("{\"a\":".repeat(100).toByteArray()); Thread.sleep(50) }
+                "trickle" -> "{\"a\":{\"b\":1},\"items\":[]}".toByteArray().forEach { Thread.sleep(2000); chunk(byteArrayOf(it)) }
+                "stall" -> Thread.sleep(600_000)
+            }
+            if (case != "endless") output.write("0\r\n\r\n".toByteArray())
+        } catch (error: java.io.IOException) {
+            if (case == "endless" && !socket.isClosed && connection.peerClosedAt == null)
+                connection.peerClosedAt = System.nanoTime() / 1_000_000
+            throw error
+        } finally { peer?.cancel(true) }
     }
 
     override fun close() = synchronized(lifecycle) {

@@ -31,7 +31,7 @@ class StressRun(
     internal val timing: Timing = Timing(),
 ) {
     data class Options(val bench: String? = null, val axes: List<Char> = ('a'..'g').toList(),
-                       val serial: String? = null, val quick: Boolean = false)
+                       val serial: String? = null, val quick: Boolean = false, val allowRememberedChange: Boolean = false)
     /** Tests use the same ramps with a monotonic virtual clock and zero-duration holds. */
     class Timing(val scale: Double = 1.0, val now: () -> Long = { System.nanoTime() / 1_000_000 },
                  val sleep: (Long) -> Unit = { Thread.sleep(it) }, val recoveryMs: Long = 180_000,
@@ -73,6 +73,10 @@ class StressRun(
     private var observedConsole = emptyList<String>()
     private var restartRequested = false
     private var backDown = false
+    private var directionDown: Int? = null
+    private var originalRememberedApp: String? = null
+    private var canRestoreRemembered = false
+    private var rememberedChanged = false
     private var removedListFull = false
     private var retainedStores = false
     private var recordingFailed = false
@@ -114,15 +118,20 @@ class StressRun(
             settings = json("/api/settings") as? Map<*, *> ?: error("invalid settings")
             require(settings!!["time_auto"] is Boolean) { "settings has no time_auto" }
             originalApps = apps()
+            val installedNames = originalApps.map { it["name"] }.toSet()
+            originalRememberedApp = (initial["last_app"] as? String
+                ?: initial["current_app"] as? String)?.takeIf { it in installedNames }
+            canRestoreRemembered = originalRememberedApp != null && initial["dev_tools"] == true
             val removed = json("/api/apps/removed") as List<*>
             removedListFull = removed.size >= REMOVED_LISTED_MAX
             retainedStores = removed.isNotEmpty()
             protectedNames = originalApps.map { it["name"].toString() }.toSet() + removed.map { it.toString() }
             originalGlyphs = glyphInventory(json("/api/glyphs") as Map<*, *>)
-            note(mapOf("event" to "start", "options" to mapOf("axes" to options.axes.map { it.toString() }, "quick" to options.quick),
+            note(mapOf("event" to "start", "options" to mapOf("axes" to options.axes.map { it.toString() }, "quick" to options.quick,
+                    "allow_remembered_change" to options.allowRememberedChange),
                 "host" to client.host, "status" to initial, "settings" to settings,
-                "apps" to originalApps, "glyphs" to originalGlyphs, "screen_headers" to screen.headers))
-            if (initial["dev_tools"] == true && !removedListFull && options.axes.any { it in "ef" || it in "cd" && !retainedStores }) {
+                "remembered_app" to originalRememberedApp, "apps" to originalApps, "glyphs" to originalGlyphs, "screen_headers" to screen.headers))
+            if (initial["dev_tools"] == true && (canRestoreRemembered || options.allowRememberedChange) && !removedListFull && options.axes.any { it in "ef" || it in "cd" && !retainedStores }) {
                 val address = options.bench ?: benchAddress()
                 server = StressServer(address) { note(mapOf("event" to "hostile_hit") + it) }
                 benchUrl = "http://$address:${server!!.port}"
@@ -140,6 +149,10 @@ class StressRun(
                 }
                 if (axis in "cd" && retainedStores) {
                     skip(axis, "retained stores exist; application settings and KV writes may evict them")
+                    continue
+                }
+                if (axis in "cdef" && !canRestoreRemembered && !options.allowRememberedChange) {
+                    skip(axis, "remembered application cannot be determined and restored; use --allow-remembered-change to permit changing it")
                     continue
                 }
                 try {
@@ -160,7 +173,8 @@ class StressRun(
                     fail(axis, "setup", error.message ?: error.javaClass.simpleName)
                 } finally {
                     server?.clear()
-                    cleanup(::restoreClock, ::releaseBack, { if (axis in "cdef") removeBench() }, { checkCleanupObservation() })
+                    cleanup(::restoreClock, ::releaseDirection, ::releaseBack, { if (axis in "cdef") removeBench() },
+                        ::restoreRememberedApp, { checkCleanupObservation() })
                 }
             }
         } catch (_: InterruptedException) {
@@ -173,7 +187,8 @@ class StressRun(
         } finally {
             Thread.interrupted()
             try {
-                cleanup(::restoreClock, ::releaseBack, { server?.close() }, ::removeBench, ::removeGlyph,
+                cleanup(::restoreClock, ::releaseDirection, ::releaseBack, { server?.close() }, ::removeBench,
+                    ::restoreRememberedApp, ::removeGlyph,
                     ::verifyGlyphs, ::verifyOriginalApps, { checkCleanupObservation() })
             } catch (error: Exception) { cleanupErrors += "Cleanup: ${error.message}" }
             try {
@@ -430,6 +445,16 @@ class StressRun(
             source()
             return null
         }
+        if (originalApps.size >= INSTALLED_APPS_MAX) {
+            coverage('b', "install part skipped: no remaining application slots")
+            source()
+            return null
+        }
+        if (!canRestoreRemembered && !options.allowRememberedChange) {
+            coverage('b', "install part skipped: remembered application cannot be determined and restored; use --allow-remembered-change to permit changing it")
+            source()
+            return null
+        }
         installEntry = source()?.filter { entry ->
             val name = entry["name"] as? String ?: return@filter false
             val files = entry["files"] as? List<*> ?: return@filter false
@@ -492,6 +517,7 @@ class StressRun(
                         "catalog" -> request("/api/catalog?source=0", timeout = 120_000)
                         "install" -> {
                             changedApps = true
+                            rememberedChanged = true
                             request("/api/apps/install?source=0&app=${encode(entry!!["name"].toString())}", "POST",
                                 Json.write(mapOf("version" to entry["version"], "files" to entry["files"], "approved_authorities" to 0)).toByteArray(), timeout = 120_000)
                         }
@@ -529,6 +555,7 @@ class StressRun(
         changedApps = true
     }
     private fun restartInto(name: String) {
+        rememberedChanged = true
         post("/api/dev/run?app=${encode(name)}")
         pause(3000)
         waitBack()
@@ -542,15 +569,15 @@ class StressRun(
         require(!retainedStores) { "retained stores exist; refusing application settings writes" }
         post("/api/apps/settings?app=${encode(name)}", mapOf("server" to url, "mode" to mode))
     }
-    private fun open(name: String) { post("/api/dev/open?app=${encode(name)}") }
+    private fun open(name: String) { rememberedChanged = true; post("/api/dev/open?app=${encode(name)}") }
     private fun press(button: Int, kind: String = "short") {
         require(button in listOf(1, 3, 4)) { "stress-run never injects OK" }
         post("/api/dev/button?button=$button&press=$kind")
     }
-    private fun served(path: String, case: String, since: Int, timeout: Long) {
+    private fun served(path: String, case: String, since: Int, timeout: Long): StressServer.Connection {
         val deadline = timing.now() + duration(timeout)
         do {
-            if (server!!.hits.drop(since).any { it == path to case }) return
+            server!!.connections.drop(since).firstOrNull { it.path == path && it.case == case }?.let { return it }
             pause(100)
         } while (timing.now() < deadline)
         throw IOException("bench received no $path/$case request")
@@ -565,7 +592,7 @@ class StressRun(
                 for (other in owned.filter { it in BENCH_NAMES && it != kind }) configure(other, url = "")
                 server!!.clear()
                 server!!.select(path, case)
-                val mark = server!!.hits.size
+                val mark = server!!.connections.size
                 try {
                     configure(kind)
                     open(kind)
@@ -589,19 +616,21 @@ class StressRun(
             val kind = if (path == "doc") "stressdoc" else "stress"
             owned.filter { it in BENCH_NAMES && it != kind }.forEach { configure(it, url = "") }
             server!!.clear()
-            val mark = server!!.hits.size
+            val mark = server!!.connections.size
             server!!.select(path, "endless")
             configure(kind)
             open(kind)
-            served(path, "endless", mark, 90_000)
-            server!!.select(path, "ok")
+            val connection = served(path, "endless", mark, 90_000)
             if (path == "raw") { pause(8000); press(4, "long") }
             val releasedAt = timing.now()
-            val next = server!!.hits.size
-            served(path, "ok", next, CONNECTION_RELEASE_MS)
-            val gap = timing.now() - releasedAt
+            val deadline = releasedAt + duration(CONNECTION_RELEASE_MS)
+            while (connection.peerClosedAt == null) {
+                if (timing.now() >= deadline) throw IOException("bench connection ${connection.id} $path/endless did not close")
+                pause(100)
+            }
+            val gap = (connection.peerClosedAt!! - releasedAt).coerceAtLeast(0)
             server!!.clear()
-            mapOf("next_request_after_ms" to gap)
+            mapOf("connection" to connection.id, "peer_closed_after_ms" to gap)
         }
     }
     private fun misbehaving() {
@@ -631,8 +660,14 @@ class StressRun(
         val random = java.util.Random(7)
         fun chord() {
             backDown = true
-            try { press(4, "down"); pause(50); press(if (random.nextBoolean()) 1 else 3); pause(50) }
-            finally { post("/api/dev/button?button=4&press=up"); backDown = false }
+            try {
+                press(4, "down")
+                pause(50)
+                val direction = if (random.nextBoolean()) 1 else 3
+                directionDown = direction
+                press(direction, "down")
+                pause(50)
+            } finally { cleanup(::releaseDirection, ::releaseBack) }
         }
         for (mode in listOf("open", "updown", "held", "mixed")) {
             val gaps = if (options.quick) listOf(200L, 0L) else listOf(2000L, 1000L, 500L, 200L, 50L, 0L)
@@ -728,10 +763,25 @@ class StressRun(
     private fun cleanupSleep(ms: Long) {
         timing.sleep(if (cleanupDeadline == null) ms else minOf(ms, cleanupRemaining()))
     }
+    private fun releaseDirection() {
+        directionDown?.let { button -> cleanupAttempt("release button $button") {
+            press(button, "up")
+            press(button, "short")
+            directionDown = null
+        } }
+    }
     private fun releaseBack() {
         if (backDown) cleanupAttempt("release BACK") {
-            post("/api/dev/button?button=4&press=up")
+            press(4, "up")
+            press(4, "short")
             backDown = false
+        }
+    }
+    private fun restoreRememberedApp() {
+        if (!rememberedChanged || !canRestoreRemembered) return
+        cleanupAttempt("restore remembered application") {
+            post("/api/dev/open?app=${encode(originalRememberedApp!!)}")
+            rememberedChanged = false
         }
     }
     private fun glyphInventory(state: Map<*, *>): Map<String, Long> =
@@ -784,6 +834,7 @@ class StressRun(
                     successful(request("/api/dev/app?name=$name&file=app.wasm", "POST", File(packed, "app.wasm").readBytes(), "application/octet-stream"))
                     // Cleanup must proceed after cancellation; it does not use pause().
                     checkCleanupObservation()
+                    rememberedChanged = true
                     post("/api/dev/run?app=$name"); cleanupSleep(duration(3000)); cleanupBack()
                     checkCleanupObservation(restart = true)
                     successful(removeWhenIdle(name, false, deadline))
@@ -877,8 +928,13 @@ class StressRun(
             append("Steps and HTTP outcomes: `steps.jsonl`. Cleanup inventory: `cleanup.json`.\n")
             append(if (options.serial == null) "USB console was not observed.\n" else "${serial?.diagnostic ?: "console not captured"}\n")
             append("Initial status: `initial-status.json`. Initial panel frame: `initial-screen.bmp`.\n")
-            if (changedApps)
-                append("The API exposes neither the open nor the remembered application. The device will start into the menu or the default application. The owner should open their application once.\n")
+            if (rememberedChanged) {
+                append("The remembered application could not be restored. ")
+                if (options.allowRememberedChange) append("--allow-remembered-change permits this change. ")
+                append("Open the owner's application once to select it for subsequent boots.\n")
+            }
+            else if (canRestoreRemembered)
+                append("Remembered application preserved: `$originalRememberedApp`.\n")
             append("This run does not qualify endurance, power loss, physical buttons, panel timing or TLS with two roots.\n")
         }
         File(directory, "report.md").writeText(text)

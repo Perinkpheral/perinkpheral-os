@@ -87,6 +87,31 @@ object StressServerTest {
                 check(socket.getInputStream().readBytes().toString(Charsets.UTF_8).endsWith("<r><a b=\"1\">x</a></r>"))
             }
         }
+        StressServer("127.0.0.1").use { server ->
+            server.select("doc", "endless")
+            fun connect(path: String): Socket = Socket("127.0.0.1", server.port).apply {
+                soTimeout = 2000
+                getOutputStream().write("GET /$path HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray())
+                check(getInputStream().read() >= 0)
+            }
+            val socket = connect("doc")
+            val connection = server.connections.last()
+            check(connection.path == "doc" && connection.peerClosedAt == null)
+            connect("pick").use { it.getInputStream().readBytes() }
+            Thread.sleep(100)
+            check(connection.peerClosedAt == null) { "another connection closed the tested socket" }
+            socket.close()
+            val deadline = System.nanoTime() + 2_000_000_000
+            while (connection.peerClosedAt == null && System.nanoTime() < deadline) Thread.sleep(10)
+            check(connection.peerClosedAt != null) { "peer closure was not observed" }
+            connect("doc").use {
+                val local = server.connections.last()
+                check(local.id != connection.id)
+                server.clear()
+                Thread.sleep(100)
+                check(local.peerClosedAt == null) { "local cleanup counted as peer closure" }
+            }
+        }
         println("Stress hostile socket checks passed")
     }
 }

@@ -31,6 +31,7 @@ object StressRunTest {
         requestDeadlines()
         verdicts()
         regressions()
+        chordSemantics()
         runAxes()
         releaseAndFailures()
         failedUpload()
@@ -101,6 +102,19 @@ object StressRunTest {
                 if (kind == "stressfat") check(module.memoryBytes!! > 60000)
                 if (kind == "stressbig") check(File(out, "app.wasm").length() in 40000..49152)
             }
+            val host = File(root, "firmware/test/host")
+            fun execute(vararg command: String): String {
+                val log = File(scratch, "runtime.log")
+                val process = ProcessBuilder(*command).directory(host).redirectErrorStream(true).redirectOutput(log).start()
+                try {
+                    check(process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS) && process.exitValue() == 0) { log.readText() }
+                    return log.readText()
+                } finally { if (process.isAlive) process.destroyForcibly().waitFor() }
+            }
+            execute("make", "test_app")
+            val output = execute(File(host, "test_app").path, File(scratch, "stress/app.wasm").path,
+                File(scratch, "stressfat/app.wasm").path)
+            check(Regex("(?m)^\\d+ checks, 0 failed$").containsMatchIn(output)) { output }
         } finally { scratch.deleteRecursively() }
     }
 
@@ -209,6 +223,7 @@ object StressRunTest {
 
     private fun regressions() {
         fun exercise(axes: List<Char> = listOf('b'), expected: Int = 1, recoveryMs: Long = 1000,
+                     allowRememberedChange: Boolean = false,
                      setup: (FakeDevice, File) -> Unit = { _, _ -> },
                      say: (FakeDevice, File, String) -> Unit = { _, _, _ -> },
                      verify: (FakeDevice, File) -> Unit) {
@@ -220,7 +235,7 @@ object StressRunTest {
                 fake.advanceTime = { clock.addAndGet(it) }
                 try {
                     setup(fake, out)
-                    val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", axes, quick = true),
+                    val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", axes, quick = true, allowRememberedChange = allowRememberedChange),
                         ::build, ::glyphPack, { say(fake, out, it) },
                         StressRun.Timing(scale = 0.0001, now = { clock.get() }, sleep = { clock.addAndGet(it.coerceAtLeast(1)) },
                             recoveryMs = recoveryMs, cleanupMs = 30_000, installMs = 20_000, absentMs = 2000)).run()
@@ -256,9 +271,21 @@ object StressRunTest {
         exercise(expected = 0, say = { _, out, line ->
             if (line.contains("=2/2/2/4")) out.resolve("serial.log").appendText("first: 123 worst:456\n")
         }) { fake, _ -> fake.assertRestored() }
-        exercise(listOf('e'), setup = { fake, _ -> fake.releaseFailures = 2 }) { fake, _ ->
+        exercise(listOf('e'), expected = 0, setup = { fake, _ -> fake.releaseFailures = 2 }) { fake, _ ->
             check(fake.calls.count { "button=4&press=up" in it } >= 3)
             check(!fake.backHeld)
+        }
+        for (button in listOf("1", "3", "4")) exercise(listOf('e'), expected = 0,
+            setup = { fake, _ -> fake.releaseFailures = 2; fake.releaseFailureButton = button }) { fake, _ ->
+            fake.assertRestored()
+        }
+        exercise(listOf('e'), setup = { fake, _ -> fake.failDirectionDown = true }) { fake, _ ->
+            fake.assertRestored()
+            check(fake.calls.any { "button=4&press=up" in it })
+        }
+        exercise(listOf('e'), setup = { fake, _ -> fake.interruptOnDirectionDown = Thread.currentThread() }) { fake, out ->
+            fake.assertRestored()
+            check("Interrupted" in out.resolve("report.md").readText())
         }
         for (cancel in listOf(false, true)) exercise(expected = if (cancel) 1 else 0,
             setup = { fake, _ -> fake.dropInstall = true; fake.removeBusy = 4 },
@@ -310,17 +337,45 @@ object StressRunTest {
         }
         exercise(listOf('d'), expected = 0) { fake, out ->
             val report = out.resolve("report.md").readText()
-            check("owner should open their application once" in report)
-            check("device will start into the menu or the default application" in report)
+            check("Remembered application preserved: `keeper`" in report)
+            check(fake.remembered == "keeper" && fake.currentApp == "keeper")
             check(out.resolve("initial-screen.bmp").readBytes().contentEquals(fake.initialFrame))
             val initial = Json.parse(out.resolve("initial-status.json").readText()) as Map<*, *>
             check(initial["dev_tools"] == true && initial["uptime_s"] is Number)
-            check(initial["current_app"] == null && initial["last_app"] == null)
+            check(initial["last_app"] == "keeper")
             check(fake.calls.indexOf("GET /api/screen") < fake.calls.indexOfFirst { it.startsWith("POST ") })
         }
         exercise(listOf('e'), expected = 0) { fake, _ ->
             check(fake.ownerButtonWrites == 0)
             check(fake.siblingSwitches > 0)
+        }
+        exercise(('c'..'f').toList(), expected = 0, setup = { fake, _ -> fake.exposeRemembered = false }) { fake, out ->
+            check(fake.calls.none { it.startsWith("POST ") })
+            check(out.resolve("report.md").readText().split("remembered application cannot be determined").size == 5)
+            fake.assertRestored()
+        }
+        exercise(listOf('d'), expected = 0, allowRememberedChange = true,
+            setup = { fake, _ -> fake.exposeRemembered = false }) { fake, out ->
+            check(fake.calls.any { it.startsWith("POST /api/dev/app?") })
+            check(fake.remembered.isEmpty())
+            check("remembered application could not be restored" in out.resolve("report.md").readText())
+        }
+        exercise(listOf('b'), expected = 0, setup = { fake, _ -> fake.exposeRemembered = false }) { fake, out ->
+            check(fake.calls.none { it.startsWith("POST /api/apps/install?") })
+            check("install part skipped: remembered application" in out.resolve("report.md").readText())
+            fake.assertRestored()
+        }
+        exercise(listOf('e'), expected = 0, setup = { fake, _ ->
+            fake.exposeRemembered = false
+            fake.statusChange = { _, sample -> sample + ("current_app" to fake.currentApp) }
+        }) { fake, _ -> fake.assertRestored() }
+        exercise(listOf('b'), expected = 0, setup = { fake, _ -> fake.fillApplications(24) }) { fake, out ->
+            check(fake.calls.none { it.startsWith("POST /api/apps/install?") })
+            check(fake.calls.count { it == "GET /api/catalog?source=0" } > 1)
+            check(fake.calls.any { it == "POST /api/glyphs" })
+            check(fake.calls.count { it == "GET /api/apps" } > 2)
+            check(fake.installed.size == 24)
+            check("install part skipped: no remaining application slots" in out.resolve("report.md").readText())
         }
         for (count in listOf(23, 24)) exercise(listOf('f'), expected = 0,
             setup = { fake, _ -> fake.fillApplications(count) }) { fake, out ->
@@ -376,7 +431,7 @@ object StressRunTest {
             val out = Files.createTempDirectory("stress-full-c").toFile()
             try {
                 check(StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", listOf('c')),
-                    ::build, ::glyphPack, { if (it.contains("connection release")) fake.repeatPolls = true },
+                    ::build, ::glyphPack, {},
                     StressRun.Timing(scale = 0.002, recoveryMs = 1000)).run() == 0) {
                     out.resolve("report.md").readText()
                 }
@@ -391,10 +446,10 @@ object StressRunTest {
             try {
                 val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", listOf('c')),
                     ::build, ::glyphPack, { if (it.contains("doc endless connection release")) {
-                        fake.repeatPolls = true; fake.releaseDelayMs = 650
+                        fake.holdReleasePath = "doc"; fake.releaseDelayMs = 650
                     } }, StressRun.Timing(scale = 0.002, recoveryMs = 1000)).run()
                 check(code == 1)
-                check("no doc/ok request" in out.resolve("report.md").readText())
+                check("doc/endless did not close" in out.resolve("report.md").readText())
                 fake.assertRestored()
             } finally { out.deleteRecursively() }
         }
@@ -402,10 +457,10 @@ object StressRunTest {
             val out = Files.createTempDirectory("stress-wrong-release").toFile()
             try {
                 val code = StressRun(DeviceClient(fake.host), out, StressRun.Options("127.0.0.1", listOf('c')),
-                    ::build, ::glyphPack, { if (it.contains("doc endless connection release")) { fake.wrongReleasePath = true; fake.repeatPolls = true } },
+                    ::build, ::glyphPack, { if (it.contains("doc endless connection release")) { fake.holdReleasePath = "doc"; fake.releaseDelayMs = 650; fake.wrongReleasePath = true; fake.repeatPolls = true } },
                     StressRun.Timing(scale = 0.002, recoveryMs = 1000)).run()
                 check(code == 1)
-                check("no doc/ok request" in out.resolve("report.md").readText()) { out.resolve("report.md").readText() }
+                check("doc/endless did not close" in out.resolve("report.md").readText()) { out.resolve("report.md").readText() }
                 fake.assertRestored()
             } finally { out.deleteRecursively() }
         }
@@ -416,6 +471,26 @@ object StressRunTest {
         val manifest = mapOf("name" to kind, "title" to kind, "version" to "0.1.0", "abi" to 3)
         File(out, "manifest.json").writeText(Json.write(manifest))
         File(out, "app.wasm").writeBytes(ByteArray(if (kind == "stressbig") 42_000 else 100) { 1 })
+    }
+
+    private fun chordSemantics() {
+        FakeDevice().use { fake ->
+            val client = DeviceClient(fake.host)
+            fun press(button: Int, kind: String) {
+                check(client.raw("/api/dev/button?button=$button&press=$kind", "POST").status == 200)
+            }
+            press(4, "down")
+            press(1, "short")
+            check(fake.siblingSwitches == 0 && fake.ownerButtonWrites == 1)
+            press(1, "down")
+            check(fake.siblingSwitches == 1)
+            press(1, "up")
+            press(1, "short")
+            press(4, "up")
+            press(4, "short")
+            check(fake.ownerButtonWrites == 1 && fake.currentApp == "keeper")
+            fake.assertRestored()
+        }
     }
 
     private fun runAxes() {
@@ -548,7 +623,7 @@ object StressRunTest {
     private class FakeDevice(private val dev: Boolean = true, private val catalogAvailable: Boolean = true) : AutoCloseable {
         val calls = CopyOnWriteArrayList<String>()
         val staged = ConcurrentHashMap<String, MutableMap<String, ByteArray>>()
-        private val installed = ConcurrentHashMap<String, Map<String, Any?>>()
+        val installed = ConcurrentHashMap<String, Map<String, Any?>>()
         private val values = ConcurrentHashMap<String, Map<String, String>>()
         private val workers = Executors.newVirtualThreadPerTaskExecutor()
         private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -576,6 +651,7 @@ object StressRunTest {
         var removed = emptyList<String>()
         val packs = ConcurrentHashMap<String, Map<String, Any?>>()
         var exposeFaces = true
+        var exposeRemembered = true
         var remembered = "keeper"
         var currentApp = "keeper"
         var ownerButtonWrites = 0
@@ -591,10 +667,19 @@ object StressRunTest {
         var reappear = false
         private var absentPolls = 0
         var releaseFailures = 0
+        var releaseFailureButton: String? = null
+        var failDirectionDown = false
+        var interruptOnDirectionDown: Thread? = null
         var backHeld = false
+        private var backChorded = false
+        private var backLong = false
+        private val heldButtons = mutableSetOf<String>()
+        private val swallowed = mutableSetOf<String>()
         @Volatile var wrongReleasePath = false
         @Volatile var repeatPolls = false
         @Volatile var releaseDelayMs = 0L
+        @Volatile var holdReleasePath = ""
+        private val pollSockets = ConcurrentHashMap.newKeySet<Socket>()
         private val polling = ConcurrentHashMap<String, Int>()
         private val generations = AtomicInteger()
         private val keeper = mapOf("name" to "keeper", "version" to "1.0.0", "values" to mapOf("secret" to true, "city" to "", "url" to "http://saved"))
@@ -634,7 +719,8 @@ object StressRunTest {
                             "reset_reason" to resetReason, "last_panic" to if (panicRecord) "${panicCounter.get()} \"old fault\" main pc 1234" else "",
                             "storage_ok" to true, "storage_total" to 655360L, "storage_used" to 655360L - storageFree,
                             "failed_allocations" to if (failAllocations && count > 2) 1L else 0L)
-                        response = statusChange(count, if (panicRecord) sample else sample - "last_panic")
+                        val named = if (exposeRemembered) sample + ("last_app" to remembered) else sample
+                        response = statusChange(count, if (panicRecord) named else named - "last_panic")
                     }
                     path == "/api/log" -> { exchange.responseHeaders.set("X-Log-Boot", "boot${bootCounter.get()}"); response = "log" }
                     path == "/api/screen" -> response = initialFrame
@@ -720,12 +806,38 @@ object StressRunTest {
                         }
                     }
                     path == "/api/dev/open" -> { opened.incrementAndGet(); currentApp = name; remembered = name }
-                    path == "/api/dev/button" -> when (query["press"]) {
-                        "down" -> backHeld = true
-                        "up" -> if (releaseFailures > 0) { releaseFailures--; code = 503 } else backHeld = false
-                        "short" -> if (query["button"] in listOf("1", "3")) {
-                            if (backHeld) { currentApp = "keeper"; siblingSwitches++ }
-                            else if (currentApp == "keeper") ownerButtonWrites++
+                    path == "/api/dev/button" -> {
+                        val button = query.getValue("button")
+                        when (query["press"]) {
+                            "down" -> {
+                                heldButtons += button
+                                if (button == "4") { backHeld = true; backChorded = false; backLong = false }
+                                else if (button in listOf("1", "3")) {
+                                    swallowed -= button
+                                    if (backHeld && currentApp.isNotEmpty()) {
+                                        backChorded = true
+                                        swallowed += button
+                                        currentApp = "keeper"; remembered = "keeper"; siblingSwitches++
+                                    }
+                                    if (failDirectionDown) { failDirectionDown = false; code = 503 }
+                                    interruptOnDirectionDown?.let { interruptOnDirectionDown = null; it.interrupt() }
+                                }
+                            }
+                            "up" -> if (releaseFailures > 0 && (releaseFailureButton == null || releaseFailureButton == button)) { releaseFailures--; code = 503 }
+                                else if (heldButtons.remove(button) && button == "4") {
+                                    backHeld = false
+                                    if (backLong && !backChorded) currentApp = ""
+                                    backChorded = backChorded && !backLong
+                                    backLong = false
+                                }
+                            "long" -> if (button == "4") {
+                                if (backHeld) backLong = true else currentApp = ""
+                            }
+                            "short" -> if (button == "4") {
+                                if (backChorded) backChorded = backHeld else currentApp = ""
+                            } else if (button in listOf("1", "3") && !swallowed.remove(button) && currentApp == "keeper") {
+                                ownerButtonWrites++
+                            }
                         }
                     }
                     path == "/api/apps/remove" -> {
@@ -764,10 +876,21 @@ object StressRunTest {
             val uri = URI(url)
             val requests = paths.map { path -> workers.submit {
                 runCatching {
-                    Socket(uri.host, uri.port).use { socket ->
+                    val socket = Socket(uri.host, uri.port)
+                    run {
+                        pollSockets += socket
                         socket.soTimeout = 1000
                         socket.getOutputStream().write("GET /$path HTTP/1.1\r\nHost: bench\r\n\r\n".toByteArray())
                         socket.getInputStream().read(ByteArray(256))
+                        if (path == holdReleasePath) {
+                            // Hold the tested socket independently of subsequent ordinary polls.
+                            workers.submit {
+                                try { Thread.sleep(releaseDelayMs) } finally { socket.close(); pollSockets -= socket }
+                            }
+                            return@submit
+                        }
+                        socket.close()
+                        pollSockets -= socket
                     }
                 }
             } }
@@ -776,9 +899,10 @@ object StressRunTest {
         fun assertRestored() {
             check(installed == mapOf("keeper" to keeper)) { "applications changed: $installed" }
             check(packs == mapOf("latin" to mapOf("name" to "latin", "bytes" to 1000L, "faces" to 4))) { "glyph packs changed: $packs" }
-            check(!backHeld)
+            check(!backHeld && heldButtons.isEmpty())
+            check(remembered == "keeper") { "remembered application changed: $remembered" }
             check(timeAuto)
         }
-        override fun close() { polling.clear(); server.stop(0); workers.shutdownNow() }
+        override fun close() { polling.clear(); pollSockets.toList().forEach { it.close() }; server.stop(0); workers.shutdownNow() }
     }
 }
