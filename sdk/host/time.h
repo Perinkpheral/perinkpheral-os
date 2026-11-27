@@ -110,8 +110,9 @@ typedef struct {
 HOST_LAYOUT(host_local_time_t, 28);
 HOST_IMPORT(time_local, int32_t time_local(host_local_time_t *now));
 
-/* Converts a moment (Unix seconds) to local date and time, using the zone
- * offset in effect at that moment, daylight saving included.
+/* Converts a moment (Unix seconds) to local date and time, using the configured
+ * recurring POSIX zone rules, daylight saving included. These rules also apply
+ * to past moments; the device does not keep IANA time-zone history.
  * Events with their own time zone must be converted before they reach the
  * application. */
 HOST_IMPORT(time_local_at, int32_t time_local_at(int64_t unix_time, host_local_time_t *parts));

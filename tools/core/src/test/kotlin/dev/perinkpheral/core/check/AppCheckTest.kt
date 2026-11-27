@@ -7,6 +7,8 @@ import dev.perinkpheral.core.build.BuildFlags
 import dev.perinkpheral.core.build.Sdk
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * The capability checks held to an application made for them, `sdk/check/apps/specimen`:
@@ -610,28 +612,44 @@ object AppCheckTest {
             val historical = File(scratch, "historical/specimen")
             specimen.copyRecursively(historical)
             File(historical, "test").listFiles().orEmpty().filter { it.extension == "c" }.forEach { it.delete() }
-            File(historical, "test/check.json").writeText(Json.write(mapOf("tz" to "America/New_York")))
-            File(historical, "test/time.c").writeText("""
-                /* SPDX-License-Identifier: MIT */
-                #include <assert.h>
-                #include "../specimen.c"
-                #include "standin.h"
-                int main(void)
-                {
-                    standin_reset();
-                    host_local_time_t parts;
-                    int64_t moment;
-                    assert(time_local_at(953553600LL, &parts) == HOST_OK);
-                    assert(parts.year == 2000 && parts.month == 3 && parts.day == 20 && parts.hour == 8);
-                    assert(time_from_local(&parts, &moment) == HOST_OK && moment == 953553600LL);
-                    assert(time_local_at(-1, &parts) == HOST_ERR_ARGUMENT);
-                    assert(time_local_at(0, &parts) == HOST_OK);
-                    return 0;
+            for ((zone, januaryOffset, julyOffset) in listOf(
+                Triple("Europe/Nicosia", 7200, 10800), Triple("Pacific/Apia", 46800, 46800),
+                Triple("America/New_York", -18000, -14400), Triple("Australia/Lord_Howe", 39600, 37800),
+                Triple("Asia/Kolkata", 19800, 19800))) {
+                File(historical, "test/check.json").writeText(Json.write(mapOf("tz" to zone)))
+                val probes = listOf("2000-01-01T12:00:00Z" to januaryOffset,
+                    "2000-07-01T12:00:00Z" to julyOffset) +
+                    if (zone == "America/New_York") listOf("2000-03-20T12:00:00Z" to julyOffset) else emptyList()
+                val assertions = probes.joinToString("\n") { (date, offset) ->
+                    val at = Instant.parse(date)
+                    val local = at.plusSeconds(offset.toLong()).atOffset(ZoneOffset.UTC)
+                    """
+                        assert(time_local_at(${at.epochSecond}LL, &parts) == HOST_OK);
+                        assert(parts.year == ${local.year} && parts.month == ${local.monthValue} &&
+                            parts.day == ${local.dayOfMonth} && parts.hour == ${local.hour} && parts.minute == ${local.minute});
+                        assert(time_from_local(&parts, &moment) == HOST_OK && moment == ${at.epochSecond}LL);
+                    """.trimIndent()
                 }
-            """.trimIndent())
-            val historicalReport = checker.run(historical, only = "logic")
-            check(historicalReport.failed.isEmpty()) {
-                historicalReport.failed.flatMap { it.details }.joinToString("\n")
+                File(historical, "test/time.c").writeText("""
+                    /* SPDX-License-Identifier: MIT */
+                    #include <assert.h>
+                    #include "../specimen.c"
+                    #include "standin.h"
+                    int main(void)
+                    {
+                        standin_reset();
+                        host_local_time_t parts;
+                        int64_t moment;
+                        $assertions
+                        assert(time_local_at(-1, &parts) == HOST_ERR_ARGUMENT);
+                        assert(time_local_at(0, &parts) == HOST_OK);
+                        return 0;
+                    }
+                """.trimIndent())
+                val historicalReport = checker.run(historical, only = "logic")
+                check(historicalReport.failed.isEmpty()) {
+                    "$zone: " + historicalReport.failed.flatMap { it.details }.joinToString("\n")
+                }
             }
             val system = File(scratch, "system/specimen")
             specimen.copyRecursively(system)

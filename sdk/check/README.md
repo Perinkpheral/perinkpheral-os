@@ -21,10 +21,14 @@ when preparing a foreground visit for background delivery. A network check with
 manual polls requires at least one delivered manual response; no delivery is a
 coverage failure, with a request to supply the trigger.
 
-Named `tz` values in native checks and simulator scenarios resolve to the Settings
-city table's recurring POSIX rules, including past dates, rather than IANA history.
-City names, their listed IANA aliases, fixed-offset zones and explicit POSIX month
-rules are accepted. Lord Howe uses `LHST-10:30LHDT-11,M10.1.0,M4.1.0` for clock probes.
+Named `tz` values in native checks and simulator scenarios use recurring POSIX
+rules, including for past dates, rather than IANA history. Settings city names and
+their IANA aliases use the city table first. Other IANA names known to the JDK use
+the current year's standard and daylight offsets and transition dates, converted
+to recurring month rules as on the device page. Without an annual transition pair,
+the current offset becomes a fixed rule (for example, `Pacific/Apia` is now UTC+13).
+Fixed-offset zones and explicit POSIX month rules are also accepted. Lord Howe's
+inferred rule preserves its half-hour DST change.
 
 Mock responses may include `"headers": {"ETag": "v1", "Set-Cookie": ["a=1", "b=2"]}`.
 String values are single fields; arrays preserve repeated fields in order. Names are
@@ -90,6 +94,8 @@ defect of the checks:
 - Time-zone rules cover the full 1970-2100 conversion range. Current-clock queries
   report unknown outside the separate 2026-2100 clock range; the raw test clock
   remains available to the harness.
+- At Unix zero, the recurring Lord Howe rule gives UTC+11 here; macOS libc uses
+  UTC+10:30 for the same POSIX rule in the simulator. Probes in 2000 are unaffected.
 - Mock headers describe the final response: no automatic headers, transfer decoding or
   Content-Length/body consistency check is performed.
 - The network has no redirects, TLS or timeouts; the request queue holds only the checked

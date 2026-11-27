@@ -2,15 +2,15 @@
 package dev.perinkpheral.core
 
 import java.io.File
-import java.time.Instant
+import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.zone.ZoneOffsetTransition
 import java.time.zone.ZoneRules
 
-/** Named test zones use the same recurring POSIX rules as Settings, including past dates. */
-class DeviceTimeZones(root: File) {
+/** Settings cities take precedence; other IANA names use this year's recurring POSIX rules. */
+class DeviceTimeZones(root: File, private val clock: Clock = Clock.systemUTC()) {
     private val named: Map<String, String> by lazy {
         val cities = Json.parse(File(root, "firmware/system/settings/cities.json").readText()) as List<*>
         buildMap {
@@ -20,16 +20,42 @@ class DeviceTimeZones(root: File) {
                 put(city["name"] as String, rule)
                 (city["iana"] as List<*>).forEach { put(it as String, rule) }
             }
-            put("Australia/Lord_Howe", "LHST-10:30LHDT-11,M10.1.0,M4.1.0")
         }
     }
 
     fun posix(name: String): String {
         named[name]?.let { return it }
-        val fixed = runCatching { ZoneId.of(name).rules }.getOrNull()?.takeIf { it.isFixedOffset }
-        if (fixed != null) return "FIX" + signedTime(-fixed.getOffset(Instant.EPOCH).totalSeconds)
+        runCatching { ZoneId.of(name).rules }.getOrNull()?.let { return recurring(it) }
         if (ZONE.matches(name)) return name
-        throw BuildError("unknown device time zone: $name; use a Settings city, its IANA name or POSIX rules")
+        throw BuildError("unknown device time zone: $name; use a Settings city, a JDK time-zone name or POSIX rules")
+    }
+
+    private fun recurring(rules: ZoneRules): String {
+        val now = clock.instant()
+        val year = now.atOffset(ZoneOffset.UTC).year
+        val start = LocalDate.of(year, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC)
+        val end = LocalDate.of(year + 1, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC)
+        val changes = generateSequence(rules.nextTransition(start.minusNanos(1))) { rules.nextTransition(it.instant) }
+            .takeWhile { it.instant < end }.toList()
+        // Match the device page's current-year inference, without retaining IANA history.
+        val yearlyPair = changes.size == 2 && changes[0].offsetBefore == changes[1].offsetAfter &&
+            changes[0].offsetAfter == changes[1].offsetBefore
+        if (!yearlyPair) return "FIX" + signedTime(-rules.getOffset(now).totalSeconds)
+        val summer = changes.first { it.offsetAfter.totalSeconds > it.offsetBefore.totalSeconds }
+        val winter = changes.first { it.offsetAfter.totalSeconds < it.offsetBefore.totalSeconds }
+        val standard = summer.offsetBefore.totalSeconds
+        val daylight = summer.offsetAfter.totalSeconds
+        val daylightOffset = if (daylight - standard == SECONDS_PER_HOUR) "" else signedTime(-daylight)
+        return "STD${signedTime(-standard)}DST$daylightOffset,${monthRule(summer)},${monthRule(winter)}"
+    }
+
+    private fun monthRule(change: ZoneOffsetTransition): String {
+        val wall = change.dateTimeBefore
+        val date = wall.toLocalDate()
+        val week = if (date.dayOfMonth + 7 > date.lengthOfMonth()) 5 else (date.dayOfMonth - 1) / 7 + 1
+        val at = wall.toLocalTime().toSecondOfDay()
+        val time = if (at == 2 * SECONDS_PER_HOUR) "" else "/${signedTime(at)}"
+        return "M${date.monthValue}.$week.${date.dayOfWeek.value % 7}$time"
     }
 
     fun rules(name: String): ZoneRules {
@@ -61,8 +87,14 @@ class DeviceTimeZones(root: File) {
         return if (text.startsWith('-')) -total else total
     }
 
-    private fun signedTime(seconds: Int): String = (if (seconds < 0) "-" else "") +
-        "${kotlin.math.abs(seconds) / SECONDS_PER_HOUR}:${kotlin.math.abs(seconds) / 60 % 60}:${kotlin.math.abs(seconds) % 60}"
+    private fun signedTime(seconds: Int): String {
+        val size = kotlin.math.abs(seconds)
+        val minutes = size / 60 % 60
+        val remainder = size % 60
+        return (if (seconds < 0) "-" else "") + (size / SECONDS_PER_HOUR) +
+            (if (minutes != 0 || remainder != 0) ":${minutes.toString().padStart(2, '0')}" else "") +
+            (if (remainder != 0) ":${remainder.toString().padStart(2, '0')}" else "")
+    }
 
     companion object {
         private const val SECONDS_PER_HOUR = 3600

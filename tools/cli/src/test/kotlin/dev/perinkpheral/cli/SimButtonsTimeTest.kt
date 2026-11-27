@@ -7,6 +7,8 @@ import dev.perinkpheral.core.build.Sdk
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
+import java.time.ZoneOffset
 import javax.imageio.ImageIO
 
 /** Exercises scene routing and time services through a real module in the simulator. */
@@ -75,21 +77,44 @@ object SimButtonsTimeTest {
             val wasi = File(System.getenv("WASI_SDK_PATH") ?: error("WASI_SDK_PATH is required"))
             val failures = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scenarios, false, workers = 1)
             check(failures.isEmpty()) { failures.joinToString("\n") }
-            File(app, "probe.c").writeText("""
-                /* SPDX-License-Identifier: MIT */
-                #include "host_api.h"
-                void app_on_load(void)
-                {
-                    host_local_time_t parts;
-                    int64_t moment;
-                    if (time_local_at(953553600LL, &parts) != HOST_OK || parts.hour != 8 ||
-                        time_from_local(&parts, &moment) != HOST_OK || moment != 953553600LL) __builtin_trap();
+            File(scenarios, "scenario.json").delete()
+            listOf(Triple("Europe/Nicosia", 7200, 10800), Triple("Pacific/Apia", 46800, 46800),
+                Triple("America/New_York", -18000, -14400), Triple("Australia/Lord_Howe", 39600, 37800),
+                Triple("Asia/Kolkata", 19800, 19800)).forEachIndexed { index, (zone, januaryOffset, julyOffset) ->
+                val zoneApp = File(scratch, "zone-$index").apply { mkdirs() }
+                File(zoneApp, "manifest.json").writeText(Json.write(mapOf(
+                    "name" to "zone-$index", "title" to "Time zone", "version" to "1.0.0",
+                    "abi" to 3, "fullscreen" to true)))
+                val probes = listOf("2000-01-01T12:00:00Z" to januaryOffset,
+                    "2000-07-01T12:00:00Z" to julyOffset) +
+                    if (zone == "America/New_York") listOf("2000-03-20T12:00:00Z" to julyOffset) else emptyList()
+                val assertions = probes.joinToString("\n") { (date, offset) ->
+                    val at = Instant.parse(date)
+                    val local = at.plusSeconds(offset.toLong()).atOffset(ZoneOffset.UTC)
+                    """
+                        if (time_local_at(${at.epochSecond}LL, &parts) != HOST_OK ||
+                            parts.year != ${local.year} || parts.month != ${local.monthValue} ||
+                            parts.day != ${local.dayOfMonth} || parts.hour != ${local.hour} || parts.minute != ${local.minute} ||
+                            time_from_local(&parts, &moment) != HOST_OK || moment != ${at.epochSecond}LL) __builtin_trap();
+                    """.trimIndent()
                 }
-                void app_on_draw(void) { gfx_draw_rect(0, 0, 1, 1, HOST_RECT_FILLED); }
-            """.trimIndent())
-            File(scenarios, "scenario.json").writeText(Json.write(mapOf(
-                "app" to app.path, "at" to 1795780800L, "tz" to "America/New_York",
-                "steps" to listOf("shot initial"))))
+                File(zoneApp, "probe.c").writeText("""
+                    /* SPDX-License-Identifier: MIT */
+                    #include "host_api.h"
+                    void app_on_load(void)
+                    {
+                        host_local_time_t parts;
+                        int64_t moment;
+                        $assertions
+                    }
+                    void app_on_draw(void) { gfx_draw_rect(0, 0, 1, 1, HOST_RECT_FILLED); }
+                """.trimIndent())
+                val scenario = File(scenarios, "zone-$index").apply { mkdirs() }
+                File(scenario, "scenario.json").writeText(Json.write(mapOf(
+                    "app" to zoneApp.path, "at" to 1795780800L, "tz" to zone,
+                    "steps" to listOf("shot initial"))))
+                File(scenarios, "initial.png").copyTo(File(scenario, "initial.png"))
+            }
             val recurring = SimTest(root) { AppBuilder(Sdk(root), wasi) {} }.run(scenarios, false, workers = 1)
             check(recurring.isEmpty()) { recurring.joinToString("\n") }
         } finally {

@@ -75,9 +75,15 @@ response cannot restart its cooldown or change its Retry-After date normalizatio
 Mocks take Content-Length from the complete header, or report -1 when absent or
 outside 0..INT32_MAX, including HEAD responses; fixture body size is independent.
 
-`sim-test` resolves named `tz` values through the Settings city table to the device's
-recurring POSIX rules. Historical IANA changes are not used. Explicit POSIX month
-rules and fixed-offset zones are also accepted.
+`sim-test` resolves named `tz` values to recurring POSIX rules, using the Settings
+city table first. Other IANA names known to the JDK use the current year's standard
+and daylight offsets and transition dates, converted to recurring month rules as
+on the device page. Without an annual transition pair, the current offset becomes
+a fixed rule. These rules also apply to past dates; historical IANA changes are not
+used. Explicit POSIX month rules and fixed-offset zones are also accepted.
+
+At Unix zero, macOS libc uses UTC+10:30 for the Lord Howe POSIX rule, while the
+native checker's recurring rules give UTC+11. Probes in 2000 are unaffected.
 
 Not simulated: the menu of several applications, the system API except
 `sys_setting_get`, `sys_setting_set`, `sys_setting_range`, `sys_time_set`,
