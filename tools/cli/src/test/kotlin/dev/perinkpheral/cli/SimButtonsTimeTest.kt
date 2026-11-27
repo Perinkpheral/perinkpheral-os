@@ -80,7 +80,9 @@ object SimButtonsTimeTest {
             File(scenarios, "scenario.json").delete()
             listOf(Triple("Europe/Nicosia", 7200, 10800), Triple("Pacific/Apia", 46800, 46800),
                 Triple("America/New_York", -18000, -14400), Triple("Australia/Lord_Howe", 39600, 37800),
-                Triple("Asia/Kolkata", 19800, 19800)).forEachIndexed { index, (zone, januaryOffset, julyOffset) ->
+                Triple("Asia/Kolkata", 19800, 19800), Triple("UTC-3", 10800, 10800),
+                Triple("<+03>-3", 10800, 10800), Triple("EST5EDT,M3.2.0,M11.1.0", -18000, -14400),
+                Triple("Etc/GMT-1", 3600, 3600)).forEachIndexed { index, (zone, januaryOffset, julyOffset) ->
                 val zoneApp = File(scratch, "zone-$index").apply { mkdirs() }
                 File(zoneApp, "manifest.json").writeText(Json.write(mapOf(
                     "name" to "zone-$index", "title" to "Time zone", "version" to "1.0.0",

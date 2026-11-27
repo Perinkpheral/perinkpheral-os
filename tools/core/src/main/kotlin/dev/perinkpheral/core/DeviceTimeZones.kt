@@ -9,7 +9,7 @@ import java.time.ZoneOffset
 import java.time.zone.ZoneOffsetTransition
 import java.time.zone.ZoneRules
 
-/** Settings cities take precedence; other IANA names use this year's recurring POSIX rules. */
+/** Explicit POSIX syntax keeps its signs; named zones use the device's recurring rules. */
 class DeviceTimeZones(root: File, private val clock: Clock = Clock.systemUTC()) {
     private val named: Map<String, String> by lazy {
         val cities = Json.parse(File(root, "firmware/system/settings/cities.json").readText()) as List<*>
@@ -24,9 +24,9 @@ class DeviceTimeZones(root: File, private val clock: Clock = Clock.systemUTC()) 
     }
 
     fun posix(name: String): String {
+        if (ZONE.matches(name)) return name
         named[name]?.let { return it }
         runCatching { ZoneId.of(name).rules }.getOrNull()?.let { return recurring(it) }
-        if (ZONE.matches(name)) return name
         throw BuildError("unknown device time zone: $name; use a Settings city, a JDK time-zone name or POSIX rules")
     }
 

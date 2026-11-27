@@ -236,6 +236,7 @@ typedef struct {
     bool           has_settings;   /* the user saved the settings: app_on_settings() */
     int32_t        intent;         /* a HOST_INTENT_* delivered after the load, or 0 */
     bool           has_data;       /* a whole round of answers before anything else */
+    bool           prepares_requests; /* a foreground visit that queues later background work */
     const char    *presses;        /* U O D B, lower case for a long press */
     fire_t         fire;           /* the timer that waits soonest */
     bool           has_alarms;     /* every alarm that waits comes */
@@ -589,10 +590,14 @@ static void load_foreground(void)
 static void trigger_requests(void)
 {
     standin_t *host = standin();
-    if (!is_away && !requests_triggered) {
+    if (!is_away && !requests_triggered && standin_subject.request_presses != NULL) {
         requests_triggered = true;
+        show();
         for (const char *key = standin_subject.request_presses; key != NULL && *key != '\0' && !host->is_leaving; key++) {
             press(*key);
+            if (!host->is_leaving) {
+                show();
+            }
         }
     }
 }
@@ -694,7 +699,9 @@ static void scene_run(void *context)
         standin_focus();
         shown.is_shown = false;
         host->marks[MARK_FIRST_PICTURE] = show();
-        if (!scene->has_data && scene->rounds[0].kind == ROUND_NONE) trigger_requests();
+        if (scene->prepares_requests) {
+            trigger_requests();
+        }
     }
     if (scene->has_settings) {
         standin_settings();
@@ -982,6 +989,7 @@ static uint64_t mark(int which)
 static bool has_polls_or_requests;
 
 static const scene_t ON_SCREEN = { 0 };
+static const scene_t REQUESTS_PREPARED = { .prepares_requests = true };
 
 /* What an application is put through before it is unloaded: nothing, a
  * press, a way into a page and down it, a long press, a way in and back. */
@@ -1543,7 +1551,7 @@ static void check_network(void)
      * back on the screen it shows what it would had it been there. It was on
      * the screen once before either: what it asked for then is what arrives. */
     standin_reset();
-    if (!play(&ON_SCREEN) || !play(&whole) || !play(&ON_SCREEN)) {
+    if (!play(&REQUESTS_PREPARED) || !play(&whole) || !play(&ON_SCREEN)) {
         return;
     }
     uint64_t seen_it_arrive = mark(MARK_PICTURE);
@@ -1551,7 +1559,7 @@ static void check_network(void)
     for (size_t index = 0; index < sizeof AWAY_PIECES / sizeof AWAY_PIECES[0]; index++) {
         standin_reset();
         scene_t away = { .is_off_screen = true, .rounds = { { ROUND_PIECES, AWAY_PIECES[index], 0 } } };
-        if (play(&ON_SCREEN) && play(&away) && play(&ON_SCREEN)) {
+        if (play(&REQUESTS_PREPARED) && play(&away) && play(&ON_SCREEN)) {
             expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive,
                    "%s, then on the screen: it shows another picture than an application that was on the screen "
                    "when the answers came, was unloaded and came back", told(&away));
@@ -1560,16 +1568,16 @@ static void check_network(void)
     /* An answer that did not end whole leaves what a request that failed leaves; one that
      * stopped, cut off with the instance, leaves nothing. */
     standin_reset();
-    uint64_t nothing_came = play(&ON_SCREEN) && play(&ON_SCREEN) ? mark(MARK_PICTURE) : 0;
+    uint64_t nothing_came = play(&REQUESTS_PREPARED) && play(&ON_SCREEN) ? mark(MARK_PICTURE) : 0;
     standin_reset();
     scene_t failed_away = { .is_off_screen = true, .rounds = { { ROUND_STATUS, HOST_FAILED_NO_ANSWER, 0 } } };
-    uint64_t failed_seen = play(&ON_SCREEN) && play(&failed_away) && play(&ON_SCREEN) ? mark(MARK_PICTURE) : 0;
+    uint64_t failed_seen = play(&REQUESTS_PREPARED) && play(&failed_away) && play(&ON_SCREEN) ? mark(MARK_PICTURE) : 0;
     static const round_kind_t AWAY_ENDINGS[] = { ROUND_CUT, ROUND_FAILED_LATE };
     for (size_t index = 0; index < sizeof AWAY_ENDINGS / sizeof AWAY_ENDINGS[0]; index++) {
         standin_reset();
         scene_t away = { .is_off_screen = true, .rounds = { { AWAY_ENDINGS[index], 0, 0 } } };
         uint64_t expected = AWAY_ENDINGS[index] == ROUND_CUT ? nothing_came : failed_seen;
-        if (expected != 0 && play(&ON_SCREEN) && play(&away) && play(&ON_SCREEN)) {
+        if (expected != 0 && play(&REQUESTS_PREPARED) && play(&away) && play(&ON_SCREEN)) {
             expect(NETWORK, mark(MARK_PICTURE) == expected,
                    "%s, then on the screen: it shows another picture than %s - only HOST_DATA_LAST makes an "
                    "answer whole", told(&away),
@@ -1581,7 +1589,7 @@ static void check_network(void)
          * On return, answer a fresh request if focus or its timer asks for one. */
         scene_t reopened = { .retry_round = 1, .rounds = { { ROUND_WHOLE, 0, 0 } } };
         const scene_t *returned = standin_subject.poll_count == 0 ? &reopened : &ON_SCREEN;
-        if (play(&ON_SCREEN) && play(&away) && play(&then) && play(returned)) {
+        if (play(&REQUESTS_PREPARED) && play(&away) && play(&then) && play(returned)) {
             expect(NETWORK, mark(MARK_PICTURE) == seen_it_arrive || deferred_recovery,
                    "%s, then a whole answer off the screen, then on the screen: it shows another picture than "
                    "after the whole answer alone", told(&away));

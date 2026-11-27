@@ -13,6 +13,13 @@ object DeviceTimeZonesTest {
             .first { File(it, "sdk/host_api.h").isFile }
         val zones = DeviceTimeZones(root, Clock.fixed(Instant.parse("2026-11-28T00:00:00Z"), ZoneOffset.UTC))
         fun offset(zone: String, at: String) = zones.rules(zone).getOffset(Instant.parse(at)).totalSeconds
+        for (rule in listOf("UTC-3", "<+03>-3", "EST5EDT,M3.2.0,M11.1.0")) {
+            check(zones.posix(rule) == rule) { "explicit POSIX rule was reinterpreted: $rule" }
+        }
+        check(offset("UTC-3", "2026-11-28T12:00:00Z") == 3 * 3600)
+        check(offset("<+03>-3", "2026-11-28T12:00:00Z") == 3 * 3600)
+        check(offset("EST5EDT,M3.2.0,M11.1.0", "2026-01-01T12:00:00Z") == -5 * 3600)
+        check(offset("EST5EDT,M3.2.0,M11.1.0", "2026-07-01T12:00:00Z") == -4 * 3600)
         check(offset("Europe/Nicosia", "2000-01-01T12:00:00Z") == 2 * 3600)
         check(offset("Europe/Nicosia", "2000-07-01T12:00:00Z") == 3 * 3600)
         check(offset("Pacific/Apia", "1970-01-01T00:00:00Z") == 13 * 3600)
