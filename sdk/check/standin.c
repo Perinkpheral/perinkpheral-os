@@ -2667,7 +2667,12 @@ __attribute__((weak)) const int32_t app_alloc_arena_bytes = 0;
 
 static int32_t arena_bytes(void)
 {
-    return app_alloc_arena_bytes >= 0 && app_alloc_arena_bytes <= ARENA_BYTES ? app_alloc_arena_bytes : 0;
+    /* Read through a pointer the compiler cannot see through: GCC takes the
+     * initializer of a weak constant for its value, and the declaration of
+     * the application would not be seen. */
+    const int32_t *volatile declared = &app_alloc_arena_bytes;
+    int32_t bytes = *declared;
+    return bytes >= 0 && bytes <= ARENA_BYTES ? bytes : 0;
 }
 
 int32_t app_alloc_left(void)
