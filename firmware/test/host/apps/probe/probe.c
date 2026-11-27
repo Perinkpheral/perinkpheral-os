@@ -793,6 +793,18 @@ void app_on_draw(void)
     if (boundaries_checked && time_from_local(&carried_year, &moment) == HOST_OK && moment == HOST_TIME_MIN) {
         mark(26, ROW_LOCAL_TIME);
     }
+    char empty_text[2] = { 'x', 'y' };
+    bool zero_capacity_checked = time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, empty_text, 0) == 0 &&
+        time_text(HOST_TIME_MAX, HOST_TIME_WEEKDAY_SHORT, (char *)memory_end(), 0) == 0 &&
+        time_text(HOST_TIME_MIN - 1, HOST_TIME_CLOCK, empty_text, 0) == HOST_ERR_ARGUMENT &&
+        time_text(HOST_TIME_MAX + 1, HOST_TIME_CLOCK, empty_text, 0) == HOST_ERR_ARGUMENT &&
+        time_text(HOST_TIME_MIN, -1, empty_text, 0) == HOST_ERR_ARGUMENT &&
+        time_text(HOST_TIME_MIN, HOST_TIME_WEEKDAY_SHORT + 1, empty_text, 0) == HOST_ERR_ARGUMENT &&
+        time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, (char *)(memory_end() + 1), 0) == HOST_ERR_ARGUMENT &&
+        time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, empty_text, -1) == HOST_ERR_ARGUMENT;
+    if (zero_capacity_checked && empty_text[0] == 'x' && empty_text[1] == 'y') {
+        mark(28, ROW_LOCAL_TIME);
+    }
     host_answer_info_t outside;
     if (answer_info(&outside, sizeof outside) == HOST_ERR_NOT_FOUND &&
         answer_header("set-cookie", 10, 0, (char *)&outside, sizeof outside) == HOST_ERR_NOT_FOUND) {

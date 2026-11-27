@@ -42,7 +42,7 @@ HOST_IMPORT(gfx_height, int32_t gfx_height(void));
  * differ, so layout must use measured widths: gfx_text_width(),
  * gfx_font_height(), gfx_font_ascent(), gfx_font_cap_height().
  *
- * Sizes in pixels, Departure Mono / Jersey:
+ * Informative sizes in pixels, Departure Mono / Jersey:
  *                       capitals   line       digits per 400 px
  *   HOST_FONT_SMALL      8 / 10    15 / 21    57 / 50
  *   HOST_FONT_TEXT      16 / 15    30 / 28    28 / 33
@@ -106,7 +106,7 @@ HOST_IMPORT(gfx_font_cap_height, int32_t gfx_font_cap_height(int32_t font));
 /* Sets the colour for the following calls: HOST_PAPER (0) to HOST_INK
  * (16). The colour is HOST_INK at the start of every app_on_draw().
  * Intermediate values are greys produced by dithering: N of every 16
- * pixels are inked, in a fixed 4 x 4 pattern. When the user disables
+ * pixels are inked, currently in a 4 x 4 pattern (informative). When the user disables
  * dithering, 1..7 become paper and 8..15 ink. Use greys for filled areas
  * only; thin lines and small text become unreadable. */
 #define HOST_PAPER 0
@@ -201,11 +201,8 @@ HOST_IMPORT(gfx_draw_bitmap_file,
 #define HOST_ICON_LEAF           47
 #define HOST_ICON_MASK           48
 #define HOST_ICON_LAYERS         49
-#define HOST_SINCE_HOST_ICON_LAYERS "0.1.84"
 #define HOST_ICON_PROGRESS       50
-#define HOST_SINCE_HOST_ICON_PROGRESS "0.1.84"
 #define HOST_ICON_CUBE           51
-#define HOST_SINCE_HOST_ICON_CUBE "0.1.84"
 #define HOST_ICON_COUNT          52
 #define HOST_ICON_NONE           (-1) /* where an icon is optional: none */
 #define HOST_ICON_CELLS          11
@@ -260,11 +257,8 @@ HOST_IMPORT(gfx_draw_picture,
  * on an eight-pixel grid. A centre near a source cell's edge may select a
  * neighbouring cell. An invalid map is refused with HOST_ERR_ARGUMENT. */
 #define HOST_MAP_WORLD 0
-#define HOST_SINCE_HOST_MAP_WORLD "0.1.94"
 #define HOST_MAP_AEQD 1
-#define HOST_SINCE_HOST_MAP_AEQD "0.1.94"
 #define HOST_MAP_COASTLINE 1
-#define HOST_SINCE_HOST_MAP_COASTLINE "0.1.94"
 
 typedef struct host_map {
     int32_t x, y, w, h;
@@ -283,7 +277,6 @@ HOST_LAYOUT(host_map_point_t, 12);
  * of a second, about a second for a large map near a pole; not measured on the device.
  * While it draws it takes 8,128 bytes from the shared 112 KB application area;
  * HOST_ERR_NO_SPACE when that much is not free. Requires app_on_draw(). */
-#define HOST_SINCE_gfx_draw_map "0.1.94"
 HOST_IMPORT(gfx_draw_map, int32_t gfx_draw_map(const host_map_t *map));
 
 /* Where a place falls on the map: visible 1 and x, y of the pixel that holds it in surface
@@ -291,7 +284,6 @@ HOST_IMPORT(gfx_draw_map, int32_t gfx_draw_map(const host_map_t *map));
  * the rectangle or the place is on the far side of an azimuthal map. A world map's edges
  * clamp: 180 E is its last column and 90 S its last row. Works in any handler. Returns
  * HOST_ERR_ARGUMENT, leaving point untouched, for an invalid map or place. */
-#define HOST_SINCE_gfx_map_point "0.1.94"
 HOST_IMPORT(gfx_map_point, int32_t gfx_map_point(const host_map_t *map, int32_t lat_e6,
                                                  int32_t lon_e6, host_map_point_t *point));
 
@@ -299,6 +291,5 @@ HOST_IMPORT(gfx_map_point, int32_t gfx_map_point(const host_map_t *map, int32_t 
  * clipped to the map's rectangle: 256 straight pieces, true distance on any projection. On an
  * azimuthal map centred on the place it is a circle of radius_m / m_per_px pixels; on a world
  * map a ring cut by the left or right edge goes on from the other. Requires app_on_draw(). */
-#define HOST_SINCE_gfx_draw_map_radius "0.1.94"
 HOST_IMPORT(gfx_draw_map_radius, int32_t gfx_draw_map_radius(const host_map_t *map, int32_t lat_e6,
                                                              int32_t lon_e6, int32_t radius_m));

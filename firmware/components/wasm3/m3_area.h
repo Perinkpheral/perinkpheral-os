@@ -19,9 +19,12 @@ extern "C" {
  * needs more than there is fails to start, every time, instead of now and
  * then. A module declares the memory its stack and data take, at most one
  * standard page of 64 KB (d_m3MaxLinearMemoryPages); what it leaves is the
- * interpreter's. 112 KB from 2026-11-26: at 144 KB the heap left to the
- * host stayed under what a network session needs. */
+ * interpreter's. ABI 3 keeps at least 112 KB for this shared area; a
+ * module within the linear-memory ceiling may still fail to fit. */
 #define M3_AREA_BYTES (112 * 1024)
+#if M3_AREA_BYTES < (112 * 1024)
+#error "ABI 3 application area floor"
+#endif
 
 /* Takes the area from the heap, once, for as long as the device runs.
  * Call it first of all, while the heap is whole. False if unavailable. */

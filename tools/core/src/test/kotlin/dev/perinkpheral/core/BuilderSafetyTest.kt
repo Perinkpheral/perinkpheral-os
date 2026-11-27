@@ -265,7 +265,7 @@ object BuilderSafetyTest {
                     check(messages.any { "warning: this much memory and code" in it } == overBudget)
                     check(messages.none { "larger arena" in it || "declare \"firmware\"" in it })
                     val packaged = Json.parse(File(arenaOutput, "manifest.json").readText()) as Map<*, *>
-                    check(packaged["firmware"] == (firmware ?: "0.1.30")) // Advisory, never an automatic bump.
+                    check(packaged["firmware"] == Sdk(root).firmwareFor(emptyList()).first) // Advisory, never an automatic bump.
                     check(File(arenaOutput, "app.wasm").isFile)
                 }
                 val hostTests = File(root, "firmware/test/host")

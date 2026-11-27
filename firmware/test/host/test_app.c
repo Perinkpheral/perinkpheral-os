@@ -683,6 +683,20 @@ static void test_bad_modules(void)
     CHECK(app_load("x", HOST_API_VERSION, two_pages, sizeof two_pages, 0, &SERVICES, &app) == APP_ERR_BAD_MODULE);
     CHECK(app == NULL);
 
+    /* Declared or unbounded growth is refused even when the initial size fits. */
+    static const uint8_t growable[][16] = {
+        { 0x00, 'a', 's', 'm', 1, 0, 0, 0, 5, 4, 1, 1, 0, 1 },
+        { 0x00, 'a', 's', 'm', 1, 0, 0, 0, 5, 3, 1, 0, 0 },
+        { 0x00, 'a', 's', 'm', 1, 0, 0, 0, 5, 5, 1, 9, 1, 2, 0 },
+        { 0x00, 'a', 's', 'm', 1, 0, 0, 0, 5, 4, 1, 8, 1, 0 },
+    };
+    for (size_t index = 0; index < sizeof growable / sizeof growable[0]; index++) {
+        app = (app_t *)1;
+        size_t size = 8 + 2 + growable[index][9];
+        CHECK(app_load("growable", HOST_API_VERSION, growable[index], size, 0, &SERVICES, &app) ==
+              APP_ERR_BAD_MODULE && app == NULL);
+    }
+
     /* A memory of 65537 one-byte pages, initial and maximum: a byte more than an application gets */
     static const uint8_t byte_over[] = { 0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
                                          0x05, 0x09, 0x01, 0x09, 0x81, 0x80, 0x04, 0x81, 0x80, 0x04, 0x00 };
@@ -892,6 +906,9 @@ static void test_color_and_local_time(void)
     CHECK(gfx_get(&surface, 22, ROW_LOCAL_TIME)); /* invalid moments leave destinations intact */
     CHECK(gfx_get(&surface, 24, ROW_LOCAL_TIME)); /* extreme normalized fields are refused */
     CHECK(gfx_get(&surface, 26, ROW_LOCAL_TIME)); /* both bounds round-trip */
+    if (probe_bytes == probe_wasm) {
+        CHECK(gfx_get(&surface, 28, ROW_LOCAL_TIME)); /* zero capacity validates without writing */
+    }
     const char *previous_zone = getenv("TZ");
     char *kept_zone = previous_zone != NULL ? strdup(previous_zone) : NULL;
     CHECK(setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1) == 0);
@@ -951,6 +968,20 @@ static void test_byte_page_memory(void)
     CHECK(app_load("memory", HOST_API_VERSION, memory_wasm, sizeof memory_wasm, 0, &SERVICES, &app) == APP_OK);
     CHECK(app != NULL && !app_has_stopped(app));
     CHECK(app_take_redraw_request(app));
+    app_unload(app);
+
+    /* (memory 0 0); app_on_load traps if memory.grow(1) succeeds. */
+    static const uint8_t memory_zero_wasm[] = {
+        0x00, 'a', 's', 'm', 1, 0, 0, 0,
+        1, 4, 1, 0x60, 0, 0,
+        3, 2, 1, 0,
+        5, 4, 1, 1, 0, 0,
+        7, 15, 1, 11, 'a', 'p', 'p', '_', 'o', 'n', '_', 'l', 'o', 'a', 'd', 0, 0,
+        10, 15, 1, 13, 0, 0x41, 1, 0x40, 0, 0x41, 0x7f, 0x47, 4, 0x40, 0, 0x0b, 0x0b
+    };
+    app = NULL;
+    CHECK(app_load("zero", HOST_API_VERSION, memory_zero_wasm, sizeof memory_zero_wasm, 0, &SERVICES, &app) == APP_OK);
+    CHECK(app != NULL && !app_has_stopped(app));
     app_unload(app);
 }
 

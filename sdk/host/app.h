@@ -41,7 +41,8 @@ APP_EXPORT(app_on_terminate, void app_on_terminate(void));
  * Called once, on or off the screen, after app_on_load(); off the screen the
  * application is loaded for the call. A new version does not inherit the
  * alarms set by the old one: set them again here. The store, the files
- * and poll intervals set from code are kept across an update. A load
+ * and poll intervals set from code are kept across an update, except that
+ * a file in the incoming package replaces an existing file of the same name. A load
  * failure leaves the notification pending for the next startup/reload.
  * Once loaded it is consumed before the callback (or a missing callback),
  * even if app_on_load() or the callback traps: it is not retried endlessly. */
@@ -77,9 +78,7 @@ APP_EXPORT(app_on_settings, void app_on_settings(void));
  * The room is taken from Perinkpheral OS's memory when first set and grown
  * when more is asked: HOST_ERR_NO_SPACE when it cannot be given, the bytes
  * kept before staying as they were. Keep it small - a few fields; a packed
- * board of a game is the most it is for. Firmware before 0.1.61 keeps 128
- * bytes: an application that keeps more names "firmware": "0.1.61" in its
- * manifest. */
+ * board of a game is the most it is for. */
 #define HOST_SESSION_MAX 1024
 HOST_IMPORT(session_set, int32_t session_set(const void *data, int32_t length));
 HOST_IMPORT(session_get, int32_t session_get(void *buffer, int32_t capacity));

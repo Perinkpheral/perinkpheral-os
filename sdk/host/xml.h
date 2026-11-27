@@ -19,7 +19,6 @@
  * Find the first direct child with ordinal >= from. Use parent -1 for the
  * root, or a zero-length name to match any name. Returns an ordinal, -1 if
  * absent, or -2 for an invalid document or argument. */
-#define HOST_SINCE_xml_child "0.1.100"
 HOST_IMPORT(xml_child, int32_t xml_child(const char *doc, int32_t length, int32_t parent,
                                          const char *name, int32_t name_length, int32_t from));
 
@@ -29,7 +28,6 @@ HOST_IMPORT(xml_child, int32_t xml_child(const char *doc, int32_t length, int32_
  * When label is 0 an
  * oversized value fails. With label 1 it is shortened on a UTF-8 boundary,
  * adding three ASCII dots if capacity >= 5. An absent value or error leaves the output untouched. */
-#define HOST_SINCE_xml_attr "0.1.100"
 HOST_IMPORT(xml_attr, int32_t xml_attr(const char *doc, int32_t length, int32_t node,
                                        const char *name, int32_t name_length, char *out,
                                        int32_t capacity, int32_t label));
@@ -40,8 +38,6 @@ HOST_IMPORT(xml_attr, int32_t xml_attr(const char *doc, int32_t length, int32_t 
  * output ranges. Reserved bytes must be zero. */
 #define HOST_XML_LABEL 1
 #define HOST_XML_REQUIRED 2
-#define HOST_SINCE_HOST_XML_LABEL "0.1.100"
-#define HOST_SINCE_HOST_XML_REQUIRED "0.1.100"
 typedef struct host_xml_field {
     char name[32];
     uint16_t offset;
@@ -57,7 +53,6 @@ HOST_LAYOUT(host_xml_field_t, 40);
  * shortening rule of xml_attr. Document, table and output must be mutually
  * disjoint; the table must be aligned to 2 bytes. Invalid input, duplicate
  * keys, or an unsuccessful field leaves the entire output untouched. */
-#define HOST_SINCE_xml_attrs "0.1.100"
 HOST_IMPORT(xml_attrs, int32_t xml_attrs(const char *doc, int32_t length, int32_t node,
                                          const host_xml_field_t *fields, int32_t count,
                                          char *out, int32_t capacity));

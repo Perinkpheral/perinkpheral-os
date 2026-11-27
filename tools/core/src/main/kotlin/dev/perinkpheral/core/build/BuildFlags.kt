@@ -12,8 +12,8 @@ object BuildFlags {
      *  and what it leaves of the application area is the interpreter's. */
     const val WASM_PAGE = 65536
 
-    /** The application area of the device: the module's memory and the interpreter's
-     *  together (M3_AREA_BYTES of firmware/components/wasm3/m3_area.h). */
+    /** The ABI 3 application-area floor, not a guarantee that every module fits:
+     *  the module's memory and the interpreter's together (M3_AREA_BYTES of firmware/components/wasm3/m3_area.h). */
     const val APP_AREA = 112 * 1024
 
     /** The stack at the bottom of the memory. */

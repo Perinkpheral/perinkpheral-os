@@ -193,12 +193,15 @@ HOST_FUNCTION(time_text)
     m3ApiGetArg(int32_t, capacity);
     app_t *app = APP_OF(runtime);
     char  *text = (char *)app_memory_to_fill(runtime, _mem, text_offset, capacity);
-    if (text == NULL || capacity < 1 || style < HOST_TIME_CLOCK || style > HOST_TIME_WEEKDAY_SHORT) {
+    if (text == NULL || style < HOST_TIME_CLOCK || style > HOST_TIME_WEEKDAY_SHORT) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
     }
     host_local_time_t at, today;
     if (!take_apart(app, unix_time, &at)) {
         m3ApiReturn(HOST_ERR_ARGUMENT);
+    }
+    if (capacity == 0) {
+        m3ApiReturn(0);
     }
     int64_t now = app->services->unix_time();
     if (!take_apart(app, now, &today)) {

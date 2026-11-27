@@ -40,6 +40,23 @@ static void test_package_files(void)
     CHECK(file_write("root.pem.copy", 13, 0, "x", 1) == HOST_OK);
 }
 
+static void test_time_text_zero_capacity(void)
+{
+    standin_reset();
+    char text[] = { 'x', 'y' };
+    for (int32_t style = HOST_TIME_CLOCK; style <= HOST_TIME_WEEKDAY_SHORT; style++) {
+        CHECK(time_text(HOST_TIME_MIN, style, text, 0) == 0);
+        CHECK(time_text(HOST_TIME_MAX, style, text, 0) == 0);
+    }
+    CHECK(time_text(HOST_TIME_MIN - 1, HOST_TIME_CLOCK, text, 0) == HOST_ERR_ARGUMENT);
+    CHECK(time_text(HOST_TIME_MAX + 1, HOST_TIME_CLOCK, text, 0) == HOST_ERR_ARGUMENT);
+    CHECK(time_text(HOST_TIME_MIN, -1, text, 0) == HOST_ERR_ARGUMENT);
+    CHECK(time_text(HOST_TIME_MIN, HOST_TIME_WEEKDAY_SHORT + 1, text, 0) == HOST_ERR_ARGUMENT);
+    CHECK(time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, text, -1) == HOST_ERR_ARGUMENT);
+    CHECK(time_text(HOST_TIME_MIN, HOST_TIME_CLOCK, NULL, 0) == HOST_ERR_ARGUMENT);
+    CHECK(text[0] == 'x' && text[1] == 'y');
+}
+
 static void test_long_back(void)
 {
     standin_reset();
@@ -123,6 +140,7 @@ static void test_notification_validation(void)
 int main(void)
 {
     test_package_files();
+    test_time_text_zero_capacity();
     test_long_back();
     test_log_sanitization();
     test_redraw_flags();

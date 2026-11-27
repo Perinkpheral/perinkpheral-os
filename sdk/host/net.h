@@ -184,7 +184,6 @@ HOST_IMPORT(answer_info, int32_t answer_info(host_answer_info_t *response, int32
  * repeated values in "headers". Its stand-in uses the firmware storage and
  * fixed metadata parser; no transport decoding or automatic headers are
  * simulated (sdk/check/README.md). */
-#define HOST_SINCE_answer_header "0.1.51"
 HOST_IMPORT(answer_header,
             int32_t answer_header(const char *name, int32_t name_length, int32_t occurrence,
                                   char *value, int32_t capacity));
@@ -201,9 +200,7 @@ APP_EXPORT(app_data_buffer, uint8_t *app_data_buffer(void));
  * including line feeds; a carriage return fails preparation. The developer
  * supplies escaping and Content-Type in headers. Headers and body expand
  * together immediately before sending; "each" substitutes its item in both.
- * "pick" works with every method; HEAD has no values. Only GET follows redirects.
- * The build computes this firmware minimum for non-GET methods or any body. */
-#define HOST_SINCE_POLL_METHOD "0.1.80"
+ * "pick" works with every method; HEAD has no values. Only GET follows redirects. */
 
 /* Network availability is reported in the answer: a request made without
  * a network fails with HOST_FAILED_NO_NETWORK. The radio can be off
@@ -321,11 +318,6 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
 #define HOST_FORMAT_JSON 1
 #define HOST_FORMAT_XML  2
 #define HOST_DOCUMENT_MAX 12288
-#define HOST_SINCE_HOST_FORMAT_RAW "0.1.100"
-#define HOST_SINCE_HOST_FORMAT_JSON "0.1.100"
-#define HOST_SINCE_HOST_FORMAT_XML "0.1.100"
-#define HOST_SINCE_HOST_DOCUMENT_MAX "0.1.100"
-#define HOST_SINCE_RESPONSE_FORMAT "0.1.100"
 
 /* Register a guest buffer for structured raw responses, normally in
  * app_on_load. Its lifetime is the current instance. The buffer must be
@@ -336,7 +328,6 @@ HOST_IMPORT(poll_set_interval, int32_t poll_set_interval(int32_t poll, int32_t s
  * Structured XML uses the host/xml.h subset, with up to 64 attributes per
  * element. Duplicate attribute names within an element, or unknown entities
  * anywhere, invalidate the document. */
-#define HOST_SINCE_document_buffer_set "0.1.100"
 HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, int32_t capacity));
 
 /* Opt-in notification for recognized formats, normally after the final raw piece.
@@ -355,6 +346,5 @@ HOST_IMPORT(document_buffer_set, int32_t document_buffer_set(uint8_t *buffer, in
  * or unload. Non-2xx statuses and validation, size or transport errors have
  * zero length. An interrupted instance has no later completion. Raw MIME
  * and JSON pick polls continue through their own handlers. */
-#define HOST_SINCE_app_on_document "0.1.100"
 APP_EXPORT(app_on_document, void app_on_document(int32_t request, int32_t format,
                                                  int32_t status, int32_t length));

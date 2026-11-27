@@ -276,10 +276,10 @@ build/budget/app.wasm: apps/budget/budget.c $(TOOLS)
 build/budget_wasm.h: build/budget/app.wasm
 	(echo "static const unsigned char budget_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@
 
-# A growable module made outside the builder, with a declared maximum above the runtime limit.
+# A fixed module made outside the builder: memory.grow must fail.
 build/memory/app.wasm: apps/memory/memory.c $(SDK)/host_api.h $(wildcard $(SDK)/host/*.h) $(TOOLS)
 	@mkdir -p build/memory
-	$(WASI_SDK_PATH)/bin/clang --target=wasm32 -nostdlib -Oz -Wall -Wextra -Werror -I$(SDK) -Wl,--no-entry -Wl,--page-size=1 -Wl,-z,stack-size=0 -Wl,--initial-memory=65528 -Wl,--max-memory=65538 $< -o $@
+	$(WASI_SDK_PATH)/bin/clang --target=wasm32 -nostdlib -Oz -Wall -Wextra -Werror -I$(SDK) -Wl,--no-entry -Wl,--page-size=1 -Wl,-z,stack-size=0 -Wl,--initial-memory=65528 -Wl,--no-growable-memory $< -o $@
 
 build/memory_wasm.h: build/memory/app.wasm
 	(echo "static const unsigned char memory_wasm[] = {"; $(call c_bytes,$<); echo "};") > $@

@@ -6,21 +6,30 @@
  * applications. Applications include this header and link the imports.
  * Perinkpheral OS builds its import table from the same names.
  *
- * ABI 3 first appeared in firmware 0.1.30. Approved changes before the
- * first public release removed scene_state_set and scene_state_get and
- * increased session capacity in 0.1.61, and changed network-forgetting
- * behavior in 0.1.66. After the public release, existing names, signatures,
- * privileges, layouts, values and meanings must remain compatible;
- * incompatible changes require a new ABI. Additions after the 0.1.30 floor
- * carry valid HOST_SINCE_<name> introduction stamps before snapshot recording;
- * established baseline entries need none and recorded stamps stay fixed.
- * Only host_answer_info_t may append fields beyond its old extent, preserving
- * alignment and every existing field type, offset and size. Other recorded
- * layouts stay fixed. ABI 2 is unsupported.
- * Application linear memory is sized to its stack and static data, at most
- * 64 KB, and cannot grow. Linear memory, interpreter allocations and contract
- * scratch memory share a 112 KB application area. Build estimates are
- * advisory and do not establish peak use.
+ * ABI 3 starts with the first public release named by
+ * HOST_ABI_3_FIRMWARE_FIRST. Earlier packages have no compatibility guarantee.
+ * After that release, existing names, signatures, privileges, layouts,
+ * values and meanings remain compatible; incompatible changes require a
+ * new ABI. Later additions carry permanent HOST_SINCE_<name> introduction
+ * stamps. Only the explicit admission and reservation limits listed in
+ * ContractSnapshot.growableLimits may increase; applications using an
+ * increased limit must declare its firmware minimum. Output sizes and
+ * layout dimensions remain fixed. HOST_ICON_COUNT may grow with contiguous
+ * appended icon IDs. Only host_answer_info_t may append fields beyond its
+ * old extent, preserving alignment and every existing field type, offset
+ * and size. Other recorded layouts stay fixed. ABI 2 is unsupported.
+ *
+ * A module's linear memory is fixed at build time, cannot grow and is at
+ * most 64 KB (65536 bytes). ABI 3 reserves an application area of at least
+ * 112 KB (114688 bytes), shared by linear memory, interpreter allocations
+ * and contract scratch memory. Meeting the linear-memory limit does not
+ * guarantee that a module fits this shared area. The builder's interpreter
+ * estimate is advisory and does not establish peak use.
+ * Surface sizes of 400 x 300 (full screen) and 400 x 260 (below the header),
+ * and ink levels 0..16 are contract guarantees. Timing descriptions, font
+ * metrics, dithering patterns and physical panel facts are informative,
+ * not compatibility promises; measure text with the supplied calls.
+ *
  * Commands use subject then verb (gfx_draw_text); queries name what is
  * asked (gfx_width); events called by Perinkpheral OS are app_on_<what happened>.
  *

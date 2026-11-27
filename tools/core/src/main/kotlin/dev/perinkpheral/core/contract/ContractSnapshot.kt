@@ -7,15 +7,38 @@ import java.security.MessageDigest
 import java.io.File
 import java.nio.file.Files
 
-/** Recorded entries stay fixed; the icon count grows only with appended icon IDs. A check also
- * fails on an entry of the contract that is not recorded: an unrecorded call could change
- * unnoticed. Until ABI 3 is frozen, `unfrozen` lets a snapshot rewrite recorded entries. */
+/** Recorded entries stay fixed except approved capacity growth, appended icon IDs and
+ * response metadata. Unrecorded entries fail the check too: an unrecorded call could
+ * change unnoticed. Until ABI 3 is frozen, `unfrozen` permits rewriting recorded entries. */
 object ContractSnapshot {
+    /** Input admission and storage reservations may grow. Output bounds, truncation
+     * limits, layout dimensions and protocol encodings are deliberately absent.
+     * Using a larger capacity requires an explicit manifest firmware minimum;
+     * introduction stamps describe new entries, not later capacity increases. */
+    internal val growableLimits = setOf(
+        "HOST_SESSION_MAX",
+        "HOST_KV_KEY_MAX", "HOST_KV_VALUE_MAX", "HOST_KV_TOTAL_MAX",
+        "HOST_FILE_NAME_MAX", "HOST_FILES_MAX", "HOST_FILES_WRITER_MAX",
+        "HOST_ALARM_COUNT", "HOST_TIMER_COUNT", "HOST_ALARM_REPEATING_MAX",
+        "HOST_HTTP_HEADERS_MAX", "HOST_HTTP_BODY_MAX", "HOST_HTTP_PENDING_MAX",
+        "HOST_TEXT_ARGUMENTS_MAX", "HOST_CHART_VALUES_MAX",
+        "HOST_ANSWER_MAX", "HOST_ANSWER_PIECES_MAX", "HOST_DOCUMENT_MAX",
+        "MANIFEST_MODULE_MAX_BYTES", "MANIFEST_POLLS_MAX", "MANIFEST_HOSTS_MAX",
+        "MANIFEST_SETTINGS_MAX", "MANIFEST_HEADERS_MAX", "MANIFEST_PICK_PATHS_MAX",
+        "MANIFEST_SETTING_OPTIONS_MAX", "MANIFEST_CERTIFICATES_MAX",
+        "MANIFEST_POLL_BODY_MAX", "MANIFEST_URL_MAX", "MANIFEST_HOST_MAX",
+        "MANIFEST_HEADER_NAME_MAX", "MANIFEST_HEADER_VALUE_MAX",
+        "MANIFEST_FILE_NAME_MAX", "MANIFEST_FILES_MAX_BYTES", "MANIFEST_FILES_WRITER_MAX_BYTES",
+        "MANIFEST_CERTIFICATE_MAX_BYTES", "MANIFEST_STRINGS_MAX_BYTES"
+    )
+
     private val ignored = setOf("HOST_IMPORT", "HOST_SYSTEM_IMPORT", "HOST_LAYOUT")
 
     fun run(sdk: Sdk, wasi: File, out: File, check: Boolean, unfrozen: Boolean = false) {
         val current = entries(sdk, wasi)
-        checkIntroductionStamps(sdk, current, out)
+        // An authorized release-baseline rewrite folds pre-release additions into the floor.
+        val recordsReleaseBaseline = !check && unfrozen && sdk.version == sdk.firmwareFirst
+        if (!recordsReleaseBaseline) checkIntroductionStamps(sdk, current, out)
         val packages = File(sdk.sdk, "abi/${sdk.hostApiVersion}")
         val fixtures = File(packages, "fixtures.txt")
         val hashes = fixtureEntries(packages, fixtures)
@@ -36,7 +59,8 @@ object ContractSnapshot {
         if (out.isFile) {
             val recorded = read(out)
             val broken = recorded.filter { (key, value) ->
-                current[key] != value && !iconCountAddition(key, value, current, recorded) &&
+                current[key] != value && !limitIncrease(key, value, current) &&
+                    !iconCountAddition(key, value, current, recorded) &&
                     !answerInfoExtension(key, current, recorded)
             }
             if (broken.isNotEmpty()) throw BuildError("$label changed:\n" + broken.entries.joinToString("\n") {
@@ -59,6 +83,13 @@ object ContractSnapshot {
         }
         if (unstamped.isNotEmpty()) throw BuildError("New ABI entries require HOST_SINCE_<name> introduction stamps:\n" +
             unstamped.sorted().joinToString("\n") { "  HOST_SINCE_$it" })
+    }
+
+    private fun limitIncrease(key: String, value: String, current: Map<String, String>): Boolean {
+        if (!key.startsWith("constant ") || key.removePrefix("constant ") !in growableLimits) return false
+        val before = value.toLongOrNull() ?: return false
+        val after = current[key]?.toLongOrNull() ?: return false
+        return before > 0 && after > before
     }
 
     /* answer_info copies a capacity-bounded prefix; only fields beyond the old

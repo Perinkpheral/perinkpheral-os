@@ -12,17 +12,15 @@
 
 #define HOST_API_VERSION 3
 
-/* Every ABI 3 application requires at least 0.1.30. HOST_SINCE_<call>
- * records only a call or contract entry added after that ABI floor, beside
- * its declaration, with the firmware version it will be released in.
- * The build sets the manifest's "firmware" to the maximum required by the
- * ABI floor, imported calls, exported handlers, recognized manifest features
- * and an explicit manifest minimum. Behavior and constants not detectable
- * from the module require an explicit minimum, including sessions larger
- * than 128 bytes and SYS_DO_WIFI_SETUP. Older firmware neither installs
- * nor starts the application. */
-#define HOST_ABI_3_FIRMWARE_FIRST "0.1.30"
-#define HOST_FIRMWARE_FIRST     "0.1.30" /* entries without an introduction stamp */
+/* ABI 3 starts with the first public release, 0.1.103. Entries in that
+ * release need no introduction stamp. Later additions carry a permanent
+ * HOST_SINCE_<name> version beside their declaration. The build takes the
+ * maximum of the ABI floor, detected introduction stamps and an explicit
+ * manifest minimum. Use an explicit minimum for behaviour or increased
+ * limits that the build cannot infer from imports, exports or the manifest.
+ * Older firmware neither installs nor starts the application. */
+#define HOST_ABI_3_FIRMWARE_FIRST "0.1.103"
+#define HOST_FIRMWARE_FIRST     "0.1.103" /* entries without an introduction stamp */
 
 /* Perinkpheral OS includes this header for its constants. Outside a
  * wasm build the declarations expand to nothing, because Perinkpheral OS defines
@@ -69,15 +67,23 @@
  * return error codes reject negative lengths, negative capacities and ranges
  * outside module memory with HOST_ERR_ARGUMENT unless they document their own result codes. log_write() returns no
  * status and ignores an invalid input range.
- * Zero capacity is accepted for buffer reads except time_text(), xml_attr() and xml_attrs(); the
- * destination must still be a valid memory offset. Successful text reads
- * never append NUL, except xml_attr(), xml_attrs() and the fixed string fields of host_answer_info_t.
+ * Zero capacity is accepted for buffer reads except xml_attr() and
+ * xml_attrs(); the destination must still be a valid memory offset. Text
+ * reads never append NUL, except xml_attr(), xml_attrs() and the fixed
+ * string fields of host_answer_info_t.
  * Unless a call says it truncates, insufficient capacity returns
  * HOST_ERR_NO_SPACE and copies nothing. Read/format/measurement errors
  * leave outputs untouched, except file_read(): a storage error can follow
  * a partial read. Storage writes can fail after changing storage; no
  * rollback is promised. If several arguments are invalid, which error is
  * reported first is unspecified. */
+
+/* Unless a call documents another result convention, a negative result
+ * means failure. New failure codes may be added; handle an unknown negative
+ * result as failure. Event, intent, enum and flag outputs may be extended:
+ * ignore unknown events, intents and enum values, and ignore unknown output
+ * flag bits while processing known bits. Input validation is specific to
+ * each call; no common rule permits unknown input values or bits. */
 
 /* Return codes of imports that return no value of their own. */
 #define HOST_OK               0

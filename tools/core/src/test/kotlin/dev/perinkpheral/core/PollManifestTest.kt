@@ -14,8 +14,7 @@ object PollManifestTest {
         val root = generateSequence(File(System.getProperty("user.dir")).canonicalFile) { it.parentFile }
             .first { File(it, "sdk/host_api.h").isFile }
         val sdk = Sdk(root)
-        val introduced = sdk.contract.string("HOST_SINCE_POLL_METHOD")!!
-        check(sdk.callSince.getValue("POLL_METHOD") == introduced)
+        val introduced = sdk.callSince["POLL_METHOD"] ?: sdk.firmwareFirst
         val scratch = Files.createTempDirectory("perinkpheral-poll-method").toFile()
         try {
             val app = File(scratch, "apps/probe").apply { mkdirs() }
@@ -117,7 +116,7 @@ object PollManifestTest {
                 check(builtMinimum(get + ("method" to "GET")) == floor)
                 for (method in listOf("POST", "HEAD", "REPORT")) {
                     check(builtMinimum(get + ("method" to method)) == introduced)
-                    check(buildLines.any { "for a poll's method or body" in it })
+                    check(buildLines.any { "for a poll's method or body" in it } == (introduced != floor))
                     check(buildLines.none { "POLL_METHOD" in it })
                 }
                 val post = get + mapOf("method" to "POST", "body" to "request", "pick" to listOf("value"))

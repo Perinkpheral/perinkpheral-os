@@ -982,7 +982,7 @@ static int32_t auth_set(const char *app, const char *key, const void *value, int
     }
     return HOST_OK;
 }
-static const char *current_firmware(void) { return "0.1.100"; }
+static const char *current_firmware(void) { return HOST_ABI_3_FIRMWARE_FIRST; }
 static void test_headers_across_background_unloads(void)
 {
     start_on(&menu.scene);
@@ -1051,7 +1051,7 @@ static void test_scene_inversion_lifetime(void)
 }
 
 static int settings_actions;
-static const char *settings_firmware(void) { return "0.1.79"; }
+static const char *settings_firmware(void) { return HOST_ABI_3_FIRMWARE_FIRST; }
 static int32_t record_settings_action(int action)
 {
     CHECK(action == SYS_DO_RESTART);
