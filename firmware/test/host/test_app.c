@@ -14,6 +14,7 @@
 #include "host_api.h"
 #include "budget_wasm.h"
 #include "document_wasm.h"
+#include "memory_wasm.h"
 #include "every_call_wasm.h"
 #include "probe_wasm.h"
 #include "frozen_probe_wasm.h"
@@ -935,6 +936,24 @@ static void test_probe_contract(void)
     test_name_subsection_bounds();
 }
 
+static void test_byte_page_memory(void)
+{
+    static const uint8_t at_limit[] = {
+        0x00, 'a', 's', 'm', 0x01, 0x00, 0x00, 0x00,
+        0x05, 0x09, 0x01, 0x09, 0x80, 0x80, 0x04, 0x80, 0x80, 0x04, 0x00
+    };
+    app_t *app = NULL;
+    CHECK(app_load("limit", HOST_API_VERSION, at_limit, sizeof at_limit, 0, &SERVICES, &app) == APP_OK);
+    CHECK(app != NULL && !app_has_stopped(app));
+    app_unload(app);
+
+    app = NULL;
+    CHECK(app_load("memory", HOST_API_VERSION, memory_wasm, sizeof memory_wasm, 0, &SERVICES, &app) == APP_OK);
+    CHECK(app != NULL && !app_has_stopped(app));
+    CHECK(app_take_redraw_request(app));
+    app_unload(app);
+}
+
 static void test_frozen_hello_state(void)
 {
     FILE *fixture = fopen("../../../sdk/abi/3/hello/presses.bin", "rb");
@@ -1206,13 +1225,44 @@ static void test_document_delivery(void)
     app_unload(app);
 }
 
-int main(void)
+static void test_builder_memory(const char *path, int32_t data_bytes)
 {
+    FILE *module = fopen(path, "rb");
+    CHECK(module != NULL);
+    if (module == NULL) {
+        return;
+    }
+    CHECK(fseek(module, 0, SEEK_END) == 0);
+    long size = ftell(module);
+    rewind(module);
+    uint8_t *bytes = malloc((size_t)size);
+    CHECK(bytes != NULL && fread(bytes, 1, (size_t)size, module) == (size_t)size);
+    fclose(module);
+    app_t *app = NULL;
+    CHECK(app_load("sizing", 3, bytes, (size_t)size, 0, &SERVICES, &app) == APP_OK);
+    CHECK(app != NULL && !app_has_stopped(app));
+    int32_t layout[4] = {0};
+    CHECK(fake_kv_get("sizing", "m", layout, sizeof layout) == sizeof layout);
+    CHECK(layout[0] == 8192);
+    CHECK(layout[1] > 0 && layout[1] + (int32_t)sizeof layout <= 8192);
+    CHECK(layout[2] == data_bytes && layout[3] == 17);
+    app_unload(app);
+    free(bytes);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 4 && strcmp(argv[1], "--builder-memory") == 0) {
+        test_builder_memory(argv[2], (int32_t)strtol(argv[3], NULL, 10));
+        REPORT();
+    }
+    CHECK(argc == 1);
     test_document_delivery();
     test_screen_inversion();
     test_probe_contract();
     test_scene_state();
     test_response_headers();
+    test_byte_page_memory();
     probe_bytes = frozen_probe_wasm;
     probe_size = sizeof frozen_probe_wasm;
     test_probe_contract();

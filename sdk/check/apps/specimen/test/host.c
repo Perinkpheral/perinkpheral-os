@@ -17,18 +17,25 @@
 #include "standin.h"
 #include "app_alloc.h"
 
-APP_ALLOC_ARENA(64);
+APP_ALLOC_ARENA(61);
 
 static void test_arena_alignment(void)
 {
     app_alloc_release(0);
     int32_t before = app_alloc_left();
+    assert(before == 64 && app_alloc_mark() == 0);
     void *first = app_alloc(1);
     void *second = app_alloc(9);
     assert(first != NULL && second != NULL);
     assert((uintptr_t)first % 8 == 0 && (uintptr_t)second % 8 == 0);
     assert((uint8_t *)second - (uint8_t *)first == 8);
     assert(app_alloc_mark() == 24 && app_alloc_left() == before - 24);
+    assert(app_alloc(41) == NULL && app_alloc_left() == 40);
+    void *rest = app_alloc(40);
+    assert(rest != NULL && (uint8_t *)rest - (uint8_t *)first == 24);
+    memset(rest, 0x5a, 40);
+    assert(app_alloc_left() == 0 && app_alloc_mark() == 64);
+    assert(app_alloc(1) == NULL && app_alloc_mark() == 64);
     app_alloc_release(0);
     assert(app_alloc_left() == before);
 }
