@@ -21,14 +21,14 @@ async function run(replies, action = "install", options = {}) {
     button, offer: { ...offer, app: { ...offer.app, version: options.offeredVersion || offer.app.version } },
     Error, encodeURIComponent, TextEncoder, MANIFEST_AUTHOR_MAX: 63,
     window: { addEventListener() {} },
-    t: (text, ...values) => text.replace(/\{(\d+)\}/g, (_, at) => values[at]),
+    localStorage: { getItem: () => options.language || "en" },
     installed: options.fresh ? [] : [{ name: "iss", version: options.installedVersion || "1.0.0" }, { name: "clock", version: "1.0.0" }],
     document: { getElementById: () => button },
     compatibilityProblem: () => options.incompatible ? "Update Perinkpheral OS." : null,
     confirmed: async () => false,
     offerSays: offer => offer.app.name === "clock" ? "Clock" : "ISS",
     updates: () => [offer, { source: 0, generation: 0, app: { name: "clock", version: "2.0.0", files: [] } }],
-    loadApps: async () => { reloads++; },
+    loadApps: async () => { reloads++; if (options.reloadError) throw options.reloadError; },
     loadSources: async () => {}, sources: ["https://example.test/catalog"],
     offered: [], catalogsRead: action !== "catalog", drawTiles() {}, loadGlyphs() {}, loadRemoved() {},
     setTimeout: (callback, delay) => {
@@ -47,6 +47,7 @@ async function run(replies, action = "install", options = {}) {
         reply[0] === 200 ? { ok: "Saved.", apps: [] } : { error: reply[1] } };
     },
   });
+  vm.runInContext(read("i18n.js").split("const SAID")[0], context);
   vm.runInContext(core.slice(0, core.indexOf('const CONFIRM_ON_DEVICE')), context);
   vm.runInContext(read("compatibility.js"), context);
   context.toast = (text, kind, stays) => {
@@ -369,6 +370,23 @@ async function testAuthors() {
   assert.equal(result.messages.at(-1).text, "ISS: Device busy. Try again shortly.");
   assert.equal(result.messages.at(-1).kind, "error");
 
+  for (const action of ["install", "update-all"])
+    for (const [refusal, expected] of [
+      [[409, "Not enough storage."], "Недостаточно места."],
+      [[502, "Invalid app author."], "Неверный автор приложения."],
+      [[502, "App or source changed."], "Приложение или источник изменились."],
+      [memory, "Устройство пока занято. Попробуйте чуть позже."],
+      [interrupted, "Загрузка не удалась."],
+      [new Error("Failed to fetch"), "Устройство недоступно."],
+    ]) {
+      const russian = await run([refusal], action, { language: "ru" });
+      const titles = action === "install" ? ["ISS"] : ["ISS", "Clock"];
+      assert.deepEqual(russian.messages.filter(message => message.kind === "error").map(message => message.text),
+        titles.map(title => title + ": " + expected), "translate the error before adding the application title");
+    }
+  result = await run([success], "install", { language: "ru", reloadError: new Error("Not enough memory.") });
+  assert.equal(result.messages.at(-1).text, "ISS: Недостаточно памяти.", "queue errors also translate before the title is added");
+
   for (const refusal of [[502, "Checksum mismatch."], [409, "Not enough storage."],
                          [500, "Storage error."], [403, "Not confirmed."],
                          [503, "Service unavailable."], new Error("Failed to fetch")]) {
@@ -408,5 +426,6 @@ async function testAuthors() {
   await require("./test_control_screen.js")();
   await require("./test_load_states.js")();
   await require("./test_glyph_memory.js")();
+  await require("./test_page_i18n.js")();
   console.log("App requests: retry, exhaustion, update all and refusal checks passed.");
 })().catch(error => { console.error(error); process.exitCode = 1; });
