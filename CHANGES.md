@@ -4,6 +4,29 @@ Firmware release notes, newest first. Each successful push to `main` publishes a
 CI uses the matching version section for its notes; otherwise it lists commits since
 the previous release. Notes appear on GitHub, in the flasher and on the device's page.
 
+## 0.2.1
+
+- The device page shows manual polls as On request and retains interval descriptions for automatic polls.
+- Application errors are translated before the application name is added. The application name is preserved.
+- The factory-reset warning specifies that device settings and saved application values are erased; installed applications and their files remain.
+- Russian translations cover the missing firmware-update, recovery and application-install errors.
+- Documentation corrections cover the ABI 3 freeze and firmware floor, snapshot rules, polling and handler limits, saved state and file retention, memory validation, language changes and refresh tests. The application guide and user manual are updated in English and Russian.
+
+## 0.2.0
+
+- The release that freezes the application contract, ABI 3. Acceptance and the endurance run follow before the public release.
+- Catalog applications are rebuilt for the public ABI 3 contract and firmware 0.2.0. Fresh installations include the rebuilt Weather, Clock, ISS, Calendar, Timer, Stopwatch, Stocks and Air quality packages. Existing installations update applications through the catalog.
+- Manifest polls respect server cooldowns across scheduled requests, settings saves, reconnects and `poll_run()`. HTTP 429 without a usable Retry-After delay applies a 60-second cooldown. Reconnection retries transport failures in every power profile without advancing healthy polls.
+- Abandoned streamed responses stop downloading when their receiving instance is gone or a document-only consumer has completed with an error or HTTP refusal. Catalog reads and installations wait behind the current poll. Failed-allocation diagnostics include the requested size and memory kind.
+- Stress measurements on 2026-11-27, using 0.1.101 and local fix builds: 20 heavy clients caused one Wi-Fi transmit-buffer allocation failure and made the page unavailable during the load. Consecutive handlers occupied the main event loop for over 5 seconds and produced task watchdog messages; background handlers delayed application opening to 4.3 seconds. No tested load produced a panic, watchdog reset or unrequested restart. These observations do not establish unrestricted responsiveness or physical power-loss qualification.
+- In the same run, an abandoned endless response held the connection for 307 seconds before the cancellation fix. After the fix, the connection was held for 3.5 seconds after long BACK and 1.7 seconds for a document-only poll. A stream still consumed by an application can retain the connection for its 300-second body deadline; connection setup and delivery add to elapsed time.
+- ABI 3 is frozen from firmware 0.2.0, its permanent minimum. The 0.1.30 snapshot was a pre-release baseline, superseded by this freeze. Pre-release packages are unsupported; rebuild or update them. Later additions require recorded snapshots and introduction stamps. Incompatible changes require a new ABI.
+- Button events use `(button << 4) | action`, with four low action bits. Explicit calendar conversion accepts 1970-2100; current-clock validity and absolute alarms use 2026-2100, with the exact bounds in `sdk/host/time.h`.
+- Manual polls start through `poll_run()` and have no startup, settings or periodic trigger. JSON picking validates complete JSON, including UTF-8 and escapes. Complete JSON/XML delivery uses an application-owned buffer; XML queries validate the supported attribute-only subset. Raw request tags span 16 through `INT32_MAX`, separate from poll numbers.
+- Text wrapping preserves UTF-8 boundaries. Text fitting supports ellipsis-only results. Charts support fixed ranges and clip values and marks to their rectangle. Geometry queries work in any handler, including load and background delivery; drawing remains restricted to `app_on_draw()`.
+- `app_state_load()` distinguishes absent or incompatible state from storage failures. Unreadable durable state must not be overwritten with defaults. Builder, installer and runtime use the same file accounting in whole 4 KiB blocks, including translations and certificates; an incomplete quota census refuses mutation.
+- Modules use fixed linear memory sized to their stack and data in one-byte pages, at most 64 KiB. Builder and runtime reject growable or oversized memory. Linear memory, interpreter allocations and contract scratch memory share the 112 KiB application area; satisfying the linear-memory limit does not guarantee that a module fits.
+
 ## 0.1.103
 
 - Document-only consumers reject non-2xx responses after headers, without downloading the body.

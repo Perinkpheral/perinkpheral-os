@@ -214,8 +214,8 @@ Before setup: complete the settings on the page.
 After saving: the application can fetch its data.
 После сохранения: приложение может получить данные.
 
-A new device starts in English. To change it, open <b>Settings > Language</b> on its page, choose your language and click <b>Save</b>. Install <b>Cyrillic</b> there for Russian letters on the screen.
-У нового устройства выбран английский язык. Чтобы изменить его, откройте <b>Settings > Language (Настройки > Язык)</b> на странице устройства, выберите язык и нажмите <b>Save (Сохранить)</b>. Установите там пакет <b>Cyrillic (Кириллица)</b> для русских букв на экране.
+A new device starts in English. To change it, open <b>Settings > Language</b> on its page, choose your language and click <b>Save</b>. Install <b>Cyrillic</b> there for Russian letters on the screen. Then choose <b>Device > Restart</b> to finish applying the language.
+У нового устройства выбран английский язык. Чтобы изменить его, откройте <b>Settings > Language (Настройки > Язык)</b> на странице устройства, выберите язык и нажмите <b>Save (Сохранить)</b>. Установите там пакет <b>Cyrillic (Кириллица)</b> для русских букв на экране. Затем выберите <b>Устройство > Перезагрузить</b>, чтобы завершить применение языка.
 
 Open <b>Settings > Network</b>. Click <b>Scan networks</b>, choose your home network, enter its password and click <b>Connect</b>. Use a 2.4 GHz Wi-Fi network. Confirm with <code>OK</code> on the device when it asks to join.
 Откройте <b>Settings > Network (Настройки > Сеть)</b>. Нажмите <b>Scan networks (Найти сети)</b>, выберите домашнюю сеть, введите пароль и нажмите <b>Connect (Подключить)</b>. Нужна сеть Wi-Fi 2,4 ГГц. Подтвердите подключение кнопкой <code>OK</code> на устройстве.
@@ -229,8 +229,8 @@ Eight applications are already installed: Weather, Clock, ISS, Calendar, Timer, 
 Open the device page from a phone or computer on the same Wi-Fi network. Choose <b>Catalog</b> and read the application's description.
 Откройте страницу устройства на телефоне или компьютере в той же сети Wi-Fi. Выберите <b>Каталог</b> и прочитайте описание приложения.
 
-Open <b>Installed apps</b> to manage your applications. The information icon on a tile shows its connections and access. Click <b>Update</b> when offered. <b>Update all</b> appears when at least two compatible updates are available. Updates keep settings and the current screen.
-Установленные приложения находятся в разделе <b>Мои приложения</b>. Значок сведений на карточке показывает подключения и доступ приложения. Нажмите <b>Обновить</b>, если доступна новая версия. Кнопка <b>Обновить все</b> появляется, если доступны хотя бы два совместимых обновления. Обновление сохраняет настройки и текущий экран.
+Open <b>Installed apps</b> to manage your applications. The information icon on a tile shows its connections and access. Click <b>Update</b> when offered. <b>Update all</b> appears when at least two compatible updates are available. Updates keep saved settings and reopen the current application. Navigation state and unsaved changes may be lost.
+Установленные приложения находятся в разделе <b>Мои приложения</b>. Значок сведений на карточке показывает подключения и доступ приложения. Нажмите <b>Обновить</b>, если доступна новая версия. Кнопка <b>Обновить все</b> появляется, если доступны хотя бы два совместимых обновления. Обновление сохраняет записанные настройки и вновь открывает текущее приложение. Состояние навигации и несохранённые изменения могут быть потеряны.
 
 The official catalog is already included. The gear at the upper right of Catalog opens <b>Sources</b>. Press <b>+</b>, enter the publisher's catalog address and click <b>Save</b>. The official source stays first. If several sources contain the same application, the first source containing it is used.
 Официальный каталог уже подключён. Шестерёнка в правом верхнем углу каталога открывает <b>Источники</b>. Нажмите <b>+</b>, введите адрес каталога автора и нажмите <b>Сохранить</b>. Официальный источник остаётся первым. Если приложение есть в нескольких источниках, используется первый источник, в котором оно найдено.

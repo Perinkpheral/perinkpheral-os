@@ -27,8 +27,9 @@ usable capacity or a runtime result. There are no measured current or endurance
 numbers from which to derive a battery-life promise.
 
 Power saving retains application state in light sleep, with a 300-second minimum
-poll interval and a two-minute user-access window. Auto samples the existing USB
-Serial/JTAG host connection every five seconds; a charger does not constitute a
+interval for scheduled polls and a two-minute user-access window. Explicit refresh
+requests can run sooner, subject to queueing and server cooldowns. Auto samples the
+existing USB Serial/JTAG host connection every five seconds; a charger does not constitute a
 USB host. This signal does not identify the actual power source or charge state.
 An attached computer inhibits automatic light sleep, so observing the schedule
 over USB does not establish battery current. Deep sleep is deferred to version 2.

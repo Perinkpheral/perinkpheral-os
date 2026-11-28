@@ -12,8 +12,8 @@
 
 #define HOST_API_VERSION 3
 
-/* ABI 3 starts with the first public release, 0.2.0. Entries in that
- * release need no introduction stamp. Later additions carry a permanent
+/* ABI 3 is frozen from firmware 0.2.0. Entries in that release need no
+ * introduction stamp. Later additions carry a permanent
  * HOST_SINCE_<name> version beside their declaration. The build takes the
  * maximum of the ABI floor, detected introduction stamps and an explicit
  * manifest minimum. Use an explicit minimum for behaviour or increased

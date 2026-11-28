@@ -332,11 +332,14 @@ Code:
   Perinkpheral OS calls is added to the header and called in `firmware/components/appsys/app.c`, whose
   count of them stops the build until it is. ABI 3 is held as frozen:
   changing an existing signature, meaning, privilege, layout or constant
-  requires a new ABI, not just a firmware version. Exceptions are growth of
-  `HOST_ICON_COUNT` through contiguous appended icon IDs and extension of
-  `host_answer_info_t` after its unchanged prefix, preserving alignment. Until the first
-  public release, the owner may authorize other ABI 3 changes, recorded with
-  `tools/perinkpheral contract snapshot --unfrozen`.
+  requires a new ABI, not just a firmware version. Exceptions are increases of the
+  explicit admission and reservation limits in
+  `ContractSnapshot.growableLimits`, growth of `HOST_ICON_COUNT` through contiguous
+  appended icon IDs and extension of `host_answer_info_t` after its unchanged prefix,
+  preserving alignment. Record these extensions with `contract snapshot`; checks
+  require exact agreement with the recorded snapshot. An application relying on
+  increased capacity must declare an explicit firmware minimum. ABI 3 is frozen
+  from 0.2.0; the pre-release `contract snapshot --unfrozen` exception is closed.
   Record every added call with `contract snapshot`: the check refuses an unrecorded one. Commands use subject
   then verb (`kv_get`, `gfx_draw_text`); queries name the subject and what
   is asked (`gfx_width`, `time_now`); events are `app_on_<what happened>`
@@ -376,11 +379,11 @@ Display:
     sleep (`0x10`) BUSY stays high for good; the next show always
     starts with a hardware reset, which is also how the panel wakes.
 - A byte takes about 8 microseconds, a frame 0.12 s.
-- Only `display.c` touches the panel. Each drawing component owns its framebuffer
-  and submits complete frames to `display_show(frame, reason)`; the
-  service keeps a copy of what the panel shows, leaves the panel alone
-  when the frame is the same, and may answer "deferred" - then offer
-  the frame again later.
+- Only `display.c` touches the panel. Main owns one composition buffer in `host.c`;
+  scenes draw into it or its viewports through the window manager. The main event
+  loop submits the completed frame to `display_show(frame, reason)`. The service
+  keeps a copy of what the panel shows, leaves the panel alone when the frame is
+  the same, and may answer "deferred"; main offers the frame again later.
 - The first image after boot is full: it fills the RAM 0x26 that
   partial updates compare against. `epd.c` sleeps the panel at the end
   of a full show, mode 1 so that RAM is kept; after a partial one a

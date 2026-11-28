@@ -23,7 +23,9 @@ Controls:
 
 - It runs in the interpreter with memory of its own, at most 64 KB. Every pointer, length and coordinate
   it passes is checked before use (`firmware/components/appsys/app.c`); it cannot read or write Perinkpheral OS's
-  memory. A handler that does not return in 3 seconds is stopped.
+  memory. Handlers have a cooperative 3000 ms execution budget, checked at interpreter
+  yield points, after native imports and on return. Native calls and scheduling delays
+  can extend elapsed time.
 - Its store is its own (`a.<name>`; a name has no dot), its files are its own folder, and
   a file's name cannot leave it. It cannot reach another application's secrets.
 - It has no sockets. Polls start at their manifest URLs; requests made with `http_send`

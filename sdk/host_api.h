@@ -6,9 +6,8 @@
  * applications. Applications include this header and link the imports.
  * Perinkpheral OS builds its import table from the same names.
  *
- * ABI 3 starts with the first public release named by
- * HOST_ABI_3_FIRMWARE_FIRST. Earlier packages have no compatibility guarantee.
- * After that release, existing names, signatures, privileges, layouts,
+ * ABI 3 is frozen from the firmware named by HOST_ABI_3_FIRMWARE_FIRST.
+ * Earlier packages have no compatibility guarantee. From that release, existing names, signatures, privileges, layouts,
  * values and meanings remain compatible; incompatible changes require a
  * new ABI. Later additions carry permanent HOST_SINCE_<name> introduction
  * stamps. Only the explicit admission and reservation limits listed in

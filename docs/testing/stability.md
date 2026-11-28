@@ -108,6 +108,9 @@ require hardware tests. Injected presses do not test the button pins.
 
 ### Reconnect regression (2026-11-24)
 
+The following account records the November 24 implementation. The 0.2.0 note
+below supersedes its intent and simulator behavior.
+
 Before this change (commit `8d7b247`), `poller_network_is_back()` requested every poll
 only when `power_is_saving()` was false. Plugged and Auto with a USB host therefore
 refetched healthy polls too. Always and Auto without a USB host only woke the poller;
@@ -137,6 +140,13 @@ request, list rounds, deferred calls, cooldowns and raw queue expiry and limits.
 `test_poller_net.c` exercises connection/DNS/TLS/read failures separately from HTTP
 refusals, certificate rejection and malformed answers. The simulator has no Wi-Fi
 loss, address-acquisition or power-profile model; its intent endpoint delivers news only.
+
+Current behavior in 0.2.0: genuine connections deliver subscribed `network_up`
+intents in every power profile; deliberate radio cycling does not deliver them.
+The simulator's `network_up` endpoint also marks the network connected and requests
+retries of manifest polls whose requested work failed in transport. Current
+regressions must check intents in every power profile and simulator reconnect
+retries. Healthy and never-requested manual polls must remain idle.
 
 ### Observation collector
 
@@ -189,7 +199,9 @@ sleep test without presenting a USB host; this is not a battery-life measurement
 Afterward check OTA, physical confirmation, exact image identity and probation,
 then manual recovery entry and exit, and compare settings and application versions.
 A separate 26-hour static-image run with the header clock disabled checks the daily
-panel refresh: routine screen updates can postpone that deadline.
+panel refresh without intervening full refreshes restarting the interval. The
+deadline is measured from the last full refresh. Also verify that repeated partial
+updates cannot postpone the forced full refresh.
 
 ### Physical checks
 

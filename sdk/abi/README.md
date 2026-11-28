@@ -1,8 +1,8 @@
 # Frozen application contracts
 
-ABI 3 was introduced with firmware 0.1.30. Its recorded contract is checked for
-compatibility. Until the first public release, owner-authorized changes may be
-recorded with `contract snapshot --unfrozen`.
+ABI 3 is frozen from firmware 0.2.0. Its recorded contract is checked for
+compatibility. Before 0.2.0, owner-authorized changes were recorded with
+`contract snapshot --unfrozen`; that exception is closed.
 Perinkpheral OS supports the explicit set `{3}`;
 ABI 2 has no adapter and receives "Update the app."
 
@@ -20,9 +20,9 @@ constants and function macros, permanent introduction stamps, struct sizes,
 alignments, field types, sizes and offsets. The separate `3/fixtures.txt` records
 SHA-256 hashes of the package inputs, including translations and saved state;
 `contract check` verifies them with the same no-change rule as the contract.
-After the first public release, changing an existing signature or meaning requires
-another ABI; additions preserve old entries. `HOST_SINCE_<name>` stamps only entries
-added after the ABI 3 firmware floor, 0.1.30. A new fixed layout
+From 0.2.0, changing an existing signature or meaning requires another ABI;
+additions preserve old entries. `HOST_SINCE_<name>` stamps only entries added
+after the ABI 3 firmware floor, 0.2.0. A new fixed layout
 needs a new type/call. `answer_info` may grow after its unchanged prefix.
 
 `3/` contains packages built once for this generation. Tests never rebuild them:

@@ -1,6 +1,6 @@
 # Poll response formats
 
-This runnable ABI 3 example requires firmware 0.1.100 or later. Its endpoints
+This runnable ABI 3 example requires firmware 0.2.0 or later. Its endpoints
 use a reserved example domain, and the simulator supplies the responses.
 
 | Poll | Request | Response handling |
@@ -41,7 +41,7 @@ tools/perinkpheral sim-test docs/examples/poll-formats/tests
 
 ## Форматы ответов опросов
 
-Для примера с ABI 3 нужна прошивка 0.1.100 или новее. Адреса используют
+Для примера с ABI 3 нужна прошивка 0.2.0 или новее. Адреса используют
 зарезервированный домен, ответы подставляет симулятор.
 
 - **MIME GET** - GET принимает JSON или XML согласно MIME-типу ответа. Два
