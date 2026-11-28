@@ -31,6 +31,8 @@ concurrency:
 
 env:
   WASI_SDK_URL: https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
+  CMAKE_URL: https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz
+  CMAKE_SHA256: 5a1133ff103c71eb5120e2cc3de922733e7d8a26a98ae716397e8676adb367bf
 
 jobs:
   version:
@@ -89,6 +91,20 @@ jobs:
             rm -rf "$fresh"
           fi
           echo "WASI_SDK_PATH=$sdk" >> "$GITHUB_ENV"
+      - name: CMake
+        run: |
+          # The SDK's CMake module is tested by the CLI check; the runners have no CMake of their own.
+          cmake_dir="$RUNNER_TOOL_CACHE/cmake-3.31.6-linux-x86_64"
+          if [ ! -x "$cmake_dir/bin/cmake" ]; then
+            mkdir -p "$RUNNER_TOOL_CACHE"
+            fresh=$(mktemp -d -p "$RUNNER_TOOL_CACHE")
+            curl -sSL -o "$fresh/cmake.tar.gz" "$CMAKE_URL"
+            echo "$CMAKE_SHA256  $fresh/cmake.tar.gz" | sha256sum -c -
+            tar -xzf "$fresh/cmake.tar.gz" -C "$fresh"
+            mv -T "$fresh/cmake-3.31.6-linux-x86_64" "$cmake_dir" || true
+            rm -rf "$fresh"
+          fi
+          echo "$cmake_dir/bin" >> "$GITHUB_PATH"
       - name: The tools
         run: tools/perinkpheral > /dev/null
       - name: Host tests, frozen ABI and the layers
