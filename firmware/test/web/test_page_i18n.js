@@ -47,6 +47,17 @@ function testPolls() {
     assert.equal(updates([{ every: 60 }, { manual: true, every: 60 }, { manual: true }]), minute + ", " + manual);
     assert.equal(updates([{ every: 3600 }, { every: 20 }, { every: "{{interval}}" }]),
       language === "ru" ? "Каждые 1 ч, Каждые 20 с, Каждые Daily" : "Every 1 h, Every 20 s, Every Daily");
+    // An application's own data is shown as it is, even when it spells a word of the dictionary.
+    const facts = context.appFacts({ name: "stored", version: "restarting", hosts: ["https://saved.example"],
+      trusts: ["Saved."], companion: "https://setup.example/page", polls: [] });
+    for (const label of ["Name", "Version", "Connects to", "Own certificate authorities", "Set up page"]) {
+      const fact = facts.find(([name]) => name === label);
+      assert.equal(fact[2], true, label + " is shown verbatim");
+    }
+    const none = context.appFacts({ name: "x", polls: [] });
+    assert.equal(none.find(([name]) => name === "Connects to")[1], "Nothing");
+    assert.notEqual(none.find(([name]) => name === "Connects to")[2], true, "a page word stays translatable");
+    assert.notEqual(none.find(([name]) => name === "Own certificate authorities")[2], true);
   }
 }
 

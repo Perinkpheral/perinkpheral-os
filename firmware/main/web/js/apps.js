@@ -28,7 +28,7 @@ function placeField(input, latitude, longitude) {
     found = places;
     current = -1;
     list.replaceChildren(...places.map((place, index) => {
-      const row = make("li", { textContent: place.name });
+      const row = make("li", { textContent: place.name, translate: false });
       row.addEventListener("mousedown", event => { event.preventDefault(); choose(index); });
       return row;
     }));
@@ -499,21 +499,23 @@ function hostOf(app, address) {
   }
 }
 
+/* A fact marked true is the application's own data - a name, a host - and is shown as it is,
+ * never put into the page's language. */
 function appFacts(app) {
   const hosts = [...new Set([...(app.hosts || []), ...(app.polls || []).map(poll => poll.url)]
                             .map(address => hostOf(app, address)))];
   const updates = (app.polls || []).map(poll => poll.manual ? t("On request") : t("Every {0}", paceOf(app, poll.every)));
   return [
-    ["Name", app.name],
-    ["Version", app.version || "-"],
-    ["Connects to", hosts.join("\n") || "Nothing"],
+    ["Name", app.name, true],
+    ["Version", app.version || "-", true],
+    hosts.length ? ["Connects to", hosts.join("\n"), true] : ["Connects to", "Nothing"],
     ["Updates", [...new Set(updates)].join(", ") || "On request"],
     ["Starts with device", (app.intents || []).includes("started") ? "Yes" : "No"],
     ["System access", app.system ? "Yes" : "No"],
     ["Writes files", app.writes_files ? "Yes, 32 KB" : "No"],
-    ["Own certificate authorities", (app.trusts || []).join(", ") || "None"],
+    (app.trusts || []).length ? ["Own certificate authorities", app.trusts.join(", "), true] : ["Own certificate authorities", "None"],
     ["Screen", app.fullscreen ? "Full" : "With header"],
-    ...(app.companion ? [["Set up page", new URL(app.companion).host]] : []),
+    ...(app.companion ? [["Set up page", new URL(app.companion).host, true]] : []),
   ];
 }
 
@@ -524,8 +526,8 @@ function openAppInfo(app) {
   show("info-dialog-title", app.title);
   show("info-description", appDescription(app.description || ""));
   byId("info-description").hidden = !app.description;
-  byId("info-facts").replaceChildren(...appFacts(app).flatMap(([name, value]) =>
-    [make("dt", { textContent: name }), make("dd", { textContent: value })]));
+  byId("info-facts").replaceChildren(...appFacts(app).flatMap(([name, value, verbatim]) =>
+    [make("dt", { textContent: name }), make("dd", verbatim ? { textContent: value, translate: false } : { textContent: value })]));
   byId("info-dialog").showModal();
 }
 
