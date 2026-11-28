@@ -25,7 +25,7 @@ function harness() {
     installed: offers.map(offer => ({ name: offer.app.name, version: "1.0.0" })),
     document: { getElementById: id => button(id === "update-all" ? "all" : id) },
     window: { addEventListener: (event, callback) => { events[event] = callback; } },
-    t: (text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index]),
+    localStorage: { getItem: () => "en" },
     compatibilityProblem: () => "", offerSays: offer => offer.app.title,
     confirmed: async () => confirms,
     updates: () => offers,
@@ -42,6 +42,7 @@ function harness() {
       });
     }),
   });
+  vm.runInContext(read("i18n.js").split("const SAID")[0], context);
   vm.runInContext(core.slice(0, core.indexOf("const CONFIRM_ON_DEVICE")), context);
   vm.runInContext(read("compatibility.js"), context);
   context.toast = (text, kind, stays) => {

@@ -320,7 +320,8 @@ async function runAppInstalls() {
       try {
         done = await performInstall(job.button, job.offer);
       } catch (error) {
-        if (!appInstallClosed) toast(offerSays(job.offer, "title") + ": " + error.message, "error");
+        if (!appInstallClosed)
+          toast(offerSays(job.offer, "title") + ": " + (translated(error.message) || error.message), "error");
       } finally {
         pendingAppInstalls.delete(job.offer.app.name);
         if (!appInstallClosed) drawTiles();
@@ -389,7 +390,7 @@ async function performInstall(button, offer) {
         toast(have ? t("{0} updated to {1}.", offerSays(offer, "title"), offer.app.version) : "Installed.");
     } catch (error) {
       throw new Error(offerSays(offer, "title") + ": " +
-        (error.message === "Failed to fetch" ? t("Device unreachable.") : error.message));
+        (error.message === "Failed to fetch" ? t("Device unreachable.") : translated(error.message) || error.message));
     } finally {
       dismiss();
     }
@@ -501,7 +502,7 @@ function hostOf(app, address) {
 function appFacts(app) {
   const hosts = [...new Set([...(app.hosts || []), ...(app.polls || []).map(poll => poll.url)]
                             .map(address => hostOf(app, address)))];
-  const updates = (app.polls || []).map(poll => t("Every {0}", paceOf(app, poll.every)));
+  const updates = (app.polls || []).map(poll => poll.manual ? t("On request") : t("Every {0}", paceOf(app, poll.every)));
   return [
     ["Name", app.name],
     ["Version", app.version || "-"],

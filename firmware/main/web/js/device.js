@@ -403,7 +403,7 @@ byId("enter-recovery").addEventListener("click", event => busy(event.currentTarg
 }));
 
 byId("reset").addEventListener("click", async event => {
-  if (await confirmed("Factory reset? All settings and app data will be erased.", "Factory reset")) {
+  if (await confirmed("Factory reset? Device settings and saved application values will be erased. Installed applications and their files will remain.", "Factory reset")) {
     toast(CONFIRM_ON_DEVICE);
     send(event.target, "/api/reset", { method: "POST" });
   }
